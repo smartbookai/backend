@@ -1,0 +1,33 @@
+/* assets/css/components.css */
+/* Custom styles for ROI Gauge component */
+
+.gauge-wrapper {
+    position: relative;
+    width: 160px;
+    height: 120px;
+  }
+  
+  .gauge-value {
+    transition: stroke-dashoffset 0.3s ease;
+  }
+  
+  /* Different color schemes for gauge based on percentage */
+  .gauge-value.low {
+    stroke: #e53e3e; /* Red */
+  }
+  
+  .gauge-value.medium-low {
+    stroke: #dd6b20; /* Orange */
+  }
+  
+  .gauge-value.medium {
+    stroke: #ecc94b; /* Yellow */
+  }
+  
+  .gauge-value.medium-high {
+    stroke: #38a169; /* Green */
+  }
+  
+  .gauge-value.high {
+    stroke: #2f855a; /* Dark Green */
+  }
