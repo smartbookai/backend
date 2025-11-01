@@ -29,4 +29,9 @@ urlpatterns = [
     path('reportes/', views.reportes, name='reportes'),
     #path('campaigns/', views.campaigns, name='campaigns'),
     path('nominas/', views.nominas, name='nominas'),
+
+    #supplier table API endpoint
+    path('api/show-table-suppliers/', views.api_show_table_suppliers, name='api_show_table_suppliers'),
+    #Company users table API endpoint
+    #path('api/suppliers/', views.api_suppliers, name='api_suppliers'),
 ]

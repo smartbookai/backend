@@ -1,5 +1,8 @@
 <header class="header">
-  <button id="sidebarToggle" class="sidebar-toggle-btn" style="background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .75rem;">
+  <div style="color:#111827;font-weight:600;margin-right:auto;">
+    <h1>{{ request.user.company_user.company.name }}</h1>
+  </div>
+  <button id="sidebarToggle" class="sidebar-toggle-btn" style="background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .75rem;margin-left:12px;">
     <i class="bi bi-list"></i>
   </button>
   <div style="display:flex;align-items:center;gap:.5rem;">

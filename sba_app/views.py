@@ -1,7 +1,10 @@
 from django.contrib.auth.decorators import user_passes_test, login_required
+from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
 from django.contrib import messages
+
+from sba_app.models import CompanyUser, Supplier
 
 
 def anonymous_required(function=None):
@@ -75,3 +78,26 @@ def campaigns(request):
 @login_required
 def nominas(request):
     return render(request, 'pages/nominas.html')
+
+
+def get_current_company(user):
+    return CompanyUser.objects.select_related('company').get(user=user).company
+
+@login_required
+def api_show_table_suppliers(request):
+    print("API Suppliers called")
+    company = get_current_company(request.user)
+    qs = Supplier.objects.filter(company=company).order_by('name')
+    data = [
+        {
+            'id': s.id,
+            'name': s.name,
+            'contact_person': s.contact_person or '',
+            'phone': s.phone or '',
+            'email': s.email or '',
+            'document': f"{(s.document_type or '')} {('· ' if s.document_type and s.document_number else '')}{(s.document_number or '')}".strip(),
+            'address': s.address or '',
+        }
+        for s in qs
+    ]
+    return JsonResponse({'suppliers': data})
