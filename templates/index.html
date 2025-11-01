@@ -1,10 +1,210 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Title</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | SBA</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/scss/style.css' %}">
 </head>
 <body>
-  <h1>index</h1>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="d-flex align-items-center gap-2 px-3 mb-3" style="display:flex;align-items:center;gap:.5rem;">
+      <div style="width:28px;height:28px;border-radius:6px;background:#111827"></div>
+      <h1 style="font-size:18px;margin:0;">SBA</h1>
+    </div>
+
+    <nav>
+      <a href="#" class="sidebar-link active" data-tab="dashboard">
+        <i class="bi bi-speedometer2"></i>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="sidebar-link" data-tab="facturas">
+        <i class="bi bi-box-seam"></i>
+        <span>Facturas</span>
+      </a>
+      <a href="#" class="sidebar-link" data-tab="proveedores">
+        <i class="bi bi-receipt"></i>
+        <span>Proveedores</span>
+      </a>
+      <a href="#" class="sidebar-link" data-tab="deliveries">
+        <i class="bi bi-truck"></i>
+        <span>Trabajadores</span>
+      </a>
+      <a href="#" class="sidebar-link" data-tab="reportes">
+        <i class="bi bi-bag"></i>
+        <span>Reportes</span>
+      </a>
+      <!--<a href="#" class="sidebar-link" data-tab="campaigns">
+        <i class="bi bi-bullseye"></i>
+        <span>Campaigns</span>
+      </a>
+      <a href="#" class="sidebar-link" data-tab="leads">
+        <i class="bi bi-people"></i>
+        <span>Leads</span>
+      </a> -->
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+    <!-- Header / Topbar -->
+    <header class="header">
+      <button id="sidebarToggle" class="sidebar-toggle-btn" style="background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .75rem;display:flex;align-items:center;gap:.5rem;">
+        <i class="bi bi-list"></i>
+        <span>Menu</span>
+      </button>
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <i class="bi bi-person-circle" style="font-size:1.25rem;color:#6B7280"></i>
+        <span style="font-weight:500;">{{ request.user.get_username }}</span>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <section id="dashboard" class="tab-panel" style="display:block;">
+      <div class="grid grid-cols-4 gap-6">
+        <div class="card stat-card">
+          <div style="display:flex;align-items:center;">
+            <div class="stat-card-icon"><i class="bi bi-send"></i></div>
+            <div>
+              <div class="stat-label">Heralds Sent</div>
+              <div class="stat-value">163</div>
+            </div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div style="display:flex;align-items:center;">
+            <div class="stat-card-icon"><i class="bi bi-truck"></i></div>
+            <div>
+              <div class="stat-label">In Transit</div>
+              <div class="stat-value">0</div>
+            </div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div style="display:flex;align-items:center;">
+            <div class="stat-card-icon"><i class="bi bi-check2-circle"></i></div>
+            <div>
+              <div class="stat-label">Delivered</div>
+              <div class="stat-value">153</div>
+            </div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div style="display:flex;align-items:center;">
+            <div class="stat-card-icon"><i class="bi bi-arrow-counterclockwise"></i></div>
+            <div>
+              <div class="stat-label">Bounced</div>
+              <div class="stat-value">3</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6 mt-6" style="display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;margin-top:1.5rem;">
+        <div class="card table-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h2 style="font-size:18px;margin:0;">Heralds in Inventory</h2>
+            <a href="#" class="link-blue">View all</a>
+          </div>
+          <div class="table-container">
+            <table class="table" style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th class="table-header">Product</th>
+                  <th class="table-header">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="table-cell">Herald A5, 7 inch</td>
+                  <td class="table-cell text-right">18</td>
+                </tr>
+                <tr>
+                  <td class="table-cell">Herald A5, 7 inch</td>
+                  <td class="table-cell text-right">50</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h2 style="font-size:18px;margin:0;">Merch in Inventory</h2>
+            <a href="#" class="link-blue">View all</a>
+          </div>
+          <div style="color:#6B7280;">No data</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="inventory" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Inventory</h2>
+        <p style="color:#6B7280;">Contenido de inventario</p>
+      </div>
+    </section>
+
+    <section id="orders" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Orders</h2>
+        <p style="color:#6B7280;">Listado de órdenes</p>
+      </div>
+    </section>
+
+    <section id="deliveries" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Deliveries</h2>
+        <p style="color:#6B7280;">Estado de envíos</p>
+      </div>
+    </section>
+
+    <section id="store" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Store</h2>
+        <p style="color:#6B7280;">Productos</p>
+      </div>
+    </section>
+
+    <section id="campaigns" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Campaigns</h2>
+        <p style="color:#6B7280;">Gestión de campañas</p>
+      </div>
+    </section>
+
+    <section id="leads" class="tab-panel" style="display:none;">
+      <div class="card p-8">
+        <h2 style="margin:0 0 8px 0;">Leads</h2>
+        <p style="color:#6B7280;">Listado de leads</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Tabs logic
+    const links = document.querySelectorAll('.sidebar-link');
+    const panels = document.querySelectorAll('.tab-panel');
+    links.forEach(l => {
+      l.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = l.getAttribute('data-tab');
+        links.forEach(a => a.classList.remove('active'));
+        l.classList.add('active');
+        panels.forEach(p => p.style.display = (p.id === target) ? 'block' : 'none');
+        // Cerrar sidebar en mobile tras seleccionar
+        document.getElementById('sidebar').classList.remove('active');
+      });
+    });
+
+    // Sidebar toggle (mobile)
+    const toggleBtn = document.getElementById('sidebarToggle');
+    toggleBtn?.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('active');
+    });
+  </script>
 </body>
 </html>

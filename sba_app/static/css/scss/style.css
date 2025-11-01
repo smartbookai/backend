@@ -128,12 +128,12 @@ body {
   position: fixed;
   left: 0;
   top: 0;
-  padding: 0.7em 1em;
+  padding: 1.25rem 1rem;
 }
 .sidebar-link {
   display: flex;
   align-items: center;
-  padding: 1rem;
+  padding: 1.25rem;
   color: #4F545B;
   font-weight: 500;
   transition: all 0.2s;
@@ -1409,12 +1409,20 @@ a, input, select, button {
   .p-8 {
     padding: 1.5rem !important;
   }
+  /* Oculta el botón cuando el sidebar está abierto para evitar superposición */
+  .sidebar.active ~ .main-content .sidebar-toggle-btn {
+    display: none !important;
+  }
 }
 @media (min-width: 1024px) {
   .main-content {
     margin-left: 18rem;
     padding: 2rem 3rem;
   }
+  /* Aumenta la altura de cada item y el espacio superior del listado para ocupar más vertical */
+  .sidebar nav { padding-top: 0.5rem; }
+  .sidebar .sidebar-link { padding: 1.5rem 1.25rem; font-size: 18px; }
+  .sidebar .sidebar-link svg { font-size: 1.35rem; }
   .grid {
     grid-template-columns: repeat(4, 1fr);
     gap: 2rem;
@@ -1454,7 +1462,7 @@ a, input, select, button {
 @media (max-width: 767px) {
   .sidebar-toggle-btn {
     display: flex;
-    z-index: 99999;
+    z-index: 2000; /* menor que el sidebar (9000) */
     width: 48px;
     height: 48px;
     background: #111827;

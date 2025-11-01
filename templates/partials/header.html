@@ -1,0 +1,10 @@
+<header class="header">
+  <button id="sidebarToggle" class="sidebar-toggle-btn" style="background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .75rem;">
+    <i class="bi bi-list"></i>
+  </button>
+  <div style="display:flex;align-items:center;gap:.5rem;">
+    <i class="bi bi-person-circle" style="font-size:1.25rem;color:#6B7280"></i>
+    <span style="font-weight:500;">{{ request.user.get_username }}</span>
+    <a href="{% url 'logout' %}" class="link-blue" style="margin-left:.5rem;">Logout</a>
+  </div>
+</header>

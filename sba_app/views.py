@@ -37,7 +37,7 @@ def login(request):
 
 @login_required
 def index(request):
-    return render(request, 'index.html')
+    return render(request, 'pages/dashboard.html')
 
 
 def logout_view(request):
@@ -45,3 +45,33 @@ def logout_view(request):
     logout(request)
     messages.success(request, "Ha cerrado sesion correctamente.")
     return redirect('login')
+
+
+@login_required
+def facturas(request):
+    return render(request, 'pages/facturas.html')
+
+
+@login_required
+def proveedores(request):
+    return render(request, 'pages/proveedores.html')
+
+
+@login_required
+def trabajadores(request):
+    return render(request, 'pages/trabajadores.html')
+
+
+@login_required
+def reportes(request):
+    return render(request, 'pages/reportes.html')
+
+
+@login_required
+def campaigns(request):
+    return render(request, 'pages/campaigns.html')
+
+
+@login_required
+def nominas(request):
+    return render(request, 'pages/nominas.html')

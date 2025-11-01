@@ -1,0 +1,31 @@
+<aside class="sidebar" id="sidebar">
+  <div class="d-flex align-items-center gap-2 px-3" style="display:flex;align-items:center;gap:.5rem;margin-bottom:1.25rem;">
+    <h1 style="font-size:18px;margin:0;letter-spacing:.5px;">SBA</h1>
+  </div>
+  <nav>
+    <a href="{% url 'index' %}" class="sidebar-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-speedometer2"></i>
+      <span>Dashboard</span>
+    </a>
+    <a href="{% url 'facturas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'facturas' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-box-seam"></i>
+      <span>Facturas</span>
+    </a>
+    <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'leads' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-people"></i>
+      <span>Nominas</span>
+    </a>
+    <a href="{% url 'proveedores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'orders' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-receipt"></i>
+      <span>Proveedores</span>
+    </a>
+    <a href="{% url 'trabajadores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'deliveries' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-truck"></i>
+      <span>Trabajadores</span>
+    </a>
+    <a href="{% url 'reportes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'store' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-bag"></i>
+      <span>Reportes</span>
+    </a>
+  </nav>
+</aside>

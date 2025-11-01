@@ -1,0 +1,81 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Dashboard | SBA{% endblock %}
+{% block content %}
+<section>
+  <div class="grid grid-cols-4 gap-6">
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-send"></i></div>
+        <div>
+          <div class="stat-label">Heralds Sent</div>
+          <div class="stat-value">163</div>
+        </div>
+      </div>
+    </div>
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-truck"></i></div>
+        <div>
+          <div class="stat-label">In Transit</div>
+          <div class="stat-value">0</div>
+        </div>
+      </div>
+    </div>
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-check2-circle"></i></div>
+        <div>
+          <div class="stat-label">Delivered</div>
+          <div class="stat-value">153</div>
+        </div>
+      </div>
+    </div>
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-arrow-counterclockwise"></i></div>
+        <div>
+          <div class="stat-label">Bounced</div>
+          <div class="stat-value">3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-6 mt-6" style="display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;margin-top:1.5rem;">
+    <div class="card table-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="font-size:18px;margin:0;">Heralds in Inventory</h2>
+        <a href="#" class="link-blue">View all</a>
+      </div>
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header">Product</th>
+              <th class="table-header">Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="table-cell">Herald A5, 7 inch</td>
+              <td class="table-cell text-right">18</td>
+            </tr>
+            <tr>
+              <td class="table-cell">Herald A5, 7 inch</td>
+              <td class="table-cell text-right">50</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card table-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="font-size:18px;margin:0;">Merch in Inventory</h2>
+        <a href="#" class="link-blue">View all</a>
+      </div>
+      <div style="color:#6B7280;">No data</div>
+    </div>
+  </div>
+</section>
+{% endblock %}

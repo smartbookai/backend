@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SBA{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/scss/style.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  {% include 'partials/sidebar.html' %}
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <main class="main-content">
+    {% include 'partials/header.html' %}
+    <div class="page-content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+  {% block extra_js %}
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebarToggle');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    function isMobile() { return window.innerWidth <= 767; }
+
+    function setToggleVisibility() {
+      if (!toggleBtn) return;
+      toggleBtn.style.display = isMobile() ? 'flex' : 'none';
+      // Si el sidebar está abierto en mobile, ocultar el botón
+      if (isMobile() && sidebar.classList.contains('active')) {
+        toggleBtn.style.display = 'none';
+      }
+    }
+
+    function toggleSidebar(forceState) {
+      const willOpen = forceState !== undefined ? forceState : !sidebar.classList.contains('active');
+      if (willOpen) {
+        sidebar.classList.add('active');
+        overlay.style.display = 'block';
+        if (isMobile() && toggleBtn) toggleBtn.style.display = 'none';
+      } else {
+        sidebar.classList.remove('active');
+        overlay.style.display = 'none';
+        if (toggleBtn) toggleBtn.style.display = isMobile() ? 'flex' : 'none';
+      }
+    }
+
+    toggleBtn?.addEventListener('click', () => toggleSidebar());
+    overlay?.addEventListener('click', () => toggleSidebar(false));
+
+    // Cierra el sidebar al navegar entre links (mobile)
+    document.querySelectorAll('.sidebar a.sidebar-link')?.forEach(a => {
+      a.addEventListener('click', () => toggleSidebar(false));
+    });
+
+    // Estado inicial y al redimensionar
+    setToggleVisibility();
+    window.addEventListener('resize', setToggleVisibility);
+  </script>
+  {% endblock %}
+</body>
+</html>
