@@ -67,6 +67,24 @@ class Supplier(models.Model):
         verbose_name_plural = "Proveedores"
 
 
+class Client(models.Model):
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='clients')
+    name = models.CharField(max_length=255)
+    contact_person = models.CharField(max_length=255, null=True, blank=True)
+    phone = models.CharField(max_length=15, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    address = models.CharField(max_length=255, null=True, blank=True)
+    document_type = models.CharField(max_length=255, null=True, blank=True)
+    document_number = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.company.name})"
+
+    class Meta:
+        verbose_name_plural = "Clientes"
+        unique_together = ('company', 'document_number')
 
 
 
