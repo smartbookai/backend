@@ -1,8 +1,10 @@
 from django.contrib.auth.decorators import user_passes_test, login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
 from django.contrib import messages
+from django.views.decorators.http import require_POST, require_http_methods
+import json
 
 from sba_app.models import CompanyUser, Supplier
 
@@ -101,3 +103,120 @@ def api_show_table_suppliers(request):
         for s in qs
     ]
     return JsonResponse({'suppliers': data})
+
+
+@login_required
+@require_POST
+def api_create_supplier(request):
+    company = get_current_company(request.user)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    name = (payload.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': 'El nombre es obligatorio.'}, status=400)
+
+    supplier = Supplier.objects.create(
+        company=company,
+        name=name,
+        contact_person=payload.get('contact_person') or None,
+        phone=payload.get('phone') or None,
+        email=payload.get('email') or None,
+        address=payload.get('address') or None,
+        document_type=payload.get('document_type') or None,
+        document_number=payload.get('document_number') or None,
+    )
+
+    return JsonResponse({
+        'supplier': {
+            'id': supplier.id,
+            'name': supplier.name,
+            'contact_person': supplier.contact_person or '',
+            'phone': supplier.phone or '',
+            'email': supplier.email or '',
+            'document': f"{(supplier.document_type or '')} {('· ' if supplier.document_type and supplier.document_number else '')}{(supplier.document_number or '')}".strip(),
+            'address': supplier.address or '',
+        }
+    }, status=201)
+
+
+def ensure_admin(user):
+    return getattr(user.company_user, 'role', None) == 'admin'
+
+
+def get_company_scoped_supplier_or_404(user, supplier_id):
+    company = get_current_company(user)
+    try:
+        return Supplier.objects.get(id=supplier_id, company=company)
+    except Supplier.DoesNotExist:
+        raise Http404("Proveedor no encontrado")
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_supplier(request, supplier_id):
+    supplier = get_company_scoped_supplier_or_404(request.user, supplier_id)
+    return JsonResponse({
+        'supplier': {
+            'id': supplier.id,
+            'name': supplier.name,
+            'contact_person': supplier.contact_person or '',
+            'phone': supplier.phone or '',
+            'email': supplier.email or '',
+            'address': supplier.address or '',
+            'document_type': supplier.document_type or '',
+            'document_number': supplier.document_number or '',
+        }
+    })
+
+@login_required
+@require_POST
+def api_update_supplier(request, supplier_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar proveedores')
+
+    supplier = get_company_scoped_supplier_or_404(request.user, supplier_id)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    name = (payload.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': 'El nombre es obligatorio.'}, status=400)
+
+    supplier.name = name
+    supplier.contact_person = payload.get('contact_person') or None
+    supplier.phone = payload.get('phone') or None
+    supplier.email = payload.get('email') or None
+    supplier.address = payload.get('address') or None
+    supplier.document_type = payload.get('document_type') or None
+    supplier.document_number = payload.get('document_number') or None
+    supplier.save()
+
+    return JsonResponse({
+        'supplier': {
+            'id': supplier.id,
+            'name': supplier.name,
+            'contact_person': supplier.contact_person or '',
+            'phone': supplier.phone or '',
+            'email': supplier.email or '',
+            'address': supplier.address or '',
+            'document_type': supplier.document_type or '',
+            'document_number': supplier.document_number or '',
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_delete_supplier(request, supplier_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede eliminar proveedores')
+
+    supplier = get_company_scoped_supplier_or_404(request.user, supplier_id)
+    supplier.delete()
+    return JsonResponse({'success': True})
