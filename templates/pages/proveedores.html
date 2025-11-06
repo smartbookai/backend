@@ -1,25 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% block title %}Proveedores | SBA{% endblock %}
 {% block extra_head %}
-<style>
-  /* Zebra striping */
-  .table tbody tr:nth-child(odd) { background: #F8FAFC; }
-  .table tbody tr:nth-child(even) { background: #FFFFFF; }
-  /* Center headers and cells */
-  .table th, .table td { text-align: center; vertical-align: middle; }
-  /* Keep nice padding */
-  .table th { padding: 14px 18px !important; }
-  .table td { padding: 14px 18px !important; }
-  /* Drawer and overlay */
-  .overlay-mask { position: fixed; inset: 0; background: rgba(17,24,39,.5); display: none; z-index: 1000; }
-  .drawer { position: fixed; top: 0; right: -440px; width: 420px; height: 100%; background: #fff; box-shadow: -2px 0 16px rgba(0,0,0,.08); transition: right .25s ease; z-index: 1001; padding: 20px; overflow-y: auto; }
-  .drawer.active { right: 0; }
-  .btn-primary { background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .9rem; cursor:pointer; }
-  .btn-secondary { background:#F3F4F6;color:#111827;border:1px solid #E5E7EB;border-radius:8px;padding:.5rem .9rem; cursor:pointer; }
-  .form-field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; text-align:left; }
-  .form-field label { font-size:12px; color:#6B7280; }
-  .form-field input { border:1px solid #E5E7EB; border-radius:8px; padding:10px 12px; }
-</style>
+
 {% endblock %}
 {% block content %}
 <section>

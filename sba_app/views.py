@@ -87,7 +87,6 @@ def get_current_company(user):
 
 @login_required
 def api_show_table_suppliers(request):
-    print("API Suppliers called")
     company = get_current_company(request.user)
     qs = Supplier.objects.filter(company=company).order_by('name')
     data = [
@@ -220,3 +219,40 @@ def api_delete_supplier(request, supplier_id):
     supplier = get_company_scoped_supplier_or_404(request.user, supplier_id)
     supplier.delete()
     return JsonResponse({'success': True})
+
+
+@login_required
+def api_show_table_workers(request):
+    company = get_current_company(request.user)
+
+    company_users = (
+        CompanyUser.objects
+        .select_related('user', 'user__profile')
+        .filter(company=company)
+        .order_by('user__first_name', 'user__last_name')
+    )
+
+    workers = []
+    for company_user in company_users:
+        user = company_user.user
+        profile = getattr(user, 'profile', None)
+
+        workers.append({
+            'id': company_user.id,
+            'first_name': user.first_name or '',
+            'last_name': user.last_name or '',
+            'email': user.email or '',
+            'phone': getattr(profile, 'phone', '') or '',
+            'date_of_birth': (
+                profile.date_of_birth.strftime('%d/%m/%Y')
+                if profile and profile.date_of_birth else ''
+            ),
+            'address': getattr(profile, 'address', '') or '',
+            'role': company_user.role,
+            'profile_picture': (
+                profile.profile_picture.url
+                if profile and profile.profile_picture else ''
+            ),
+        })
+
+    return JsonResponse({'workers': workers})
