@@ -118,7 +118,10 @@
 
 
 
+
+
 <script>
+let currentEditId = null;
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -147,12 +150,12 @@ function loadWorkers() {
           <div style="display:flex; gap:8px; justify-content:center;">
             <button class="btn-secondary"
                     style="padding:.35rem .6rem; font-size:12px;"
-                    onclick="editSupplier(${worker.id})">
+                    onclick="editWorker(${worker.id})">
               Editar
             </button>
             <button class="btn-primary"
                     style="background:#DC2626; padding:.35rem .6rem; font-size:12px;"
-                    onclick="deleteSupplier(${worker.id})">
+                    onclick="deleteWorker(${worker.id})">
               Eliminar
             </button>
           </div>
@@ -195,32 +198,34 @@ function closeWorkerDrawer() {
   document.getElementById('workerOverlay').style.display = 'none';
   document.getElementById('workerDrawer').classList.remove('active');
 }
-function submitWorker(e) {
-  if (e) e.preventDefault();
-  closeWorkerDrawer();
-}
-</script>
-<script>
+
 async function submitWorker(e) {
   if (e) e.preventDefault();
 
   const form = document.getElementById('workerForm');
+  const isEdit = !!currentEditId;
 
-  // Validación simple de password
+  // Validación de password (obligatoria en creación, opcional en edición)
   const pwd = form.elements['password']?.value || '';
   const pwd2 = form.elements['password_confirm']?.value || '';
-  if (pwd !== pwd2) {
-    alert('Las contraseñas no coinciden.');
-    return;
+  if (!isEdit) {
+    if (!pwd) { alert('La contraseña es obligatoria.'); return; }
+    if (pwd !== pwd2) { alert('Las contraseñas no coinciden.'); return; }
+  } else {
+    // En edición: si están vacíos, no los enviamos
+    if (!pwd && form.elements['password']) form.elements['password'].disabled = true;
+    if (!pwd2 && form.elements['password_confirm']) form.elements['password_confirm'].disabled = true;
   }
+
+  const url = isEdit ? `/api/workers/${currentEditId}/update/` : '/api/workers/create/';
 
   const btn = form.querySelector('button[type="submit"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
 
   try {
-    const formData = new FormData(form); // incluye profile_picture si se cargó
+    const formData = new FormData(form);
 
-    const res = await fetch('/api/workers/create/', {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'X-CSRFToken': getCookie('csrftoken'),
@@ -230,7 +235,7 @@ async function submitWorker(e) {
     });
 
     if (!res.ok) {
-      let msg = 'Error al crear el trabajador.';
+      let msg = 'Error al guardar.';
       try {
         const data = await res.json();
         if (data.error) msg = data.error;
@@ -238,15 +243,104 @@ async function submitWorker(e) {
       throw new Error(msg);
     }
 
-    // Éxito
+    currentEditId = null;
+
+    // Restaurar título e inputs
+    const title = document.querySelector('#workerDrawer h3');
+    if (title) title.textContent = 'Crear trabajador';
+    if (form.elements['password']) form.elements['password'].disabled = false;
+    if (form.elements['password_confirm']) form.elements['password_confirm'].disabled = false;
+
     form.reset();
     closeWorkerDrawer();
     loadWorkers();
   } catch (err) {
+    // Rehabilitar por si falló
+    if (form.elements['password']) form.elements['password'].disabled = false;
+    if (form.elements['password_confirm']) form.elements['password_confirm'].disabled = false;
     alert(err.message || 'Error al guardar.');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
   }
 }
+
+const _origCloseWorker = closeWorkerDrawer;
+closeWorkerDrawer = function() {
+  document.getElementById('workerOverlay').style.display = 'none';
+  document.getElementById('workerDrawer').classList.remove('active');
+
+  currentEditId = null;
+
+  const title = document.querySelector('#workerDrawer h3');
+  if (title) title.textContent = 'Crear trabajador';
+
+  const form = document.getElementById('workerForm');
+  if (form) form.reset();
+}
+
+async function deleteWorker(id) {
+  if (!confirm('¿Seguro que deseas eliminar este trabajador?')) return;
+
+  try {
+    const res = await fetch(`/api/workers/${id}/delete/`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+
+    if (!res.ok) {
+      let msg = 'Error al eliminar.';
+      try {
+        const data = await res.json();
+        if (data.error) msg = data.error;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    loadWorkers();
+  } catch (err) {
+    alert(err.message || 'Error al eliminar.');
+  }
+}
+</script>
+<script>
+async function editWorker(id) {
+  currentEditId = id;
+
+  const title = document.querySelector('#workerDrawer h3');
+  if (title) title.textContent = 'Editar trabajador';
+
+  openWorkerDrawer();
+
+  try {
+    const res = await fetch(`/api/workers/${id}/`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error('No se pudo cargar el trabajador');
+
+    const data = await res.json();
+    const w = data.worker;
+
+    const form = document.getElementById('workerForm');
+    form.elements['first_name'].value = w.first_name || '';
+    form.elements['last_name'].value = w.last_name || '';
+    form.elements['email'].value = w.email || '';
+    form.elements['phone'].value = w.phone || '';
+    form.elements['date_of_birth'].value = w.date_of_birth || '';
+    form.elements['address'].value = w.address || '';
+    form.elements['document_type'].value = w.document_type || '';
+    form.elements['document_number'].value = w.document_number || '';
+    form.elements['marital_status'].value = w.marital_status || '';
+    form.elements['nationality'].value = w.nationality || '';
+    form.elements['role'].value = w.role || '';
+    // Nota: NO seteamos password ni confirm
+  } catch (err) {
+    alert(err.message || 'Error al cargar trabajador');
+  }
+}
+
+
 </script>
 {% endblock %}

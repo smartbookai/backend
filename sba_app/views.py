@@ -6,9 +6,12 @@ from django.contrib.auth import authenticate, login as auth_login, logout
 from django.contrib import messages
 from django.views.decorators.http import require_POST, require_http_methods
 import json
+import logging
+from datetime import datetime
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile
 
+logger = logging.getLogger(__name__)
 
 def anonymous_required(function=None):
     """Checks if the user is NOT logged in."""
@@ -293,12 +296,21 @@ def api_create_worker(request):
             user.save()
 
             # UserProfile
+            dob_str = data.get('date_of_birth') or ''
+            dob_val = None
+            if dob_str:
+                try:
+                    dob_val = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                except ValueError:
+                    logger.warning('Fecha de nacimiento inválida en create_worker: %s', dob_str)
+                    return JsonResponse({'error': 'Fecha de nacimiento inválida.'}, status=400)
+
             profile = UserProfile.objects.create(
                 user=user,
                 document_type=data.get('document_type') or None,
                 document_number=data.get('document_number') or None,
                 phone=data.get('phone') or None,
-                date_of_birth=data.get('date_of_birth') or None,  # formatea si hace falta
+                date_of_birth=dob_val,
                 address=data.get('address') or None,
                 marital_status=data.get('marital_status') or None,
                 nationality=data.get('nationality') or None,
@@ -326,4 +338,137 @@ def api_create_worker(request):
             }
         }, status=201)
     except Exception as e:
+        logger.exception('Error al crear el trabajador')
         return JsonResponse({'error': 'Error al crear el trabajador.'}, status=400)
+
+
+def get_company_scoped_worker_or_404(user, worker_id):
+    company = get_current_company(user)
+    try:
+        cu = CompanyUser.objects.select_related('user', 'user__profile').get(id=worker_id, company=company)
+        return cu  # contiene cu.user y cu.user.profile
+    except CompanyUser.DoesNotExist:
+        raise Http404("Trabajador no encontrado")
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_worker(request, worker_id):
+    cu = get_company_scoped_worker_or_404(request.user, worker_id)
+    user = cu.user
+    profile = getattr(user, 'profile', None)
+
+    return JsonResponse({
+        'worker': {
+            'id': cu.id,
+            'first_name': user.first_name or '',
+            'last_name': user.last_name or '',
+            'email': user.email or '',
+            'phone': getattr(profile, 'phone', '') or '',
+            'date_of_birth': (
+                profile.date_of_birth.strftime('%Y-%m-%d')
+                if profile and profile.date_of_birth else ''
+            ),
+            'address': getattr(profile, 'address', '') or '',
+            'document_type': getattr(profile, 'document_type', '') or '',
+            'document_number': getattr(profile, 'document_number', '') or '',
+            'marital_status': getattr(profile, 'marital_status', '') or '',
+            'nationality': getattr(profile, 'nationality', '') or '',
+            'role': cu.role or '',
+            'profile_picture': (profile.profile_picture.url if profile and profile.profile_picture else ''),
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_update_worker(request, worker_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar trabajadores')
+
+    cu = get_company_scoped_worker_or_404(request.user, worker_id)
+    user = cu.user
+    profile = getattr(user, 'profile', None)
+
+    data = request.POST
+    files = request.FILES
+
+    try:
+        with transaction.atomic():
+            # User
+            user.first_name = data.get('first_name') or ''
+            user.last_name = data.get('last_name') or ''
+            # Si NO querés permitir cambiar email/username, no lo toques.
+            # Si lo permitís:
+            # new_email = (data.get('email') or '').strip().lower()
+            # if new_email and new_email != user.username:
+            #     if User.objects.filter(username=new_email).exclude(pk=user.pk).exists():
+            #         return JsonResponse({'error': 'Ya existe un usuario con ese email.'}, status=400)
+            #     user.username = new_email
+            #     user.email = new_email
+
+            # Password (opcional)
+            pwd = data.get('password') or ''
+            pwd2 = data.get('password_confirm') or ''
+            if pwd or pwd2:
+                if pwd != pwd2:
+                    logger.warning('Password mismatch en update_worker id=%s', worker_id)
+                    return JsonResponse({'error': 'Las contraseñas no coinciden.'}, status=400)
+                user.set_password(pwd)
+            user.save()
+
+            # Profile
+            if profile is None:
+                profile = UserProfile.objects.create(user=user)
+
+            profile.document_type = data.get('document_type') or None
+            profile.document_number = data.get('document_number') or None
+            profile.phone = data.get('phone') or None
+            dob = data.get('date_of_birth') or ''
+            if dob:
+                # viene como YYYY-MM-DD
+                try:
+                    profile.date_of_birth = datetime.strptime(dob, '%Y-%m-%d').date()
+                except ValueError:
+                    logger.warning('Fecha de nacimiento inválida en update_worker id=%s: %s', worker_id, dob)
+                    return JsonResponse({'error': 'Fecha de nacimiento inválida.'}, status=400)
+            else:
+                profile.date_of_birth = None
+            profile.address = data.get('address') or None
+            profile.marital_status = data.get('marital_status') or None
+            profile.nationality = data.get('nationality') or None
+
+            if files.get('profile_picture'):
+                profile.profile_picture = files['profile_picture']
+
+            profile.save()
+
+            # CompanyUser role
+            cu.role = data.get('role') or cu.role
+            cu.save()
+
+        return JsonResponse({'success': True})
+    except Exception:
+        logger.exception('Error al actualizar el trabajador id=%s', worker_id)
+        return JsonResponse({'error': 'Error al actualizar el trabajador.'}, status=400)
+
+
+@login_required
+@require_POST
+def api_delete_worker(request, worker_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede eliminar trabajadores')
+
+    cu = get_company_scoped_worker_or_404(request.user, worker_id)
+    try:
+        with transaction.atomic():
+            user = cu.user
+            # Opción A: borrar todo el usuario (impacta si el user pertenece a otra compañía).
+            # Validar que no esté en otra company antes de borrarlo.
+            if not CompanyUser.objects.exclude(pk=cu.pk).filter(user=user).exists():
+                user.delete()  # borra profile por on_delete=CASCADE (OneToOne)
+            else:
+                cu.delete()
+        return JsonResponse({'success': True})
+    except Exception:
+        return JsonResponse({'error': 'Error al eliminar el trabajador.'}, status=400)
