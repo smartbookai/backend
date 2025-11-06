@@ -91,6 +91,7 @@ class Client(models.Model):
 
 class BaseInvoice(models.Model):
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name="%(class)s_invoices")
+    pdf_file = models.FileField(upload_to='invoices/pdfs/', null=True, blank=True)
     invoice_number = models.CharField(max_length=50)               # Número de factura
     issue_date = models.DateField(default=timezone.now)            # Fecha de emisión
     due_date = models.DateField(null=True, blank=True)             # Fecha de vencimiento

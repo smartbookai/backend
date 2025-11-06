@@ -60,6 +60,10 @@ def logout_view(request):
 def facturas(request):
     return render(request, 'pages/facturas.html')
 
+@login_required
+def invoices_sent(request):
+    return render(request, 'pages/facturas_enviadas.html')
+
 
 @login_required
 def proveedores(request):

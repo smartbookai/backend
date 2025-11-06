@@ -11,6 +11,10 @@
       <i class="bi bi-box-seam"></i>
       <span>Facturas</span>
     </a>
+    <a href="{% url 'invoices_sent' %}" class="sidebar-link {% if request.resolver_match.url_name == 'invoices_sent' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-send"></i>
+      <span>Facturas enviadas</span>
+    </a>
     <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'leads' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-people"></i>
       <span>Nominas</span>
@@ -29,3 +33,4 @@
     </a>
   </nav>
 </aside>
+
