@@ -39,6 +39,7 @@ urlpatterns = [
 
     #workers API endpoints
     path('api/show-table-workers/', views.api_show_table_workers, name='api_show_table_workers'),
+    path('api/workers/create/', views.api_create_worker, name='api_create_worker'),
 
 
 ]

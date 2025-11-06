@@ -43,6 +43,77 @@
       </div>
     </div>
   </div>
+  <!-- Overlay and Drawer -->
+  <div id="workerOverlay" class="overlay-mask" onclick="closeWorkerDrawer()"></div>
+  <aside id="workerDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Crear trabajador</h3>
+      <button class="btn-secondary" onclick="closeWorkerDrawer()">Cerrar</button>
+    </div>
+    <form id="workerForm" onsubmit="submitWorker(event)" enctype="multipart/form-data">
+      <div class="form-field">
+        <label>Nombre</label>
+        <input type="text" name="first_name" required>
+      </div>
+      <div class="form-field">
+        <label>Apellido</label>
+        <input type="text" name="last_name" required>
+      </div>
+      <div class="form-field">
+        <label>Email</label>
+        <input type="email" name="email">
+      </div>
+
+      <div class="form-field">
+        <label>Tipo de documento</label>
+        <input type="text" name="document_type">
+      </div>
+      <div class="form-field">
+        <label>Número de documento</label>
+        <input type="text" name="document_number">
+      </div>
+      <div class="form-field">
+        <label>Teléfono</label>
+        <input type="text" name="phone">
+      </div>
+      <div class="form-field">
+        <label>Fecha de nacimiento</label>
+        <input type="date" name="date_of_birth">
+      </div>
+      <div class="form-field">
+        <label>Dirección</label>
+        <input type="text" name="address">
+      </div>
+      <div class="form-field">
+        <label>Estado civil</label>
+        <input type="text" name="marital_status">
+      </div>
+      <div class="form-field">
+        <label>Nacionalidad</label>
+        <input type="text" name="nationality">
+      </div>
+      <div class="form-field">
+        <label>Foto de perfil</label>
+        <input type="file" name="profile_picture" accept="image/*">
+      </div>
+      <div class="form-field">
+        <label>Rol</label>
+        <input type="text" name="role">
+      </div>
+      <div class="form-field">
+        <label>Contraseña</label>
+        <input type="password" name="password">
+      </div>
+      <div class="form-field">
+        <label>Confirmar contraseña</label>
+        <input type="password" name="password_confirm">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeWorkerDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </aside>
 </section>
 
 
@@ -112,6 +183,70 @@ function loadWorkers() {
     const tbody = document.querySelector('.workers-tbody');
     if (tbody) tbody.innerHTML = '<tr><td class="table-cell" colspan="9" style="padding:18px;">Error al cargar trabajadores</td></tr>';
   });
+}
+</script>
+<script>
+// Drawer handlers
+function openWorkerDrawer() {
+  document.getElementById('workerOverlay').style.display = 'block';
+  document.getElementById('workerDrawer').classList.add('active');
+}
+function closeWorkerDrawer() {
+  document.getElementById('workerOverlay').style.display = 'none';
+  document.getElementById('workerDrawer').classList.remove('active');
+}
+function submitWorker(e) {
+  if (e) e.preventDefault();
+  closeWorkerDrawer();
+}
+</script>
+<script>
+async function submitWorker(e) {
+  if (e) e.preventDefault();
+
+  const form = document.getElementById('workerForm');
+
+  // Validación simple de password
+  const pwd = form.elements['password']?.value || '';
+  const pwd2 = form.elements['password_confirm']?.value || '';
+  if (pwd !== pwd2) {
+    alert('Las contraseñas no coinciden.');
+    return;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  try {
+    const formData = new FormData(form); // incluye profile_picture si se cargó
+
+    const res = await fetch('/api/workers/create/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      let msg = 'Error al crear el trabajador.';
+      try {
+        const data = await res.json();
+        if (data.error) msg = data.error;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    // Éxito
+    form.reset();
+    closeWorkerDrawer();
+    loadWorkers();
+  } catch (err) {
+    alert(err.message || 'Error al guardar.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+  }
 }
 </script>
 {% endblock %}

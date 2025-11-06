@@ -177,12 +177,7 @@ function submitSupplier(e) {
 </script>
 
 <script>
-// Util para CSRF (si no lo tenés ya)
-function getCookie(name) {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
-}
+
 
 async function createNewSupplier(evt) {
   if (evt) evt.preventDefault();

@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import user_passes_test, login_required
+from django.db import transaction
 from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
@@ -6,7 +7,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST, require_http_methods
 import json
 
-from sba_app.models import CompanyUser, Supplier
+from sba_app.models import CompanyUser, Supplier, User, UserProfile
 
 
 def anonymous_required(function=None):
@@ -256,3 +257,73 @@ def api_show_table_workers(request):
         })
 
     return JsonResponse({'workers': workers})
+
+
+@login_required
+@require_POST
+def api_create_worker(request):
+    if not ensure_admin(request.user):
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    company = get_current_company(request.user)
+
+    # Leer de multipart/form-data
+    data = request.POST
+    files = request.FILES
+
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    password_confirm = data.get('password_confirm') or ''
+
+    # Validaciones básicas
+    if not email:
+        return JsonResponse({'error': 'El email es obligatorio.'}, status=400)
+    if password != password_confirm:
+        return JsonResponse({'error': 'Las contraseñas no coinciden.'}, status=400)
+    if User.objects.filter(username=email).exists():
+        return JsonResponse({'error': 'Ya existe un usuario con ese email.'}, status=400)
+
+    try:
+        with transaction.atomic():
+            # User
+            user = User(username=email, email=email,
+                        first_name=data.get('first_name') or '',
+                        last_name=data.get('last_name') or '')
+            user.set_password(password)
+            user.save()
+
+            # UserProfile
+            profile = UserProfile.objects.create(
+                user=user,
+                document_type=data.get('document_type') or None,
+                document_number=data.get('document_number') or None,
+                phone=data.get('phone') or None,
+                date_of_birth=data.get('date_of_birth') or None,  # formatea si hace falta
+                address=data.get('address') or None,
+                marital_status=data.get('marital_status') or None,
+                nationality=data.get('nationality') or None,
+                profile_picture=files.get('profile_picture') if files.get('profile_picture') else None,
+            )
+
+            # CompanyUser
+            CompanyUser.objects.create(
+                user=user,
+                company=company,
+                role=(data.get('role') or 'worker')
+            )
+
+        return JsonResponse({
+            'worker': {
+                'id': user.id,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+                'phone': profile.phone or '',
+                'date_of_birth': str(profile.date_of_birth) if profile.date_of_birth else '',
+                'address': profile.address or '',
+                'role': (data.get('role') or 'worker'),
+                'profile_picture': profile.profile_picture.url if profile.profile_picture else ''
+            }
+        }, status=201)
+    except Exception as e:
+        return JsonResponse({'error': 'Error al crear el trabajador.'}, status=400)
