@@ -8,9 +8,7 @@
         <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Facturas enviadas</h1>
         <div style="color:#6B7280;margin-bottom:20px;">Emitidas por la compañía</div>
       </div>
-      {% if request.user.company_user.role == 'admin' %}
       <button type="button" class="btn-primary" onclick="openInvoiceDrawer()">Subir Factura</button>
-      {% endif %}
     </div>
 
     <div class="card table-card" style="padding:0;">
@@ -63,6 +61,53 @@
       </div>
     </form>
   </aside>
+
+  <!-- Edit Drawer -->
+  <div id="invoiceEditOverlay" class="overlay-mask" onclick="closeInvoiceEditDrawer()"></div>
+  <aside id="invoiceEditDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Editar factura</h3>
+      <button class="btn-secondary" onclick="closeInvoiceEditDrawer()">Cerrar</button>
+    </div>
+    <form id="invoiceEditForm" onsubmit="submitInvoiceEdit(event)">
+      <div class="form-field">
+        <label>Número</label>
+        <input type="text" name="invoice_number">
+      </div>
+      <div class="form-field">
+        <label>Fecha de emisión</label>
+        <input type="date" name="issue_date">
+      </div>
+      <div class="form-field">
+        <label>Vencimiento</label>
+        <input type="date" name="due_date">
+      </div>
+      <div class="form-field">
+        <label>Método de pago</label>
+        <input type="text" name="payment_method">
+      </div>
+      <div class="form-field">
+        <label>Base imponible</label>
+        <input type="text" name="base_amount">
+      </div>
+      <div class="form-field">
+        <label>Impuestos</label>
+        <input type="text" name="tax_amount">
+      </div>
+      <div class="form-field">
+        <label>Total</label>
+        <input type="text" name="total_amount">
+      </div>
+      <div class="form-field">
+        <label>Nombre del cliente</label>
+        <input type="text" name="client_name">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeInvoiceEditDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </aside>
 </section>
 
 <script>
@@ -105,14 +150,14 @@ function renderInvoicesTable(rows) {
   }
 
   rows.forEach(inv => {
-    const actions = IS_ADMIN
+    /*const actions = IS_ADMIN
       ? `
         <div style="display:flex; gap:8px; justify-content:center;">
           <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editInvoice(${inv.id})">Editar</button>
           <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteInvoice(${inv.id})">Eliminar</button>
         </div>
       `
-      : `<span style=\"color:#9CA3AF;\">-</span>`;
+      : `<span style=\"color:#9CA3AF;\">-</span>`;       ${actions} */
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -128,7 +173,12 @@ function renderInvoicesTable(rows) {
       <td class="table-cell" style="padding:14px 18px;">${inv.due_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${inv.total_amount || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${inv.status || '-'}</td>
-      <td class="table-cell text-right" style="padding:14px 18px;">${actions}</td>
+      <td class="table-cell text-right" style="padding:14px 18px;">
+         <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editInvoice(${inv.id})">Editar</button>
+          <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteInvoice(${inv.id})">Eliminar</button>
+        </div>
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -274,6 +324,92 @@ async function deleteInvoice(id) {
     await loadInvoices();
   } catch (err) {
     alert(err.message || 'Error al eliminar.');
+  }
+}
+</script>
+
+<script>
+let CURRENT_INVOICE_EDIT_ID = null;
+
+function openInvoiceEditDrawer() {
+  document.getElementById('invoiceEditOverlay').style.display = 'block';
+  document.getElementById('invoiceEditDrawer').classList.add('active');
+}
+function closeInvoiceEditDrawer() {
+  document.getElementById('invoiceEditOverlay').style.display = 'none';
+  document.getElementById('invoiceEditDrawer').classList.remove('active');
+  CURRENT_INVOICE_EDIT_ID = null;
+  document.getElementById('invoiceEditForm')?.reset();
+}
+
+async function editInvoice(id) {
+  CURRENT_INVOICE_EDIT_ID = id;
+  openInvoiceEditDrawer();
+  try {
+    const res = await fetch(`/api/invoices-sent/${id}/`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error('No se pudo cargar la factura');
+    const data = await res.json();
+    const inv = data.invoice || {};
+
+    const form = document.getElementById('invoiceEditForm');
+    form.elements['invoice_number'].value = inv.invoice_number || '';
+    form.elements['issue_date'].value = inv.issue_date || '';
+    form.elements['due_date'].value = inv.due_date || '';
+    form.elements['payment_method'].value = inv.payment_method || '';
+    form.elements['base_amount'].value = inv.base_amount || '';
+    form.elements['tax_amount'].value = inv.tax_amount || '';
+    form.elements['total_amount'].value = inv.total_amount || '';
+    form.elements['client_name'].value = (inv.client && inv.client.name) || '';
+  } catch (err) {
+    alert(err.message || 'Error al cargar');
+    closeInvoiceEditDrawer();
+  }
+}
+
+async function submitInvoiceEdit(e) {
+  if (e) e.preventDefault();
+  if (!CURRENT_INVOICE_EDIT_ID) return;
+
+  const form = document.getElementById('invoiceEditForm');
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  const payload = {
+    invoice_number: form.elements['invoice_number'].value,
+    issue_date: form.elements['issue_date'].value,
+    due_date: form.elements['due_date'].value,
+    payment_method: form.elements['payment_method'].value,
+    base_amount: form.elements['base_amount'].value,
+    tax_amount: form.elements['tax_amount'].value,
+    total_amount: form.elements['total_amount'].value,
+    client_name: form.elements['client_name'].value,
+  };
+
+  try {
+    const res = await fetch(`/api/invoices-sent/${CURRENT_INVOICE_EDIT_ID}/update/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let msg = 'Error al guardar.';
+      try { const data = await res.json(); if (data.error) msg = data.error; } catch(_){}
+      throw new Error(msg);
+    }
+
+    await loadInvoices();
+    closeInvoiceEditDrawer();
+  } catch (err) {
+    alert(err.message || 'Error al guardar.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
   }
 }
 </script>

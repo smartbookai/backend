@@ -38,6 +38,8 @@ urlpatterns = [
     path('api/show-table-invoices-sent/', views.api_show_table_invoices_sent, name='api_show_table_invoices_sent'),
     path('api/invoices-sent/create/', views.api_create_invoice_sent, name='api_create_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/delete/', views.api_delete_invoice_sent, name='api_delete_invoice_sent'),
+    path('api/invoices-sent/<int:invoice_id>/', views.api_get_invoice_sent, name='api_get_invoice_sent'),
+    path('api/invoices-sent/<int:invoice_id>/update/', views.api_update_invoice_sent, name='api_update_invoice_sent'),
 
 
 ]

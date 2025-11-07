@@ -523,6 +523,89 @@ def api_show_table_invoices_sent(request):
     return JsonResponse({'invoices': invoices})
 
 
+@login_required
+@require_http_methods(["GET"])
+def api_get_invoice_sent(request, invoice_id):
+    company = get_current_company(request.user)
+    try:
+        invoice = (
+            SalesInvoice.objects
+            .select_related('client')
+            .get(id=invoice_id, company=company)
+        )
+    except SalesInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    def fmt_date(d):
+        return d.strftime('%Y-%m-%d') if d else ''
+
+    data = {
+        'id': invoice.id,
+        'invoice_number': invoice.invoice_number or '',
+        'issue_date': fmt_date(invoice.issue_date),
+        'due_date': fmt_date(invoice.due_date),
+        'payment_method': invoice.payment_method or '',
+        'base_amount': f"{invoice.base_amount:.2f}" if invoice.base_amount is not None else '',
+        'tax_amount': f"{invoice.tax_amount:.2f}" if invoice.tax_amount is not None else '',
+        'total_amount': f"{invoice.total_amount:.2f}" if invoice.total_amount is not None else '',
+        'notes': invoice.notes or '',
+        'client': {
+            'id': invoice.client.id if invoice.client else None,
+            'name': invoice.client.name if invoice.client else '',
+            'email': invoice.client.email if invoice.client else '',
+        }
+    }
+
+    return JsonResponse({'invoice': data})
+
+
+@login_required
+@require_POST
+def api_update_invoice_sent(request, invoice_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar facturas')
+
+    company = get_current_company(request.user)
+    try:
+        invoice = SalesInvoice.objects.get(id=invoice_id, company=company)
+    except SalesInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    # Parse fechas
+    def parse_date(val):
+        if not val:
+            return None
+        try:
+            return datetime.strptime(val, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    invoice.invoice_number = (payload.get('invoice_number') or '').strip() or invoice.invoice_number
+    invoice.issue_date = parse_date(payload.get('issue_date'))
+    invoice.due_date = parse_date(payload.get('due_date'))
+    invoice.payment_method = payload.get('payment_method') or None
+    invoice.base_amount = safe_decimal(payload.get('base_amount'))
+    invoice.tax_amount = safe_decimal(payload.get('tax_amount'))
+    invoice.total_amount = safe_decimal(payload.get('total_amount'))
+    # notes may be omitted from payload; preserve current if not provided
+    if 'notes' in payload:
+        invoice.notes = payload.get('notes') or ''
+
+    # Update client name if provided
+    client_name = (payload.get('client_name') or '').strip()
+    if client_name and invoice.client:
+        invoice.client.name = client_name
+        invoice.client.save()
+    invoice.save()
+
+    return JsonResponse({'success': True})
+
+
 def safe_decimal(value):
     """
     Convierte el valor a Decimal seguro. Si es None, vacío o inválido, devuelve Decimal('0').
