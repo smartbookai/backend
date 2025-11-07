@@ -46,45 +46,20 @@
   <div id="invoiceOverlay" class="overlay-mask" onclick="closeInvoiceDrawer()"></div>
   <aside id="invoiceDrawer" class="drawer" aria-hidden="true">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="margin:0;font-size:18px;">Crear factura</h3>
+      <h3 style="margin:0;font-size:18px;">Subir factura</h3>
       <button class="btn-secondary" onclick="closeInvoiceDrawer()">Cerrar</button>
     </div>
-    <form id="invoiceForm" onsubmit="submitInvoice(event)">
-      <div class="form-field">
-        <label>Nº de factura</label>
-        <input type="text" name="number" required>
-      </div>
-      <div class="form-field">
-        <label>Cliente</label>
-        <input type="text" name="customer_name" required>
-      </div>
-      <div class="form-field">
-        <label>Email del cliente</label>
-        <input type="email" name="customer_email">
-      </div>
-      <div class="form-field">
-        <label>Fecha</label>
-        <input type="date" name="issue_date">
-      </div>
-      <div class="form-field">
-        <label>Vencimiento</label>
-        <input type="date" name="due_date">
-      </div>
-      <div class="form-field">
-        <label>Importe total</label>
-        <input type="number" step="0.01" name="total_amount">
-      </div>
-      <div class="form-field">
-        <label>Estado</label>
-        <input type="text" name="status">
-      </div>
-      <div class="form-field">
-        <label>Notas</label>
-        <input type="text" name="notes">
+    <form id="invoiceForm" onsubmit="submitInvoice(event)" enctype="multipart/form-data">
+      <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y soltá el archivo aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
+        <input id="pdfInput" name="pdf_file" type="file" accept="application/pdf,image/*" style="display:none;" />
+        <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closeInvoiceDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Guardar</button>
+        <button type="submit" class="btn-primary">Subir</button>
       </div>
     </form>
   </aside>
@@ -95,6 +70,7 @@ const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else
 
 document.addEventListener('DOMContentLoaded', function() {
   loadInvoices();
+  setupPdfDropzone();
 });
 
 async function loadInvoices() {
@@ -158,10 +134,64 @@ function renderInvoicesTable(rows) {
   });
 }
 
+function setupPdfDropzone() {
+  const dz = document.getElementById('pdfDropzone');
+  const input = document.getElementById('pdfInput');
+  const nameEl = document.getElementById('pdfFileName');
+  if (!dz || !input) return;
+
+  const setFile = (file) => {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf';
+    const isImage = file.type.startsWith('image/');
+    if (!isPdf && !isImage) {
+      nameEl.textContent = 'Archivo inválido: solo PDF o imagen (JPG/PNG)';
+      nameEl.style.color = '#DC2626';
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      nameEl.textContent = 'El archivo supera 10MB';
+      nameEl.style.color = '#DC2626';
+      input.value = '';
+      return;
+    }
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    nameEl.textContent = file.name;
+    nameEl.style.color = '#374151';
+  };
+
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => setFile(e.target.files[0]));
+
+  ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dz.style.background = '#EFF6FF';
+    dz.style.borderColor = '#60A5FA';
+  }));
+  ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dz.style.background = '#F9FAFB';
+    dz.style.borderColor = '#D1D5DB';
+  }));
+  dz.addEventListener('drop', (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    setFile(file);
+  });
+}
+
 // Drawer handlers (stub)
 function openInvoiceDrawer() {
   document.getElementById('invoiceOverlay').style.display = 'block';
   document.getElementById('invoiceDrawer').classList.add('active');
+  const input = document.getElementById('pdfInput');
+  const nameEl = document.getElementById('pdfFileName');
+  if (input) input.value = '';
+  if (nameEl) nameEl.textContent = '';
 }
 function closeInvoiceDrawer() {
   document.getElementById('invoiceOverlay').style.display = 'none';
@@ -170,6 +200,54 @@ function closeInvoiceDrawer() {
 function submitInvoice(e) {
   if (e) e.preventDefault();
   closeInvoiceDrawer();
+}
+</script>
+<script>
+async function submitInvoice(e) {
+  if (e) e.preventDefault();
+
+  const fileInput = document.getElementById('pdfInput');
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    alert('Seleccioná un archivo PDF o imagen.');
+    return;
+  }
+
+  const btn = (e && e.submitter) || document.querySelector('#invoiceForm button[type="submit"]');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Subiendo...';
+  }
+
+  try {
+    const fd = new FormData();
+    fd.append('pdf_file', fileInput.files[0]);
+
+    const res = await fetch('/api/invoices-sent/create/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: fd
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Error al subir la factura');
+    }
+
+    await loadInvoices();
+    closeInvoiceDrawer();
+    fileInput.value = '';
+    const nameEl = document.getElementById('pdfFileName');
+    if (nameEl) nameEl.textContent = '';
+  } catch (error) {
+    alert(error.message || 'Error subiendo archivo');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Subir';
+    }
+  }
 }
 </script>
 {% endblock %}

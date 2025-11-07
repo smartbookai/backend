@@ -35,6 +35,7 @@ urlpatterns = [
 
     #sales invoices API endpoints
     path('api/show-table-invoices-sent/', views.api_show_table_invoices_sent, name='api_show_table_invoices_sent'),
+    path('api/invoices-sent/create/', views.api_create_invoice_sent, name='api_create_invoice_sent')
 
 
 ]

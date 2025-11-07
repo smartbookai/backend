@@ -21,6 +21,7 @@ ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
 
 CORS_ORIGIN_WHITELIST = ["http://*"]
 
+OPENAI_API_KEY = env("OPENAI_API_KEY")
 # Application definition
 
 INSTALLED_APPS = [

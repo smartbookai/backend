@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.db import transaction
 from django.http import JsonResponse, HttpResponseForbidden, Http404
@@ -9,7 +11,8 @@ import json
 import logging
 from datetime import datetime
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice
+from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client
+from sba_app.services.openai_service import extract_invoice_data
 
 logger = logging.getLogger(__name__)
 
@@ -513,3 +516,94 @@ def api_show_table_invoices_sent(request):
         })
 
     return JsonResponse({'invoices': invoices})
+
+
+def safe_decimal(value):
+    """
+    Convierte el valor a Decimal seguro. Si es None, vacío o inválido, devuelve Decimal('0').
+    """
+    try:
+        if value is None or str(value).strip() == "":
+            return Decimal("0")
+        # Reemplaza coma por punto, por si viene en formato europeo
+        return Decimal(str(value).replace(",", "."))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_create_invoice_sent(request):
+    company = get_current_company(request.user)
+    file = request.FILES.get("pdf_file")
+
+    if not file:
+        return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
+
+    if file.size > 10 * 1024 * 1024:
+        return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
+
+    try:
+        # 🧠 Paso 1: Extraer datos con OpenAI (PDF o imagen)
+        result = extract_invoice_data(file)
+
+        if not result:
+            return JsonResponse({
+                "success": False,
+                "message": "No se pudo extraer información de la factura."
+            }, status=400)
+
+        invoice_data = result.get("invoice", {}) or {}
+        client_data = result.get("client", {}) or {}
+
+        # 🧍 Paso 2: Buscar o crear cliente
+        client = None
+        filters = {"company": company}
+
+        if client_data.get("document_number"):
+            filters["document_number"] = client_data["document_number"]
+            client = Client.objects.filter(**filters).first()
+        elif client_data.get("name"):
+            filters["name"] = client_data["name"]
+            client = Client.objects.filter(**filters).first()
+
+        if not client:
+            client = Client.objects.create(
+                company=company,
+                name=client_data.get("name") or "Cliente desconocido",
+                contact_person=client_data.get("contact_person"),
+                phone=client_data.get("phone"),
+                email=client_data.get("email"),
+                address=client_data.get("address"),
+                document_type=client_data.get("document_type"),
+                document_number=client_data.get("document_number"),
+            )
+
+        # 🧾 Paso 3: Crear factura
+        invoice = SalesInvoice.objects.create(
+            company=company,
+            client=client,
+            pdf_file=file,
+            invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
+            issue_date=invoice_data.get("issue_date") or None,
+            due_date=invoice_data.get("due_date") or None,
+            payment_method=invoice_data.get("payment_method"),
+            base_amount=safe_decimal(invoice_data.get("base_amount")),
+            tax_amount=safe_decimal(invoice_data.get("tax_amount")),
+            total_amount=safe_decimal(invoice_data.get("total_amount")),
+            notes=invoice_data.get("notes") or "",
+        )
+
+        return JsonResponse({
+            "success": True,
+            "message": "Factura procesada correctamente.",
+            "invoice_id": invoice.id,
+            "invoice_data": invoice_data,
+            "client_data": client_data,
+        })
+
+    except Exception as e:
+        import traceback
+        print("🔥 ERROR en api_create_invoice_sent:", traceback.format_exc())
+        return JsonResponse({"success": False, "message": str(e)}, status=500)
