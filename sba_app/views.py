@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile
+from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice
 
 logger = logging.getLogger(__name__)
 
@@ -476,3 +476,40 @@ def api_delete_worker(request, worker_id):
         return JsonResponse({'success': True})
     except Exception:
         return JsonResponse({'error': 'Error al eliminar el trabajador.'}, status=400)
+
+
+@login_required
+def api_show_table_invoices_sent(request):
+    company = get_current_company(request.user)
+
+    invoices_qs = (
+        SalesInvoice.objects
+        .select_related('client')
+        .filter(company=company)
+        .order_by('-issue_date', '-id')
+    )
+
+    invoices = []
+    for invoice in invoices_qs:
+        issue_date = invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else ''
+        due_date = invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else ''
+        total_amount = f"{invoice.total_amount:.2f}" if invoice.total_amount is not None else ''
+
+        client_name = invoice.client.name if invoice.client else ''
+        client_email = invoice.client.email if invoice.client else ''
+
+        pdf_url = request.build_absolute_uri(invoice.pdf_file.url) if invoice.pdf_file else ''
+
+        invoices.append({
+            'id': invoice.id,
+            'number': invoice.invoice_number or '',
+            'customer_name': client_name,
+            'customer_email': client_email,
+            'issue_date': issue_date,
+            'due_date': due_date,
+            'total_amount': total_amount,
+            'status': '',  # no hay status en el modelo; queda vacío
+            'pdf_url': pdf_url,
+        })
+
+    return JsonResponse({'invoices': invoices})

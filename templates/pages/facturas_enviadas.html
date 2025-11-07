@@ -94,8 +94,29 @@
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 
 document.addEventListener('DOMContentLoaded', function() {
-  // loadInvoices();  // lo conectamos luego
+  loadInvoices();
 });
+
+async function loadInvoices() {
+  const tbody = document.querySelector('.invoices-tbody');
+  if (!tbody) return;
+
+  // tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="color:#6B7280;padding:18px;">Cargando...</td></tr>';
+
+  try {
+    const res = await fetch('/api/show-table-invoices-sent/', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error('No se pudo cargar el listado de facturas enviadas');
+
+    const data = await res.json();
+    const invoices = data.invoices || [];
+    renderInvoicesTable(invoices);
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="padding:18px;">Error al cargar facturas enviadas</td></tr>';
+  }
+}
 
 function renderInvoicesTable(rows) {
   const tbody = document.querySelector('.invoices-tbody');
@@ -119,7 +140,12 @@ function renderInvoicesTable(rows) {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="table-cell" style="padding:14px 18px;">${inv.number || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">
+        ${inv.pdf_url
+          ? `<a href="${inv.pdf_url}" target="_blank" rel="noopener noreferrer">${inv.number || 'PDF'}</a>`
+          : (inv.number || '-')
+        }
+      </td>
       <td class="table-cell" style="padding:14px 18px;">${inv.customer_name || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${inv.customer_email || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${inv.issue_date || '-'}</td>
