@@ -27,6 +27,13 @@ urlpatterns = [
     path('api/suppliers/<int:supplier_id>/update/', views.api_update_supplier, name='api_update_supplier'),
     path('api/suppliers/<int:supplier_id>/delete/', views.api_delete_supplier, name='api_delete_supplier'),
 
+    #clients API endpoints
+    path('api/show-table-clients/', views.api_show_table_clients, name='api_show_table_clients'),
+    path('api/clients/create/', views.api_create_client, name='api_create_client'),
+    path('api/clients/<int:client_id>/', views.api_get_client, name='api_get_client'),
+    path('api/clients/<int:client_id>/update/', views.api_update_client, name='api_update_client'),
+    path('api/clients/<int:client_id>/delete/', views.api_delete_client, name='api_delete_client'),
+
     #workers API endpoints
     path('api/show-table-workers/', views.api_show_table_workers, name='api_show_table_workers'),
     path('api/workers/create/', views.api_create_worker, name='api_create_worker'),

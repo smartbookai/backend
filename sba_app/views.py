@@ -237,6 +237,140 @@ def api_delete_supplier(request, supplier_id):
     return JsonResponse({'success': True})
 
 
+# ==========================
+# Clients CRUD (company-scoped)
+# ==========================
+@login_required
+def api_show_table_clients(request):
+    company = get_current_company(request.user)
+    qs = Client.objects.filter(company=company).order_by('name')
+    data = [
+        {
+            'id': c.id,
+            'name': c.name,
+            'contact_person': c.contact_person or '',
+            'phone': c.phone or '',
+            'email': c.email or '',
+            'document': f"{(c.document_type or '')} {('· ' if c.document_type and c.document_number else '')}{(c.document_number or '')}".strip(),
+            'address': c.address or '',
+        }
+        for c in qs
+    ]
+    return JsonResponse({'clients': data})
+
+
+@login_required
+@require_POST
+def api_create_client(request):
+    company = get_current_company(request.user)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    name = (payload.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': 'El nombre es obligatorio.'}, status=400)
+
+    client = Client.objects.create(
+        company=company,
+        name=name,
+        contact_person=payload.get('contact_person') or None,
+        phone=payload.get('phone') or None,
+        email=payload.get('email') or None,
+        address=payload.get('address') or None,
+        document_type=payload.get('document_type') or None,
+        document_number=payload.get('document_number') or None,
+    )
+
+    return JsonResponse({
+        'client': {
+            'id': client.id,
+            'name': client.name,
+            'contact_person': client.contact_person or '',
+            'phone': client.phone or '',
+            'email': client.email or '',
+            'document': f"{(client.document_type or '')} {('· ' if client.document_type and client.document_number else '')}{(client.document_number or '')}".strip(),
+            'address': client.address or '',
+        }
+    }, status=201)
+
+
+def get_company_scoped_client_or_404(user, client_id):
+    company = get_current_company(user)
+    try:
+        return Client.objects.get(id=client_id, company=company)
+    except Client.DoesNotExist:
+        raise Http404("Cliente no encontrado")
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_client(request, client_id):
+    client = get_company_scoped_client_or_404(request.user, client_id)
+    return JsonResponse({
+        'client': {
+            'id': client.id,
+            'name': client.name,
+            'contact_person': client.contact_person or '',
+            'phone': client.phone or '',
+            'email': client.email or '',
+            'address': client.address or '',
+            'document_type': client.document_type or '',
+            'document_number': client.document_number or '',
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_update_client(request, client_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar clientes')
+
+    client = get_company_scoped_client_or_404(request.user, client_id)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    name = (payload.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': 'El nombre es obligatorio.'}, status=400)
+
+    client.name = name
+    client.contact_person = payload.get('contact_person') or None
+    client.phone = payload.get('phone') or None
+    client.email = payload.get('email') or None
+    client.address = payload.get('address') or None
+    client.document_type = payload.get('document_type') or None
+    client.document_number = payload.get('document_number') or None
+    client.save()
+
+    return JsonResponse({
+        'client': {
+            'id': client.id,
+            'name': client.name,
+            'contact_person': client.contact_person or '',
+            'phone': client.phone or '',
+            'email': client.email or '',
+            'address': client.address or '',
+            'document_type': client.document_type or '',
+            'document_number': client.document_number or '',
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_delete_client(request, client_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede eliminar clientes')
+
+    client = get_company_scoped_client_or_404(request.user, client_id)
+    client.delete()
+    return JsonResponse({'success': True})
 @login_required
 def api_show_table_workers(request):
     company = get_current_company(request.user)
