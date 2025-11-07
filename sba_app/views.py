@@ -84,6 +84,11 @@ def reportes(request):
 
 
 @login_required
+def clientes(request):
+    return render(request, 'pages/clientes.html')
+
+
+@login_required
 def campaigns(request):
     return render(request, 'pages/campaigns.html')
 
@@ -607,3 +612,20 @@ def api_create_invoice_sent(request):
         import traceback
         print("🔥 ERROR en api_create_invoice_sent:", traceback.format_exc())
         return JsonResponse({"success": False, "message": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_delete_invoice_sent(request, invoice_id):
+    company = get_current_company(request.user)
+    try:
+        invoice = SalesInvoice.objects.get(id=invoice_id, company=company)
+    except SalesInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    # Opcional: eliminar también el archivo del almacenamiento
+    if invoice.pdf_file:
+        invoice.pdf_file.delete(save=False)
+
+    invoice.delete()
+    return JsonResponse({'success': True})

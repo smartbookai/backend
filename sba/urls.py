@@ -15,6 +15,7 @@ urlpatterns = [
     path('invoices-sent/', views.invoices_sent, name='invoices_sent'),
     path('proveedores/', views.proveedores, name='proveedores'),
     path('trabajadores/', views.trabajadores, name='trabajadores'),
+    path('clientes/', views.clientes, name='clientes'),
     path('reportes/', views.reportes, name='reportes'),
     #path('campaigns/', views.campaigns, name='campaigns'),
     path('nominas/', views.nominas, name='nominas'),
@@ -35,7 +36,8 @@ urlpatterns = [
 
     #sales invoices API endpoints
     path('api/show-table-invoices-sent/', views.api_show_table_invoices_sent, name='api_show_table_invoices_sent'),
-    path('api/invoices-sent/create/', views.api_create_invoice_sent, name='api_create_invoice_sent')
+    path('api/invoices-sent/create/', views.api_create_invoice_sent, name='api_create_invoice_sent'),
+    path('api/invoices-sent/<int:invoice_id>/delete/', views.api_delete_invoice_sent, name='api_delete_invoice_sent'),
 
 
 ]

@@ -249,5 +249,32 @@ async function submitInvoice(e) {
     }
   }
 }
+
+async function deleteInvoice(id) {
+  if (!confirm('¿Seguro que deseas eliminar esta factura?')) return;
+
+  try {
+    const res = await fetch(`/api/invoices-sent/${id}/delete/`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+
+    if (!res.ok) {
+      let msg = 'Error al eliminar la factura.';
+      try {
+        const data = await res.json();
+        if (data.error) msg = data.error;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    await loadInvoices();
+  } catch (err) {
+    alert(err.message || 'Error al eliminar.');
+  }
+}
 </script>
 {% endblock %}
