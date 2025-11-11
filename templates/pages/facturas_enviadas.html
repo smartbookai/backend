@@ -12,10 +12,14 @@
     </div>
 
     <div class="card table-card" style="padding:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;">
-        <div>
+      <div style="display:flex;align-items:center;padding:16px 20px;gap:12px;">
+        <div style="flex:1;min-width:0;">
           <h2 style="font-size:16px;margin:0;">Listado</h2>
         </div>
+        <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input id="invoiceSearch" type="text" placeholder="Buscar..." aria-label="Buscar facturas enviadas" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div style="flex:1;min-width:0;"></div>
       </div>
 
       <div class="table-container">
@@ -143,17 +147,17 @@
 
 <script>
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+let INVOICES_DATA = [];
 
 document.addEventListener('DOMContentLoaded', function() {
   loadInvoices();
   setupPdfDropzone();
+  setupInvoiceSearch();
 });
 
 async function loadInvoices() {
   const tbody = document.querySelector('.invoices-tbody');
   if (!tbody) return;
-
-  // tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="color:#6B7280;padding:18px;">Cargando...</td></tr>';
 
   try {
     const res = await fetch('/api/show-table-invoices-sent/', {
@@ -163,7 +167,11 @@ async function loadInvoices() {
 
     const data = await res.json();
     const invoices = data.invoices || [];
-    renderInvoicesTable(invoices);
+    INVOICES_DATA = invoices;
+    const input = document.getElementById('invoiceSearch');
+    const term = input ? (input.value || '').trim().toLowerCase() : '';
+    const rows = term ? filterInvoices(term) : INVOICES_DATA;
+    renderInvoicesTable(rows);
   } catch (err) {
     console.error(err);
     tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="padding:18px;">Error al cargar facturas enviadas</td></tr>';
@@ -262,6 +270,32 @@ function setupPdfDropzone() {
   dz.addEventListener('drop', (e) => {
     const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     setFile(file);
+  });
+}
+
+function setupInvoiceSearch() {
+  const input = document.getElementById('invoiceSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    const rows = filterInvoices(term);
+    renderInvoicesTable(rows);
+  });
+}
+
+function filterInvoices(term) {
+  if (!term) return INVOICES_DATA;
+  return INVOICES_DATA.filter(inv => {
+    const fields = [
+      inv.number,
+      inv.customer_name,
+      inv.customer_email,
+      inv.issue_date,
+      inv.due_date,
+      inv.total_amount,
+      inv.status,
+    ];
+    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
   });
 }
 
