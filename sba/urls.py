@@ -48,6 +48,13 @@ urlpatterns = [
     path('api/invoices-sent/<int:invoice_id>/', views.api_get_invoice_sent, name='api_get_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/update/', views.api_update_invoice_sent, name='api_update_invoice_sent'),
 
+    #purchase invoices API endpoints
+    path('api/show-table-invoices-received/', views.api_show_table_invoices_received, name='api_show_table_invoices_received'),
+    path('api/invoices-received/create/', views.api_create_invoice_received, name='api_create_invoice_received'),
+    path('api/invoices-received/<int:invoice_id>/delete/', views.api_delete_invoice_received, name='api_delete_invoice_received'),
+    path('api/invoices-received/<int:invoice_id>/', views.api_get_invoice_received, name='api_get_invoice_received'),
+    path('api/invoices-received/<int:invoice_id>/update/', views.api_update_invoice_received, name='api_update_invoice_received'),
+
 
 ]
 

@@ -11,8 +11,8 @@ import json
 import logging
 from datetime import datetime
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine
-from sba_app.services.openai_service import extract_invoice_data
+from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice
+from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data
 
 logger = logging.getLogger(__name__)
 
@@ -924,3 +924,295 @@ def api_delete_invoice_sent(request, invoice_id):
 
     invoice.delete()
     return JsonResponse({'success': True})
+
+
+@login_required
+def api_show_table_invoices_received(request):
+    company = get_current_company(request.user)
+
+    # Query claramente nombrada
+    purchase_invoices_queryset = (
+        PurchaseInvoice.objects
+        .select_related('supplier')  # proveedor en facturas recibidas
+        .filter(company=company)
+        .order_by('-issue_date', '-id')
+    )
+
+    purchases_payload = []
+    for invoice in purchase_invoices_queryset:
+        issue_date_str = invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else ''
+        due_date_str = invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else ''
+        total_amount_str = f"{invoice.total_amount:.2f}" if invoice.total_amount is not None else ''
+
+        supplier_name = invoice.supplier.name if invoice.supplier else ''
+        supplier_email = invoice.supplier.email if invoice.supplier else ''
+
+        pdf_absolute_url = request.build_absolute_uri(invoice.pdf_file.url) if invoice.pdf_file else ''
+
+        purchases_payload.append({
+            'id': invoice.id,
+            'number': invoice.invoice_number or '',
+            'supplier_name': supplier_name,
+            'supplier_email': supplier_email,
+            'issue_date': issue_date_str,
+            'due_date': due_date_str,
+            'total_amount': total_amount_str,
+            'status': '',  # si no hay campo en el modelo, dejamos vacío
+            'pdf_url': pdf_absolute_url,
+        })
+
+    return JsonResponse({'purchases': purchases_payload})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_invoice_received(request, invoice_id):
+    company = get_current_company(request.user)
+    try:
+        purchase_invoice = (
+            PurchaseInvoice.objects
+            .select_related('supplier')
+            .get(id=invoice_id, company=company)
+        )
+    except PurchaseInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    def format_date(date_value):
+        return date_value.strftime('%Y-%m-%d') if date_value else ''
+
+    invoice_payload = {
+        'id': purchase_invoice.id,
+        'invoice_number': purchase_invoice.invoice_number or '',
+        'issue_date': format_date(purchase_invoice.issue_date),
+        'due_date': format_date(purchase_invoice.due_date),
+        'payment_method': getattr(purchase_invoice, 'payment_method', '') or '',
+        'base_amount': f"{purchase_invoice.base_amount:.2f}" if getattr(purchase_invoice, 'base_amount', None) is not None else '',
+        'tax_amount': f"{purchase_invoice.tax_amount:.2f}" if getattr(purchase_invoice, 'tax_amount', None) is not None else '',
+        'total_amount': f"{purchase_invoice.total_amount:.2f}" if purchase_invoice.total_amount is not None else '',
+        'notes': getattr(purchase_invoice, 'notes', '') or '',
+        'supplier': {
+            'id': purchase_invoice.supplier.id if purchase_invoice.supplier else None,
+            'name': purchase_invoice.supplier.name if purchase_invoice.supplier else '',
+            'email': purchase_invoice.supplier.email if purchase_invoice.supplier else '',
+        }
+    }
+
+    # Líneas de la factura recibida
+    purchase_lines_queryset = InvoiceLine.objects.filter(purchase_invoice=purchase_invoice).order_by('id')
+    lines_payload = [{
+        'id': line.id,
+        'description': line.description or '',
+        'quantity': float(line.quantity) if line.quantity is not None else 0,
+        'unit_price': float(line.unit_price) if line.unit_price is not None else 0,
+        'vat_rate': float(line.vat_rate) if line.vat_rate is not None else 0,
+    } for line in purchase_lines_queryset]
+
+    return JsonResponse({'invoice': invoice_payload, 'lines': lines_payload})
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_update_invoice_received(request, invoice_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar facturas')
+
+    company = get_current_company(request.user)
+    try:
+        purchase_invoice = PurchaseInvoice.objects.get(id=invoice_id, company=company)
+    except PurchaseInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    try:
+        request_payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        request_payload = request.POST
+
+    # Parse de fechas (YYYY-MM-DD)
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    # Cabecera (solo si vienen en payload)
+    invoice_number = (request_payload.get('invoice_number') or '').strip()
+    if invoice_number:
+        purchase_invoice.invoice_number = invoice_number
+
+    purchase_invoice.issue_date = parse_date(request_payload.get('issue_date'))
+    purchase_invoice.due_date = parse_date(request_payload.get('due_date'))
+    purchase_invoice.payment_method = request_payload.get('payment_method') or None
+
+    purchase_invoice.base_amount = safe_decimal(request_payload.get('base_amount'))
+    purchase_invoice.tax_amount = safe_decimal(request_payload.get('tax_amount'))
+    purchase_invoice.total_amount = safe_decimal(request_payload.get('total_amount'))
+
+    if 'notes' in request_payload:
+        purchase_invoice.notes = request_payload.get('notes') or ''
+
+    # Actualizar nombre del proveedor si viene
+    supplier_name = (request_payload.get('supplier_name') or '').strip()
+    if supplier_name and purchase_invoice.supplier:
+        purchase_invoice.supplier.name = supplier_name
+        purchase_invoice.supplier.save()
+
+    purchase_invoice.save()
+
+    # Sincronizar líneas
+    incoming_lines = request_payload.get('lines', []) or []
+
+    existing_lines_by_id = {
+        line.id: line
+        for line in InvoiceLine.objects.filter(purchase_invoice=purchase_invoice)
+    }
+
+    incoming_line_ids = set(ln.get('id') for ln in incoming_lines if ln.get('id'))
+
+    for line_item in incoming_lines:
+        line_id = line_item.get('id')
+        line_data = {
+            'description': (line_item.get('description') or '').strip(),
+            'quantity': safe_decimal(line_item.get('quantity')) or 0,
+            'unit_price': safe_decimal(line_item.get('unit_price')) or 0,
+            'vat_rate': safe_decimal(line_item.get('vat_rate')) or 0,
+        }
+        if line_id and line_id in existing_lines_by_id:
+            invoice_line = existing_lines_by_id[line_id]
+            invoice_line.description = line_data['description']
+            invoice_line.quantity = line_data['quantity']
+            invoice_line.unit_price = line_data['unit_price']
+            invoice_line.vat_rate = line_data['vat_rate']
+            invoice_line.save()
+        else:
+            InvoiceLine.objects.create(purchase_invoice=purchase_invoice, **line_data)
+
+    lines_to_delete = [
+        obj for obj_id, obj in existing_lines_by_id.items()
+        if obj_id not in incoming_line_ids
+    ]
+    if lines_to_delete:
+        InvoiceLine.objects.filter(id__in=[o.id for o in lines_to_delete]).delete()
+
+    return JsonResponse({'success': True})
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_delete_invoice_received(request, invoice_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede eliminar facturas')
+
+    company = get_current_company(request.user)
+    try:
+        purchase_invoice = PurchaseInvoice.objects.get(id=invoice_id, company=company)
+    except PurchaseInvoice.DoesNotExist:
+        raise Http404("Factura no encontrada")
+
+    purchase_invoice.delete()
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_create_invoice_received(request):
+    company = get_current_company(request.user)
+    file = request.FILES.get("pdf_file")
+
+    if not file:
+        return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
+
+    if file.size > 10 * 1024 * 1024:
+        return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
+
+    try:
+        # 🧠 Paso 1: Extraer datos con OpenAI - función específica para purchase
+        result = extract_purchase_invoice_data(file)  # ← Usá esta función
+
+        if not result:
+            return JsonResponse({
+                "success": False,
+                "message": "No se pudo extraer información de la factura."
+            }, status=400)
+
+        invoice_data = result.get("invoice", {}) or {}
+        supplier_data = result.get("supplier", {}) or {}  # ← Ahora viene como "supplier"
+        lines_data = result.get("lines", []) or []
+
+        # 🏢 Paso 2: Buscar o crear proveedor (Supplier)
+        supplier = None
+        filters = {"company": company}
+
+        if supplier_data.get("document_number"):
+            filters["document_number"] = supplier_data["document_number"]
+            supplier = Supplier.objects.filter(**filters).first()
+        elif supplier_data.get("name"):
+            filters["name"] = supplier_data["name"]
+            supplier = Supplier.objects.filter(**filters).first()
+
+        if not supplier:
+            supplier = Supplier.objects.create(
+                company=company,
+                name=supplier_data.get("name") or "Proveedor desconocido",
+                contact_person=supplier_data.get("contact_person"),
+                phone=supplier_data.get("phone"),
+                email=supplier_data.get("email"),
+                address=supplier_data.get("address"),
+                document_type=supplier_data.get("document_type"),
+                document_number=supplier_data.get("document_number"),
+            )
+
+        # 🧾 Paso 3: Crear factura recibida (PurchaseInvoice)
+        invoice = PurchaseInvoice.objects.create(
+            company=company,
+            supplier=supplier,
+            pdf_file=file,
+            invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
+            issue_date=invoice_data.get("issue_date") or None,
+            due_date=invoice_data.get("due_date") or None,
+            payment_method=invoice_data.get("payment_method"),
+            base_amount=safe_decimal(invoice_data.get("base_amount")),
+            tax_amount=safe_decimal(invoice_data.get("tax_amount")),
+            total_amount=safe_decimal(invoice_data.get("total_amount")),
+            notes=invoice_data.get("notes") or "",
+        )
+
+        # 📝 Paso 4: Crear líneas de factura
+        created_lines = []
+        if lines_data:
+            for line_data in lines_data:
+                line = InvoiceLine.objects.create(
+                    purchase_invoice=invoice,
+                    description=line_data.get("description") or "Sin descripción",
+                    quantity=safe_decimal(line_data.get("quantity", "1")),
+                    unit_price=safe_decimal(line_data.get("unit_price", "0")),
+                    vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
+                )
+                created_lines.append({
+                    "id": line.id,
+                    "description": line.description,
+                    "quantity": str(line.quantity),
+                    "unit_price": str(line.unit_price),
+                    "vat_rate": str(line.vat_rate),
+                    "subtotal": str(line.subtotal()),
+                })
+        else:
+            print("⚠️ No se encontraron líneas en la factura")
+
+        return JsonResponse({
+            "success": True,
+            "message": "Factura recibida procesada correctamente.",
+            "invoice_id": invoice.id,
+            "invoice_data": invoice_data,
+            "supplier_data": supplier_data,
+            "lines": created_lines,
+        })
+
+    except Exception as e:
+        import traceback
+        print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
+        transaction.set_rollback(True)
+        return JsonResponse({"success": False, "message": str(e)}, status=500)
