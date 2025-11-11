@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client
+from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine
 from sba_app.services.openai_service import extract_invoice_data
 
 logger = logging.getLogger(__name__)
@@ -778,6 +778,11 @@ def api_create_invoice_sent(request):
 
         invoice_data = result.get("invoice", {}) or {}
         client_data = result.get("client", {}) or {}
+        lines_data = result.get("lines", []) or []
+
+        #print(f"📊 Datos extraídos - Invoice: {invoice_data}")
+        #print(f"👤 Cliente: {client_data}")
+        #print(f"📝 Líneas: {lines_data}")
 
         # 🧍 Paso 2: Buscar o crear cliente
         client = None
@@ -817,17 +822,45 @@ def api_create_invoice_sent(request):
             notes=invoice_data.get("notes") or "",
         )
 
+        # 📝 Paso 4: Crear líneas de factura
+        created_lines = []
+        if lines_data:
+            for line_data in lines_data:
+                line = InvoiceLine.objects.create(
+                    sales_invoice=invoice,
+                    description=line_data.get("description") or "Sin descripción",
+                    quantity=safe_decimal(line_data.get("quantity", "1")),
+                    unit_price=safe_decimal(line_data.get("unit_price", "0")),
+                    vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
+                )
+                created_lines.append({
+                    "id": line.id,
+                    "description": line.description,
+                    "quantity": str(line.quantity),
+                    "unit_price": str(line.unit_price),
+                    "vat_rate": str(line.vat_rate),
+                    "subtotal": str(line.subtotal()),
+                })
+                #print(f"✅ Línea creada: {line.description} - Qty: {line.quantity} - Price: {line.unit_price}")
+        else:
+            print("⚠️ No se encontraron líneas en la factura")
+
         return JsonResponse({
             "success": True,
             "message": "Factura procesada correctamente.",
             "invoice_id": invoice.id,
             "invoice_data": invoice_data,
             "client_data": client_data,
+            "lines": created_lines,
         })
 
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_sent:", traceback.format_exc())
+
+        # ✅ CRÍTICO: Forzar rollback explícito
+        transaction.set_rollback(True)
+
         return JsonResponse({"success": False, "message": str(e)}, status=500)
 
 

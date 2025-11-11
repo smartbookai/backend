@@ -31,7 +31,15 @@ BASE_PROMPT = (
     "    \"address\": \"string\" o null,\n"
     "    \"document_type\": \"string\" o null,\n"
     "    \"document_number\": \"string\" o null\n"
-    "  }\n"
+    "  },\n"
+    "  \"lines\": [\n"
+    "    {\n"
+    "      \"description\": \"Descripción del producto/servicio\",\n"
+    "      \"quantity\": \"1.00\",\n"
+    "      \"unit_price\": \"1750.00\",\n"
+    "      \"vat_rate\": \"21.00\"\n"
+    "    }\n"
+    "  ]\n"
     "}\n\n"
     "IMPORTANTE:\n"
     "- Los montos deben ser strings con formato numérico: \"1750.00\", \"0.00\", etc.\n"
@@ -39,6 +47,9 @@ BASE_PROMPT = (
     "- USA punto como separador decimal\n"
     "- Si no encontrás un monto, usa \"0.00\"\n"
     "- Si no encontrás un dato, ponelo como null\n"
+    "- Para las líneas (lines), extraé TODOS los ítems/productos/servicios de la factura\n"
+    "- Si no hay IVA especificado en la línea, usa \"0.00\" en vat_rate\n"
+    "- Cantidad (quantity) por defecto es \"1.00\" si no está especificada\n"
     "- NO inventes valores\n"
 )
 
@@ -46,7 +57,7 @@ BASE_PROMPT = (
 def extract_invoice_data(file):
     """
     Extrae datos de una factura (PDF o imagen) usando OpenAI.
-    Devuelve dict con { 'invoice': {...}, 'client': {...} }.
+    Devuelve dict con { 'invoice': {...}, 'client': {...}, 'lines': [...] }.
     """
     content_type = file.content_type.lower()
     result = {}
@@ -82,7 +93,7 @@ def extract_invoice_data(file):
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "Extraé los datos de esta factura y devolvé solo el JSON."},
+                                {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
                                 {
                                     "type": "image_url",
                                     "image_url": {
@@ -101,7 +112,7 @@ def extract_invoice_data(file):
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": BASE_PROMPT},
-                        {"role": "user", "content": f"Extraé los datos de esta factura:\n\n{text}"},
+                        {"role": "user", "content": f"Extraé los datos de esta factura incluyendo todas las líneas:\n\n{text}"},
                     ],
                     response_format={"type": "json_object"},
                 )
@@ -123,7 +134,7 @@ def extract_invoice_data(file):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Extraé los datos de esta factura y devolvé solo el JSON."},
+                            {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
                             {
                                 "type": "image_url",
                                 "image_url": {
