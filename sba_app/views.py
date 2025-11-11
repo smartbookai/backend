@@ -690,11 +690,21 @@ def api_get_invoice_sent(request, invoice_id):
         }
     }
 
-    return JsonResponse({'invoice': data})
+    invoice_lines_queryset = InvoiceLine.objects.filter(sales_invoice=invoice).order_by('id')
+    invoice_lines_payload = [{
+        'id': line.id,
+        'description': line.description or '',
+        'quantity': float(line.quantity) if line.quantity is not None else 0,
+        'unit_price': float(line.unit_price) if line.unit_price is not None else 0,
+        'vat_rate': float(line.vat_rate) if line.vat_rate is not None else 0,
+    } for line in invoice_lines_queryset]
+
+    return JsonResponse({'invoice': data, 'lines': invoice_lines_payload})
 
 
 @login_required
 @require_POST
+@transaction.atomic
 def api_update_invoice_sent(request, invoice_id):
     if not ensure_admin(request.user):
         return HttpResponseForbidden('Solo admin puede editar facturas')
@@ -710,7 +720,6 @@ def api_update_invoice_sent(request, invoice_id):
     except Exception:
         payload = request.POST
 
-    # Parse fechas
     def parse_date(val):
         if not val:
             return None
@@ -726,7 +735,6 @@ def api_update_invoice_sent(request, invoice_id):
     invoice.base_amount = safe_decimal(payload.get('base_amount'))
     invoice.tax_amount = safe_decimal(payload.get('tax_amount'))
     invoice.total_amount = safe_decimal(payload.get('total_amount'))
-    # notes may be omitted from payload; preserve current if not provided
     if 'notes' in payload:
         invoice.notes = payload.get('notes') or ''
 
@@ -735,7 +743,44 @@ def api_update_invoice_sent(request, invoice_id):
     if client_name and invoice.client:
         invoice.client.name = client_name
         invoice.client.save()
+
     invoice.save()
+
+    incoming_lines_payload = payload.get('lines', []) or []
+
+    existing_lines_by_id = {
+        line.id: line
+        for line in InvoiceLine.objects.filter(sales_invoice=invoice)
+    }
+
+    incoming_line_ids = set(
+        ln.get('id') for ln in incoming_lines_payload if ln.get('id')
+    )
+
+    for line_item in incoming_lines_payload:
+        line_id = line_item.get('id')
+        line_data = {
+            'description': (line_item.get('description') or '').strip(),
+            'quantity': safe_decimal(line_item.get('quantity')) or 0,
+            'unit_price': safe_decimal(line_item.get('unit_price')) or 0,
+            'vat_rate': safe_decimal(line_item.get('vat_rate')) or 0,
+        }
+        if line_id and line_id in existing_lines_by_id:
+            invoice_line_obj = existing_lines_by_id[line_id]
+            invoice_line_obj.description = line_data['description']
+            invoice_line_obj.quantity = line_data['quantity']
+            invoice_line_obj.unit_price = line_data['unit_price']
+            invoice_line_obj.vat_rate = line_data['vat_rate']
+            invoice_line_obj.save()
+        else:
+            InvoiceLine.objects.create(sales_invoice=invoice, **line_data)
+
+    lines_to_delete = [
+        obj for obj_id, obj in existing_lines_by_id.items()
+        if obj_id not in incoming_line_ids
+    ]
+    if lines_to_delete:
+        InvoiceLine.objects.filter(id__in=[o.id for o in lines_to_delete]).delete()
 
     return JsonResponse({'success': True})
 
