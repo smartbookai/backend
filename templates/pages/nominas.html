@@ -1,8 +1,230 @@
 {% extends 'layouts/base.html' %}
 {% block title %}Nominas | SBA{% endblock %}
 {% block content %}
-<div class="card p-8">
-  <h2 style="margin:0 0 8px 0;">Nominas</h2>
-  <p style="color:#6B7280;">Listado de leads</p>
-</div>
+<section>
+  <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+      <div>
+        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Nóminas</h1>
+        <div style="color:#6B7280;margin-bottom:20px;">De la compañía</div>
+      </div>
+      <button type="button" class="btn-primary" onclick="openNominaDrawer()">Subir Nómina</button>
+    </div>
+
+    <div class="card table-card" style="padding:0;">
+      <div style="display:flex;align-items:center;padding:16px 20px;gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <h2 style="font-size:16px;margin:0;">Listado</h2>
+        </div>
+        <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input id="payrollSearch" type="text" placeholder="Buscar..." aria-label="Buscar nóminas" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div style="flex:1;min-width:0;"></div>
+      </div>
+
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="padding:14px 18px;">Nomina</th>
+              <th class="table-header" style="padding:14px 18px;">Empleado</th>
+              <th class="table-header" style="padding:14px 18px;">Período</th>
+              <th class="table-header" style="padding:14px 18px;">Emisión</th>
+              <th class="table-header" style="padding:14px 18px;">Pago</th>
+              <th class="table-header" style="padding:14px 18px;">Líquido</th>
+              <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="payrolls-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="nominaOverlay" class="overlay-mask" onclick="closeNominaDrawer()"></div>
+  <aside id="nominaDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Subir nómina</h3>
+      <button class="btn-secondary" onclick="closeNominaDrawer()">Cerrar</button>
+    </div>
+    <form id="nominaForm" onsubmit="submitNomina(event)" enctype="multipart/form-data">
+      <div id="payrollDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y soltá el archivo aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
+        <input id="payrollInput" name="pdf_file" type="file" accept="application/pdf,image/*" style="display:none;" />
+        <div id="payrollFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeNominaDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Subir</button>
+      </div>
+    </form>
+  </aside>
+
+</section>
+
+<script>
+let PAYROLLS_DATA = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadPayrolls();
+  setupPayrollSearch();
+  setupPayrollDropzone();
+});
+
+async function loadPayrolls() {
+  const tbody = document.querySelector('.payrolls-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px; color:#6B7280;">Cargando...</td></tr>';
+  try {
+    const res = await fetch('/api/show-table-payrolls/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('No se pudo cargar el listado de nóminas');
+    const data = await res.json();
+    PAYROLLS_DATA = data.payrolls || [];
+    renderPayrollsTable(PAYROLLS_DATA);
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px;">Error al cargar nóminas</td></tr>';
+  }
+}
+
+function renderPayrollsTable(rows) {
+  const tbody = document.querySelector('.payrolls-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay nóminas.</td></tr>';
+    return;
+  }
+  rows.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">${p.pdf_url ? `<a href="${p.pdf_url}" target="_blank" rel="noopener noreferrer">PDF</a>` : (p.number || '-')}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.employee || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.period || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.issue_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.payment_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.net_salary || '-'}</td>
+      <td class="table-cell text-right" style="padding:14px 18px;">
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editNomina(${p.id})">Editar</button>
+          <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteNomina(${p.id})">Eliminar</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function setupPayrollSearch() {
+  const input = document.getElementById('payrollSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    if (!term) { renderPayrollsTable(PAYROLLS_DATA); return; }
+    const rows = PAYROLLS_DATA.filter(p => {
+      const fields = [p.employee, p.period, p.issue_date, p.payment_date, p.net_salary];
+      return fields.some(v => (v || '').toString().toLowerCase().includes(term));
+    });
+    renderPayrollsTable(rows);
+  });
+}
+
+function openNominaDrawer() {
+  document.getElementById('nominaOverlay').style.display = 'block';
+  document.getElementById('nominaDrawer').classList.add('active');
+  const input = document.getElementById('payrollInput');
+  const nameEl = document.getElementById('payrollFileName');
+  if (input) input.value = '';
+  if (nameEl) nameEl.textContent = '';
+}
+function closeNominaDrawer() {
+  document.getElementById('nominaOverlay').style.display = 'none';
+  document.getElementById('nominaDrawer').classList.remove('active');
+}
+
+function setupPayrollDropzone() {
+  const dz = document.getElementById('payrollDropzone');
+  const input = document.getElementById('payrollInput');
+  const nameEl = document.getElementById('payrollFileName');
+  if (!dz || !input) return;
+  const setFile = (file) => {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf';
+    const isImage = file.type.startsWith('image/');
+    if (!isPdf && !isImage) {
+      nameEl.textContent = 'Archivo inválido: solo PDF o imagen (JPG/PNG)';
+      nameEl.style.color = '#DC2626';
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      nameEl.textContent = 'El archivo supera 10MB';
+      nameEl.style.color = '#DC2626';
+      input.value = '';
+      return;
+    }
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    nameEl.textContent = file.name;
+    nameEl.style.color = '#374151';
+  };
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => setFile(e.target.files[0]));
+  ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation(); dz.style.background = '#EFF6FF'; dz.style.borderColor = '#60A5FA';
+  }));
+  ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation(); dz.style.background = '#F9FAFB'; dz.style.borderColor = '#D1D5DB';
+  }));
+  dz.addEventListener('drop', (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    setFile(file);
+  });
+}
+
+async function submitNomina(e) {
+  if (e) e.preventDefault();
+  const fileInput = document.getElementById('payrollInput');
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    alert('Seleccioná un archivo PDF o imagen.');
+    return;
+  }
+  const btn = (e && e.submitter) || document.querySelector('#nominaForm button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Subiendo...'; }
+  try {
+    const fd = new FormData();
+    fd.append('pdf_file', fileInput.files[0]);
+
+    const res = await fetch('/api/payrolls/create/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: fd,
+    });
+
+    if (!res.ok) {
+      let msg = 'Error al subir la nómina.';
+      try { const data = await res.json(); if (data.message) msg = data.message; } catch(_){}
+      throw new Error(msg);
+    }
+
+    const data = await res.json();
+    await loadPayrolls();
+
+    closeNominaDrawer();
+    fileInput.value = '';
+    const nameEl = document.getElementById('payrollFileName');
+    if (nameEl) nameEl.textContent = '';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Subir'; }
+  }
+}
+
+function editNomina(id) { alert('Edición no disponible en esta vista.'); }
+function deleteNomina(id) { alert('Eliminación no disponible en esta vista.'); }
+</script>
 {% endblock %}

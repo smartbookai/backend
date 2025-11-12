@@ -10,10 +10,14 @@ from django.views.decorators.http import require_POST, require_http_methods
 import json
 import logging
 from datetime import datetime
+from django.utils import timezone
+import os
+from django.conf import settings
+from django.core.files.storage import default_storage
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
-    Employee
-from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data
+    Employee, Payroll
+from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data
 
 logger = logging.getLogger(__name__)
 
@@ -792,12 +796,38 @@ def api_update_invoice_sent(request, invoice_id):
 def safe_decimal(value):
     """
     Convierte el valor a Decimal seguro. Si es None, vacío o inválido, devuelve Decimal('0').
+    Maneja formato europeo (1.234,56) y americano (1,234.56)
     """
     try:
         if value is None or str(value).strip() == "":
             return Decimal("0")
-        # Reemplaza coma por punto, por si viene en formato europeo
-        return Decimal(str(value).replace(",", "."))
+
+        value_str = str(value).strip()
+
+        # Detectar formato: si tiene coma Y punto, determinar cuál es separador decimal
+        if "," in value_str and "." in value_str:
+            # Si la coma está después del punto: formato americano 1,234.56
+            if value_str.rindex(",") < value_str.rindex("."):
+                value_str = value_str.replace(",", "")  # Quitar separador de miles
+            # Si el punto está después de la coma: formato europeo 1.234,56
+            else:
+                value_str = value_str.replace(".", "").replace(",", ".")
+        # Solo tiene coma: puede ser separador decimal europeo (1,50) o separador de miles americano (1,234)
+        elif "," in value_str:
+            # Si hay más de 3 dígitos después de la coma, es separador de miles
+            parts = value_str.split(",")
+            if len(parts[-1]) == 3 and len(parts) > 1:
+                value_str = value_str.replace(",", "")  # Separador de miles: 1,234
+            else:
+                value_str = value_str.replace(",", ".")  # Separador decimal: 1,50
+        # Solo tiene punto: puede ser separador decimal (1.50) o separador de miles (1.234)
+        elif "." in value_str:
+            parts = value_str.split(".")
+            if len(parts[-1]) == 3 and len(parts) > 1 and len(parts[0]) <= 3:
+                value_str = value_str.replace(".", "")  # Separador de miles: 1.234
+            # Si no, es separador decimal, dejarlo como está
+
+        return Decimal(value_str)
     except (InvalidOperation, TypeError, ValueError):
         return Decimal("0")
 
@@ -1448,3 +1478,286 @@ def api_delete_employee(request, employee_id):
     except Exception:
         logger.exception('Error al eliminar empleado id=%s', employee_id)
         return JsonResponse({'error': 'Error al eliminar el empleado.'}, status=400)
+
+
+@login_required
+def api_show_table_payrolls(request):
+    company = get_current_company(request.user)
+
+    qs = (
+        Payroll.objects
+        .select_related('employee')
+        .filter(company=company)
+        .order_by('-issue_date', '-id')
+    )
+
+    rows = []
+    for p in qs:
+        emp = p.employee
+        emp_name = ''
+        if emp:
+            emp_name = f"{emp.first_name or ''} {emp.last_name or ''}".strip()
+        period = ''
+        if getattr(p, 'period_start', None) and getattr(p, 'period_end', None):
+            period = f"{p.period_start.strftime('%d/%m/%Y')} - {p.period_end.strftime('%d/%m/%Y')}"
+        elif getattr(p, 'period_start', None):
+            period = p.period_start.strftime('%d/%m/%Y')
+        elif getattr(p, 'period_end', None):
+            period = p.period_end.strftime('%d/%m/%Y')
+
+        def fmt_date(d):
+            return d.strftime('%d/%m/%Y') if d else ''
+
+        rows.append({
+            'id': p.id,
+            'number': getattr(p, 'number', None) or getattr(p, 'code', None) or str(p.id),
+            'employee': emp_name or '-',
+            'period': period or '-',
+            'issue_date': fmt_date(getattr(p, 'issue_date', None)) or '-',
+            'payment_date': fmt_date(getattr(p, 'payment_date', None)) or '-',
+            'net_salary': str(getattr(p, 'net_salary', '') or ''),
+            'pdf_url': p.pdf_file.url if getattr(p, 'pdf_file', None) else '',
+        })
+
+    return JsonResponse({'payrolls': rows})
+
+
+def validate_and_fix_payroll_data(payroll_data, employee_data):
+    """
+    Valida y corrige datos extraídos de nómina para evitar errores comunes de OpenAI
+    """
+    from datetime import datetime, date
+    import re
+
+    # 1. VALIDAR Y CORREGIR FECHAS (año incorrecto)
+    current_year = datetime.now().year
+
+    for date_field in ['period_start', 'period_end', 'payment_date', 'issue_date']:
+        date_str = payroll_data.get(date_field)
+        if date_str:
+            try:
+                parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+                # Si la fecha es de más de 2 años en el pasado, probablemente está mal
+                if parsed_date.year < (current_year - 2):
+                    print(f"⚠️ Corrigiendo {date_field}: {date_str} → año {current_year}")
+                    # Mantener mes y día, cambiar año
+                    corrected = parsed_date.replace(year=current_year)
+                    payroll_data[date_field] = corrected.strftime('%Y-%m-%d')
+            except:
+                pass
+
+    # 2. CONSOLIDAR BONUSES EN SALARY_SUPPLEMENTS
+    # En nóminas españolas, típicamente todo va en complementos salariales
+    bonuses = safe_decimal(payroll_data.get('bonuses', '0'))
+    if bonuses > 0:
+        current_supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
+        new_supplements = current_supplements + bonuses
+        payroll_data['salary_supplements'] = str(new_supplements)
+        payroll_data['bonuses'] = '0.00'
+        print(f"✅ Consolidados bonuses ({bonuses}) en salary_supplements → {new_supplements}")
+
+    # 3. VALIDAR COHERENCIA DE TOTALES - MEJORADO
+    base = safe_decimal(payroll_data.get('base_salary', '0'))
+    supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
+    overtime = safe_decimal(payroll_data.get('overtime', '0'))
+    bonuses_final = safe_decimal(payroll_data.get('bonuses', '0'))
+
+    calculated_accrued = base + supplements + overtime + bonuses_final
+    declared_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
+
+    # Solo recalcular si la diferencia es GRANDE (>5%)
+    if declared_accrued > 0:
+        diff_percentage = abs(calculated_accrued - declared_accrued) / declared_accrued
+        if diff_percentage > Decimal('0.05'):  # Más del 5% de diferencia
+            print(f"⚠️ Recalculando total_accrued: {declared_accrued} → {calculated_accrued}")
+            payroll_data['total_accrued'] = str(calculated_accrued)
+        else:
+            # Confiar en el total original extraído
+            print(f"✅ Total devengado coherente: {declared_accrued}")
+
+    # 4. VALIDAR DEDUCCIONES
+    ss_employee = safe_decimal(payroll_data.get('social_security_employee', '0'))
+    irpf = safe_decimal(payroll_data.get('irpf', '0'))
+    other_ded = safe_decimal(payroll_data.get('other_deductions', '0'))
+
+    calculated_deductions = ss_employee + irpf + other_ded
+    declared_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
+
+    if declared_deductions > 0:
+        diff_percentage = abs(calculated_deductions - declared_deductions) / declared_deductions
+        if diff_percentage > Decimal('0.05'):
+            print(f"⚠️ Recalculando total_deductions: {declared_deductions} → {calculated_deductions}")
+            payroll_data['total_deductions'] = str(calculated_deductions)
+        else:
+            print(f"✅ Total deducciones coherente: {declared_deductions}")
+
+    # 5. VALIDAR LÍQUIDO A PERCIBIR
+    final_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
+    final_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
+    calculated_net = final_accrued - final_deductions
+    declared_net = safe_decimal(payroll_data.get('net_salary', '0'))
+
+    if abs(calculated_net - declared_net) > Decimal('0.10'):
+        print(f"⚠️ Recalculando net_salary: {declared_net} → {calculated_net}")
+        payroll_data['net_salary'] = str(calculated_net)
+    else:
+        print(f"✅ Líquido coherente: {declared_net}")
+
+    # 6. VALIDAR SS EMPRESA (si es muy baja, es sospechoso)
+    ss_company = safe_decimal(payroll_data.get('social_security_company', '0'))
+    total_accrued_final = safe_decimal(payroll_data.get('total_accrued', '0'))
+
+    # SS empresa típicamente es ~30-35% del total devengado
+    if total_accrued_final > 0:
+        expected_min = total_accrued_final * Decimal('0.25')
+        expected_max = total_accrued_final * Decimal('0.40')
+
+        if ss_company < expected_min or ss_company > expected_max:
+            # Usar estimación conservadora: 32%
+            estimated_ss = (total_accrued_final * Decimal('0.32')).quantize(Decimal('0.01'))
+            print(f"⚠️ SS empresa sospechosa ({ss_company}). Estimando: {estimated_ss}")
+            payroll_data['social_security_company'] = str(estimated_ss)
+        else:
+            print(f"✅ SS empresa en rango esperado: {ss_company}")
+
+    # 7. LIMPIAR DIRECCIÓN (quitar "C/ PALAU REIAL" si aparece - dirección empresa común)
+    address = employee_data.get('address', '')
+    if address and 'PALAU REIAL' in address.upper():
+        print(f"⚠️ Dirección parece ser de empresa, limpiando: {address}")
+        employee_data['address'] = None
+
+    return payroll_data, employee_data
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_create_payroll(request):
+    company = get_current_company(request.user)
+    file = request.FILES.get("pdf_file")
+
+    if not file:
+        return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
+
+    if file.size > 10 * 1024 * 1024:
+        return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
+
+    try:
+        # Paso 1: Extraer datos con OpenAI
+        result = extract_payroll_data(file)
+
+        if not result:
+            return JsonResponse({
+                "success": False,
+                "message": "No se pudo extraer información de la nómina."
+            }, status=400)
+
+        payroll_data = result.get("payroll", {}) or {}
+        employee_data = result.get("employee", {}) or {}
+
+        payroll_data, employee_data = validate_and_fix_payroll_data(payroll_data, employee_data)
+
+        period_start = payroll_data.get("period_start")
+        period_end = payroll_data.get("period_end")
+        payment_date = payroll_data.get("payment_date")
+
+        # Si payment_date es anterior a period_start, corregir
+        if period_start and payment_date:
+            from datetime import datetime
+            try:
+                ps = datetime.strptime(period_start, "%Y-%m-%d").date()
+                pd = datetime.strptime(payment_date, "%Y-%m-%d").date()
+
+                if pd < ps:
+                    print(
+                        f"⚠️ payment_date ({payment_date}) es anterior a period_start ({period_start}). Corrigiendo...")
+                    # Usar period_end como payment_date
+                    payroll_data["payment_date"] = period_end or period_start
+            except:
+                pass
+
+        # Paso 2: Buscar o crear empleado (Employee)
+        employee = None
+        filters = {"company": company}
+
+        if employee_data.get("document_number"):
+            filters["document_number"] = employee_data["document_number"]
+            employee = Employee.objects.filter(**filters).first()
+        elif employee_data.get("first_name") and employee_data.get("last_name"):
+            filters["first_name__iexact"] = employee_data["first_name"]
+            filters["last_name__iexact"] = employee_data["last_name"]
+            employee = Employee.objects.filter(**filters).first()
+
+        if not employee:
+            employee = Employee.objects.create(
+                company=company,
+                first_name=employee_data.get("first_name") or "Nombre",
+                last_name=employee_data.get("last_name") or "Desconocido",
+                document_type=employee_data.get("document_type") or "DNI",
+                document_number=employee_data.get("document_number") or "SIN-DOCUMENTO",
+                email=employee_data.get("email"),
+                phone=employee_data.get("phone"),
+                date_of_birth=employee_data.get("date_of_birth"),
+                address=employee_data.get("address"),
+                job_position=employee_data.get("job_position") or "Sin especificar",
+                department=employee_data.get("department"),
+                contract_type=employee_data.get("contract_type") or "indefinido",
+                hire_date=employee_data.get("hire_date") or timezone.now().date(),
+                social_security_number=employee_data.get("social_security_number"),
+                bank_account=employee_data.get("bank_account"),
+                collective_agreement=employee_data.get("collective_agreement"),
+                is_active=True,
+            )
+
+        #  Paso 3: Crear nómina (Payroll)
+        payroll = Payroll.objects.create(
+            company=company,
+            employee=employee,
+            pdf_file=file,
+            period_start=payroll_data.get("period_start") or timezone.now().date(),
+            period_end=payroll_data.get("period_end") or timezone.now().date(),
+            payment_date=payroll_data.get("payment_date") or timezone.now().date(),
+            issue_date=payroll_data.get("issue_date") or timezone.now().date(),
+
+            # Devengos
+            base_salary=safe_decimal(payroll_data.get("base_salary", "0")),
+            salary_supplements=safe_decimal(payroll_data.get("salary_supplements", "0")),
+            overtime=safe_decimal(payroll_data.get("overtime", "0")),
+            bonuses=safe_decimal(payroll_data.get("bonuses", "0")),
+            total_accrued=safe_decimal(payroll_data.get("total_accrued", "0")),
+
+            # Deducciones
+            social_security_employee=safe_decimal(payroll_data.get("social_security_employee", "0")),
+            irpf=safe_decimal(payroll_data.get("irpf", "0")),
+            other_deductions=safe_decimal(payroll_data.get("other_deductions", "0")),
+            total_deductions=safe_decimal(payroll_data.get("total_deductions", "0")),
+
+            # Resultado
+            net_salary=safe_decimal(payroll_data.get("net_salary", "0")),
+            social_security_company=safe_decimal(payroll_data.get("social_security_company", "0")),
+
+            # Cuentas contables
+            account_salary_expense=payroll_data.get("account_salary_expense") or "640",
+            account_social_security_expense=payroll_data.get("account_social_security_expense") or "642",
+            account_social_security_payable=payroll_data.get("account_social_security_payable") or "476",
+            account_irpf_payable=payroll_data.get("account_irpf_payable") or "4751",
+            account_bank=payroll_data.get("account_bank") or "572",
+
+            notes=payroll_data.get("notes") or "",
+        )
+
+        return JsonResponse({
+            "success": True,
+            "message": "Nómina procesada correctamente.",
+            "payroll_id": payroll.id,
+            "payroll_data": payroll_data,
+            "employee_data": employee_data,
+            "employee_id": employee.id,
+        })
+
+    except Exception as e:
+        import traceback
+        print("ERROR en api_create_payroll:", traceback.format_exc())
+        transaction.set_rollback(True)
+        return JsonResponse({"success": False, "message": str(e)}, status=500)

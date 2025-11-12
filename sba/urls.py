@@ -62,6 +62,10 @@ urlpatterns = [
     path('api/employees/<int:employee_id>/update/', views.api_update_employee, name='api_update_employee'),
     path('api/employees/<int:employee_id>/delete/', views.api_delete_employee, name='api_delete_employee'),
 
+    #payrolls API endpoints
+    path('api/show-table-payrolls/', views.api_show_table_payrolls, name='api_show_table_payrolls'),
+    path('api/payrolls/create/', views.api_create_payroll, name='api_create_payroll'),
+
 ]
 
 if settings.DEBUG:
