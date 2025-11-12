@@ -62,6 +62,107 @@
     </form>
   </aside>
 
+  <!-- Edit Drawer -->
+  <div id="nominaEditOverlay" class="overlay-mask" onclick="closeNominaEditDrawer()"></div>
+  <aside id="nominaEditDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Editar nómina</h3>
+      <button class="btn-secondary" onclick="closeNominaEditDrawer()">Cerrar</button>
+    </div>
+    <form id="nominaEditForm" onsubmit="submitNominaEdit(event)">
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;">
+        <div class="form-field">
+          <label>Período inicio</label>
+          <input type="date" name="period_start">
+        </div>
+        <div class="form-field">
+          <label>Período fin</label>
+          <input type="date" name="period_end">
+        </div>
+        <div class="form-field">
+          <label>Fecha emisión</label>
+          <input type="date" name="issue_date">
+        </div>
+        <div class="form-field">
+          <label>Fecha pago</label>
+          <input type="date" name="payment_date">
+        </div>
+        <div class="form-field">
+          <label>Base</label>
+          <input type="text" name="base_salary">
+        </div>
+        <div class="form-field">
+          <label>Complementos</label>
+          <input type="text" name="salary_supplements">
+        </div>
+        <div class="form-field">
+          <label>Horas extra</label>
+          <input type="text" name="overtime">
+        </div>
+        <div class="form-field">
+          <label>Bonificaciones</label>
+          <input type="text" name="bonuses">
+        </div>
+        <div class="form-field">
+          <label>Total devengado</label>
+          <input type="text" name="total_accrued">
+        </div>
+        <div class="form-field">
+          <label>SS trabajador</label>
+          <input type="text" name="social_security_employee">
+        </div>
+        <div class="form-field">
+          <label>IRPF</label>
+          <input type="text" name="irpf">
+        </div>
+        <div class="form-field">
+          <label>Otras deducciones</label>
+          <input type="text" name="other_deductions">
+        </div>
+        <div class="form-field">
+          <label>Total deducciones</label>
+          <input type="text" name="total_deductions">
+        </div>
+        <div class="form-field">
+          <label>Líquido</label>
+          <input type="text" name="net_salary">
+        </div>
+        <div class="form-field">
+          <label>SS empresa</label>
+          <input type="text" name="social_security_company">
+        </div>
+        <div class="form-field">
+          <label>Cuenta gasto salarios</label>
+          <input type="text" name="account_salary_expense">
+        </div>
+        <div class="form-field">
+          <label>Cuenta gasto SS</label>
+          <input type="text" name="account_social_security_expense">
+        </div>
+        <div class="form-field">
+          <label>Cuenta SS a pagar</label>
+          <input type="text" name="account_social_security_payable">
+        </div>
+        <div class="form-field">
+          <label>Cuenta IRPF a pagar</label>
+          <input type="text" name="account_irpf_payable">
+        </div>
+        <div class="form-field">
+          <label>Cuenta banco</label>
+          <input type="text" name="account_bank">
+        </div>
+        <div class="form-field" style="grid-column:1 / -1;">
+          <label>Notas</label>
+          <textarea name="notes" rows="3"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeNominaEditDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </aside>
+
 </section>
 
 <script>
@@ -224,7 +325,126 @@ async function submitNomina(e) {
   }
 }
 
-function editNomina(id) { alert('Edición no disponible en esta vista.'); }
-function deleteNomina(id) { alert('Eliminación no disponible en esta vista.'); }
+let CURRENT_PAYROLL_EDIT_ID = null;
+
+function openNominaEditDrawer() {
+  document.getElementById('nominaEditOverlay').style.display = 'block';
+  document.getElementById('nominaEditDrawer').classList.add('active');
+}
+function closeNominaEditDrawer() {
+  document.getElementById('nominaEditOverlay').style.display = 'none';
+  document.getElementById('nominaEditDrawer').classList.remove('active');
+  CURRENT_PAYROLL_EDIT_ID = null;
+  document.getElementById('nominaEditForm')?.reset();
+}
+
+async function editNomina(id) {
+  CURRENT_PAYROLL_EDIT_ID = id;
+  openNominaEditDrawer();
+  try {
+    const res = await fetch(`/api/payrolls/${id}/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('No se pudo cargar la nómina');
+    const data = await res.json();
+    const p = data.payroll || {};
+    const form = document.getElementById('nominaEditForm');
+    form.elements['period_start'].value = p.period_start || '';
+    form.elements['period_end'].value = p.period_end || '';
+    form.elements['issue_date'].value = p.issue_date || '';
+    form.elements['payment_date'].value = p.payment_date || '';
+    form.elements['base_salary'].value = p.base_salary || '';
+    form.elements['salary_supplements'].value = p.salary_supplements || '';
+    form.elements['overtime'].value = p.overtime || '';
+    form.elements['bonuses'].value = p.bonuses || '';
+    form.elements['total_accrued'].value = p.total_accrued || '';
+    form.elements['social_security_employee'].value = p.social_security_employee || '';
+    form.elements['irpf'].value = p.irpf || '';
+    form.elements['other_deductions'].value = p.other_deductions || '';
+    form.elements['total_deductions'].value = p.total_deductions || '';
+    form.elements['net_salary'].value = p.net_salary || '';
+    form.elements['social_security_company'].value = p.social_security_company || '';
+    form.elements['account_salary_expense'].value = p.account_salary_expense || '';
+    form.elements['account_social_security_expense'].value = p.account_social_security_expense || '';
+    form.elements['account_social_security_payable'].value = p.account_social_security_payable || '';
+    form.elements['account_irpf_payable'].value = p.account_irpf_payable || '';
+    form.elements['account_bank'].value = p.account_bank || '';
+    form.elements['notes'].value = p.notes || '';
+  } catch (err) {
+    alert(err.message || 'Error al cargar nómina');
+    closeNominaEditDrawer();
+  }
+}
+
+async function submitNominaEdit(e) {
+  if (e) e.preventDefault();
+  if (!CURRENT_PAYROLL_EDIT_ID) return;
+  const form = document.getElementById('nominaEditForm');
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  const payload = {
+    period_start: form.elements['period_start'].value,
+    period_end: form.elements['period_end'].value,
+    issue_date: form.elements['issue_date'].value,
+    payment_date: form.elements['payment_date'].value,
+    base_salary: form.elements['base_salary'].value,
+    salary_supplements: form.elements['salary_supplements'].value,
+    overtime: form.elements['overtime'].value,
+    bonuses: form.elements['bonuses'].value,
+    total_accrued: form.elements['total_accrued'].value,
+    social_security_employee: form.elements['social_security_employee'].value,
+    irpf: form.elements['irpf'].value,
+    other_deductions: form.elements['other_deductions'].value,
+    total_deductions: form.elements['total_deductions'].value,
+    net_salary: form.elements['net_salary'].value,
+    social_security_company: form.elements['social_security_company'].value,
+    account_salary_expense: form.elements['account_salary_expense'].value,
+    account_social_security_expense: form.elements['account_social_security_expense'].value,
+    account_social_security_payable: form.elements['account_social_security_payable'].value,
+    account_irpf_payable: form.elements['account_irpf_payable'].value,
+    account_bank: form.elements['account_bank'].value,
+    notes: form.elements['notes'].value,
+  };
+  try {
+    const res = await fetch(`/api/payrolls/${CURRENT_PAYROLL_EDIT_ID}/update/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = 'Error al guardar.';
+      try { const d = await res.json(); if (d.error) msg = d.error; } catch(_){ }
+      throw new Error(msg);
+    }
+    await loadPayrolls();
+    closeNominaEditDrawer();
+  } catch (err) {
+    alert(err.message || 'Error al guardar.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+  }
+}
+async function deleteNomina(id) {
+  if (!confirm('¿Seguro que deseas eliminar esta nómina?')) return;
+  try {
+    const res = await fetch(`/api/payrolls/${id}/delete/`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    if (!res.ok) {
+      let msg = 'Error al eliminar la nómina.';
+      try { const d = await res.json(); if (d.error) msg = d.error; } catch(_){}
+      throw new Error(msg);
+    }
+    await loadPayrolls();
+  } catch (err) {
+    alert(err.message || 'Error al eliminar.');
+  }
+}
 </script>
 {% endblock %}

@@ -1521,6 +1521,138 @@ def api_show_table_payrolls(request):
 
     return JsonResponse({'payrolls': rows})
 
+def get_company_scoped_payroll_or_404(user, payroll_id):
+    company = get_current_company(user)
+    try:
+        return Payroll.objects.select_related('employee').get(id=payroll_id, company=company)
+    except Payroll.DoesNotExist:
+        raise Http404('Nómina no encontrada')
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_payroll(request, payroll_id):
+    p = get_company_scoped_payroll_or_404(request.user, payroll_id)
+
+    def d(val):
+        return val.strftime('%Y-%m-%d') if val else ''
+
+    return JsonResponse({
+        'payroll': {
+            'id': p.id,
+            'employee': (f"{p.employee.first_name or ''} {p.employee.last_name or ''}".strip() if p.employee else ''),
+            'employee_id': p.employee.id if p.employee else None,
+            'number': getattr(p, 'number', None) or getattr(p, 'code', None) or str(p.id),
+            'period_start': d(getattr(p, 'period_start', None)),
+            'period_end': d(getattr(p, 'period_end', None)),
+            'issue_date': d(getattr(p, 'issue_date', None)),
+            'payment_date': d(getattr(p, 'payment_date', None)),
+            'base_salary': str(getattr(p, 'base_salary', '') or ''),
+            'salary_supplements': str(getattr(p, 'salary_supplements', '') or ''),
+            'overtime': str(getattr(p, 'overtime', '') or ''),
+            'bonuses': str(getattr(p, 'bonuses', '') or ''),
+            'total_accrued': str(getattr(p, 'total_accrued', '') or ''),
+            'social_security_employee': str(getattr(p, 'social_security_employee', '') or ''),
+            'irpf': str(getattr(p, 'irpf', '') or ''),
+            'other_deductions': str(getattr(p, 'other_deductions', '') or ''),
+            'total_deductions': str(getattr(p, 'total_deductions', '') or ''),
+            'net_salary': str(getattr(p, 'net_salary', '') or ''),
+            'social_security_company': str(getattr(p, 'social_security_company', '') or ''),
+            'account_salary_expense': getattr(p, 'account_salary_expense', '') or '',
+            'account_social_security_expense': getattr(p, 'account_social_security_expense', '') or '',
+            'account_social_security_payable': getattr(p, 'account_social_security_payable', '') or '',
+            'account_irpf_payable': getattr(p, 'account_irpf_payable', '') or '',
+            'account_bank': getattr(p, 'account_bank', '') or '',
+            'notes': getattr(p, 'notes', '') or '',
+            'pdf_url': p.pdf_file.url if getattr(p, 'pdf_file', None) else '',
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_update_payroll(request, payroll_id):
+    p = get_company_scoped_payroll_or_404(request.user, payroll_id)
+    try:
+        payload = json.loads(request.body.decode('utf-8')) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    def parse_date(key):
+        val = payload.get(key)
+        if not val:
+            return None
+        try:
+            return datetime.strptime(val, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    # Dates
+    if 'period_start' in payload:
+        p.period_start = parse_date('period_start')
+    if 'period_end' in payload:
+        p.period_end = parse_date('period_end')
+    if 'issue_date' in payload:
+        p.issue_date = parse_date('issue_date')
+    if 'payment_date' in payload:
+        p.payment_date = parse_date('payment_date')
+
+    # Amounts
+    if 'base_salary' in payload:
+        p.base_salary = safe_decimal(payload.get('base_salary'))
+    if 'salary_supplements' in payload:
+        p.salary_supplements = safe_decimal(payload.get('salary_supplements'))
+    if 'overtime' in payload:
+        p.overtime = safe_decimal(payload.get('overtime'))
+    if 'bonuses' in payload:
+        p.bonuses = safe_decimal(payload.get('bonuses'))
+    if 'total_accrued' in payload:
+        p.total_accrued = safe_decimal(payload.get('total_accrued'))
+    if 'social_security_employee' in payload:
+        p.social_security_employee = safe_decimal(payload.get('social_security_employee'))
+    if 'irpf' in payload:
+        p.irpf = safe_decimal(payload.get('irpf'))
+    if 'other_deductions' in payload:
+        p.other_deductions = safe_decimal(payload.get('other_deductions'))
+    if 'total_deductions' in payload:
+        p.total_deductions = safe_decimal(payload.get('total_deductions'))
+    if 'net_salary' in payload:
+        p.net_salary = safe_decimal(payload.get('net_salary'))
+    if 'social_security_company' in payload:
+        p.social_security_company = safe_decimal(payload.get('social_security_company'))
+
+    # Accounts and notes
+    for f in [
+        'account_salary_expense', 'account_social_security_expense',
+        'account_social_security_payable', 'account_irpf_payable',
+        'account_bank', 'notes']:
+        if f in payload:
+            setattr(p, f, payload.get(f) or None)
+
+    try:
+        p.save()
+        return JsonResponse({'success': True})
+    except Exception:
+        logger.exception('Error al actualizar nómina id=%s', payroll_id)
+        return JsonResponse({'error': 'Error al actualizar la nómina.'}, status=400)
+
+
+@login_required
+@require_POST
+def api_delete_payroll(request, payroll_id):
+    p = get_company_scoped_payroll_or_404(request.user, payroll_id)
+    try:
+        # Try to delete the stored file if present
+        if getattr(p, 'pdf_file', None) and p.pdf_file.name:
+            try:
+                default_storage.delete(p.pdf_file.name)
+            except Exception:
+                logger.warning('No se pudo borrar el archivo de nómina en storage: %s', p.pdf_file.name)
+        p.delete()
+        return JsonResponse({'success': True})
+    except Exception:
+        logger.exception('Error al eliminar nómina id=%s', payroll_id)
+        return JsonResponse({'error': 'Error al eliminar la nómina.'}, status=400)
+
 
 def validate_and_fix_payroll_data(payroll_data, employee_data):
     """
