@@ -55,6 +55,12 @@ urlpatterns = [
     path('api/invoices-received/<int:invoice_id>/', views.api_get_invoice_received, name='api_get_invoice_received'),
     path('api/invoices-received/<int:invoice_id>/update/', views.api_update_invoice_received, name='api_update_invoice_received'),
 
+    #employees API endpoints
+    path('api/show-table-employees/', views.api_show_table_employees, name='api_show_table_employees'),
+    path('api/employees/create/', views.api_create_employee, name='api_create_employee'),
+    path('api/employees/<int:employee_id>/', views.api_get_employee, name='api_get_employee'),
+    path('api/employees/<int:employee_id>/update/', views.api_update_employee, name='api_update_employee'),
+    path('api/employees/<int:employee_id>/delete/', views.api_delete_employee, name='api_delete_employee'),
 
 ]
 

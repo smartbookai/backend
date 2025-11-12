@@ -11,7 +11,8 @@ import json
 import logging
 from datetime import datetime
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice
+from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
+    Employee
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,9 @@ def nominas(request):
 
 def get_current_company(user):
     return CompanyUser.objects.select_related('company').get(user=user).company
+
+
+
 
 @login_required
 def api_show_table_suppliers(request):
@@ -1216,3 +1220,231 @@ def api_create_invoice_received(request):
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
         transaction.set_rollback(True)
         return JsonResponse({"success": False, "message": str(e)}, status=500)
+
+
+@login_required
+def api_show_table_employees(request):
+    company = get_current_company(request.user)
+
+    employees_qs = (
+        Employee.objects
+        .filter(company=company)
+        .order_by('first_name', 'last_name')
+    )
+
+    employees = []
+    for employee in employees_qs:
+        hire_date = employee.hire_date.strftime('%d/%m/%Y') if employee.hire_date else ''
+        employees.append({
+            'id': employee.id,
+            'first_name': employee.first_name or '',
+            'last_name': employee.last_name or '',
+            'email': employee.email or '',
+            'phone': employee.phone or '',
+            'document': f"{(employee.document_type or '')} {(employee.document_number or '')}".strip(),
+            'job_position': employee.job_position or '',
+            'department': employee.department or '',
+            'hire_date': hire_date,
+            'is_active': employee.is_active,
+        })
+
+    return JsonResponse({'employees': employees})
+
+
+def get_company_scoped_employee_or_404(user, employee_id):
+    company = get_current_company(user)
+    try:
+        return Employee.objects.get(id=employee_id, company=company)
+    except Employee.DoesNotExist:
+        raise Http404("Empleado no encontrado")
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_get_employee(request, employee_id):
+    e = get_company_scoped_employee_or_404(request.user, employee_id)
+    return JsonResponse({
+        'employee': {
+            'id': e.id,
+            'first_name': e.first_name or '',
+            'last_name': e.last_name or '',
+            'email': e.email or '',
+            'phone': e.phone or '',
+            'document_type': e.document_type or '',
+            'document_number': e.document_number or '',
+            'job_position': e.job_position or '',
+            'department': e.department or '',
+            'address': e.address or '',
+            'date_of_birth': e.date_of_birth.strftime('%Y-%m-%d') if e.date_of_birth else '',
+            'contract_type': e.contract_type or '',
+            'hire_date': e.hire_date.strftime('%Y-%m-%d') if e.hire_date else '',
+            'termination_date': e.termination_date.strftime('%Y-%m-%d') if e.termination_date else '',
+            'is_active': e.is_active,
+            'social_security_number': e.social_security_number or '',
+            'bank_account': e.bank_account or '',
+            'collective_agreement': e.collective_agreement or '',
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_create_employee(request):
+    company = get_current_company(request.user)
+    try:
+        payload = json.loads(request.body.decode('utf-8')) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    first_name = (payload.get('first_name') or '').strip()
+    last_name = (payload.get('last_name') or '').strip()
+    job_position = (payload.get('job_position') or '').strip()
+    hire_date_raw = (payload.get('hire_date') or '').strip()
+    termination_date_raw = (payload.get('termination_date') or '').strip()
+    date_of_birth_raw = (payload.get('date_of_birth') or '').strip()
+    contract_type_in = (payload.get('contract_type') or '').strip() or 'indefinido'
+
+    if not first_name or not last_name:
+        return JsonResponse({'error': 'Nombre y apellido son obligatorios.'}, status=400)
+    if not job_position:
+        return JsonResponse({'error': 'La categoría profesional es obligatoria.'}, status=400)
+
+    hire_date_val = None
+    if hire_date_raw:
+        try:
+            hire_date_val = datetime.strptime(hire_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'error': 'Fecha de alta inválida. Use YYYY-MM-DD.'}, status=400)
+    termination_date_val = None
+    if termination_date_raw:
+        try:
+            termination_date_val = datetime.strptime(termination_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'error': 'Fecha de baja inválida. Use YYYY-MM-DD.'}, status=400)
+    dob_val = None
+    if date_of_birth_raw:
+        try:
+            dob_val = datetime.strptime(date_of_birth_raw, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'error': 'Fecha de nacimiento inválida. Use YYYY-MM-DD.'}, status=400)
+
+    valid_contract_types = {c[0] for c in Employee.CONTRACT_TYPES}
+    if contract_type_in not in valid_contract_types:
+        return JsonResponse({'error': 'Tipo de contrato inválido.'}, status=400)
+
+    e = Employee(
+        company=company,
+        first_name=first_name,
+        last_name=last_name,
+        email=(payload.get('email') or None),
+        phone=(payload.get('phone') or None),
+        document_type=(payload.get('document_type') or None),
+        document_number=(payload.get('document_number') or None),
+        job_position=job_position,
+        department=(payload.get('department') or None),
+        address=(payload.get('address') or None),
+        date_of_birth=dob_val,
+        contract_type=contract_type_in,
+        hire_date=hire_date_val,
+        termination_date=termination_date_val,
+        is_active=bool(payload.get('is_active', True)),
+        social_security_number=(payload.get('social_security_number') or None),
+        bank_account=(payload.get('bank_account') or None),
+        collective_agreement=(payload.get('collective_agreement') or None),
+    )
+    try:
+        e.save()
+        return JsonResponse({'success': True, 'id': e.id})
+    except Exception:
+        logger.exception('Error al crear empleado')
+        return JsonResponse({'error': 'Error al crear el empleado.'}, status=400)
+
+
+@login_required
+@require_POST
+def api_update_employee(request, employee_id):
+    e = get_company_scoped_employee_or_404(request.user, employee_id)
+    try:
+        payload = json.loads(request.body.decode('utf-8')) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    if 'first_name' in payload:
+        e.first_name = payload.get('first_name') or ''
+    if 'last_name' in payload:
+        e.last_name = payload.get('last_name') or ''
+    if 'email' in payload:
+        e.email = payload.get('email') or None
+    if 'phone' in payload:
+        e.phone = payload.get('phone') or None
+    if 'document_type' in payload:
+        e.document_type = payload.get('document_type') or None
+    if 'document_number' in payload:
+        e.document_number = payload.get('document_number') or None
+    if 'job_position' in payload:
+        e.job_position = payload.get('job_position') or ''
+    if 'department' in payload:
+        e.department = payload.get('department') or None
+    if 'address' in payload:
+        e.address = payload.get('address') or None
+    if 'contract_type' in payload:
+        ct = (payload.get('contract_type') or '').strip()
+        if ct:
+            valid_contract_types = {c[0] for c in Employee.CONTRACT_TYPES}
+            if ct not in valid_contract_types:
+                return JsonResponse({'error': 'Tipo de contrato inválido.'}, status=400)
+            e.contract_type = ct
+    if 'hire_date' in payload:
+        hire_date_raw = payload.get('hire_date') or ''
+        if hire_date_raw:
+            try:
+                e.hire_date = datetime.strptime(hire_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'error': 'Fecha de alta inválida. Use YYYY-MM-DD.'}, status=400)
+        else:
+            e.hire_date = None
+    if 'termination_date' in payload:
+        term_raw = payload.get('termination_date') or ''
+        if term_raw:
+            try:
+                e.termination_date = datetime.strptime(term_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'error': 'Fecha de baja inválida. Use YYYY-MM-DD.'}, status=400)
+        else:
+            e.termination_date = None
+    if 'date_of_birth' in payload:
+        dob_raw = payload.get('date_of_birth') or ''
+        if dob_raw:
+            try:
+                e.date_of_birth = datetime.strptime(dob_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'error': 'Fecha de nacimiento inválida. Use YYYY-MM-DD.'}, status=400)
+        else:
+            e.date_of_birth = None
+    if 'is_active' in payload:
+        e.is_active = bool(payload.get('is_active'))
+    if 'social_security_number' in payload:
+        e.social_security_number = payload.get('social_security_number') or None
+    if 'bank_account' in payload:
+        e.bank_account = payload.get('bank_account') or None
+    if 'collective_agreement' in payload:
+        e.collective_agreement = payload.get('collective_agreement') or None
+
+    try:
+        e.save()
+        return JsonResponse({'success': True})
+    except Exception:
+        logger.exception('Error al actualizar empleado id=%s', employee_id)
+        return JsonResponse({'error': 'Error al actualizar el empleado.'}, status=400)
+
+
+@login_required
+@require_POST
+def api_delete_employee(request, employee_id):
+    e = get_company_scoped_employee_or_404(request.user, employee_id)
+    try:
+        e.delete()
+        return JsonResponse({'success': True})
+    except Exception:
+        logger.exception('Error al eliminar empleado id=%s', employee_id)
+        return JsonResponse({'error': 'Error al eliminar el empleado.'}, status=400)
