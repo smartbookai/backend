@@ -47,7 +47,7 @@
       <button class="btn-secondary" onclick="closeEmployeeDrawer()">Cerrar</button>
     </div>
     <form id="employeeForm" onsubmit="submitEmployee(event)">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;">
         <div class="form-field">
           <label>Nombre</label>
           <input type="text" name="first_name" required>
