@@ -17,7 +17,7 @@ urlpatterns = [
     path('trabajadores/', views.trabajadores, name='trabajadores'),
     path('clientes/', views.clientes, name='clientes'),
     path('reportes/', views.reportes, name='reportes'),
-    #path('campaigns/', views.campaigns, name='campaigns'),
+    path('empleados/', views.empleados, name='empleados'),
     path('nominas/', views.nominas, name='nominas'),
 
     #supplier API endpoints

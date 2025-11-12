@@ -89,8 +89,8 @@ def clientes(request):
 
 
 @login_required
-def campaigns(request):
-    return render(request, 'pages/campaigns.html')
+def empleados(request):
+    return render(request, 'pages/empleados.html')
 
 
 @login_required
