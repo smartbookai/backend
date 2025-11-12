@@ -29,6 +29,7 @@ class Company(models.Model):
     address = models.CharField(max_length=255, null=True, blank=True)
     document_type = models.CharField(max_length=255, null=True, blank=True)
     document_number = models.CharField(max_length=255, null=True, blank=True)
+    ccc = models.CharField(max_length=11, null=True, blank=True,verbose_name="Código Cuenta Cotización",help_text="Código de 11 dígitos de la Seguridad Social")
     phone = models.CharField(max_length=15, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     website = models.URLField(null=True, blank=True)
@@ -168,6 +169,7 @@ class AccountingEntry(models.Model):
     description = models.CharField(max_length=255)                      # Descripción general
     sales_invoice = models.OneToOneField('SalesInvoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='entry')
     purchase_invoice = models.OneToOneField('PurchaseInvoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='entry')
+    payroll = models.OneToOneField('Payroll', on_delete=models.SET_NULL, null=True, blank=True,related_name='entry')
 
     debit_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     credit_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
@@ -189,6 +191,104 @@ class AccountingEntryLine(models.Model):
         return f"{self.account_code} - D:{self.debit} / C:{self.credit}"
 
 
+class Employee(models.Model):
+    CONTRACT_TYPES = [
+        ('indefinido', 'Indefinido'),
+        ('temporal', 'Temporal'),
+        ('practicas', 'En Prácticas'),
+        ('formacion', 'Formación'),
+        ('obra', 'Obra y Servicio'),
+    ]
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='employees')
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    document_type = models.CharField(max_length=50)
+    document_number = models.CharField(max_length=50)
+    email = models.EmailField(null=True, blank=True)
+    phone = models.CharField(max_length=15, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    address = models.CharField(max_length=255, null=True, blank=True)
+    job_position = models.CharField(max_length=100, verbose_name="Categoría profesional")
+    department = models.CharField(max_length=100, null=True, blank=True)
+    contract_type = models.CharField(max_length=20, choices=CONTRACT_TYPES, default='indefinido')
+    hire_date = models.DateField(verbose_name="Fecha de alta")
+    termination_date = models.DateField(null=True, blank=True, verbose_name="Fecha de baja")
+    is_active = models.BooleanField(default=True)
+    social_security_number = models.CharField(max_length=50, null=True, blank=True, verbose_name="Nº Afiliación SS")
+    bank_account = models.CharField(max_length=24, null=True, blank=True,
+                                    verbose_name="IBAN")
+    collective_agreement = models.CharField(max_length=200, null=True, blank=True, verbose_name="Convenio colectivo")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} ({self.company.name})"
+
+    class Meta:
+        verbose_name = "Empleado"
+        verbose_name_plural = "Empleados"
+        unique_together = ('company', 'document_number')
 
 
+class Payroll(models.Model):
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='payrolls')
+    employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='payrolls')
+    pdf_file = models.FileField(upload_to='payrolls/pdfs/', null=True, blank=True)
+
+    # Período y fechas
+    period_start = models.DateField(verbose_name="Inicio período")
+    period_end = models.DateField(verbose_name="Fin período")
+    payment_date = models.DateField(verbose_name="Fecha de pago")
+    issue_date = models.DateField(default=timezone.now, verbose_name="Fecha de emisión")
+
+    # Devengos (ingresos)
+    base_salary = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Salario base")
+    salary_supplements = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Complementos salariales")
+    overtime = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Horas extras")
+    bonuses = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Incentivos/bonos")
+    total_accrued = models.DecimalField(max_digits=10, decimal_places=2,verbose_name="Total devengado")
+
+    # Deducciones
+    social_security_employee = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'), verbose_name="SS empleado")
+    irpf = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Retención IRPF")
+    other_deductions = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Otras deducciones")
+    total_deductions = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="Total deducciones")
+
+    # Líquido a percibir
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2,verbose_name="Líquido a percibir")
+
+    # Seguridad Social a cargo de la empresa
+    social_security_company = models.DecimalField(max_digits=10, decimal_places=2,default=Decimal('0.00'),verbose_name="SS empresa")
+
+    # Cuentas contables (PGC español)
+    account_salary_expense = models.CharField(max_length=20, null=True, blank=True,default='640',verbose_name="Cuenta sueldos y salarios")
+    account_social_security_expense = models.CharField(max_length=20, null=True, blank=True,default='642',verbose_name="Cuenta SS empresa")
+    account_social_security_payable = models.CharField(max_length=20, null=True, blank=True,default='476',verbose_name="Cuenta SS acreedores")
+    account_irpf_payable = models.CharField(max_length=20, null=True, blank=True,default='4751',verbose_name="Cuenta IRPF")
+    account_bank = models.CharField(max_length=20, null=True, blank=True, default='572', verbose_name="Cuenta bancos")
+
+    notes = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        # Validación: Total devengado = deducciones + líquido
+        calculated_net = self.total_accrued - self.total_deductions
+        if abs(calculated_net - self.net_salary) > Decimal('0.01'):
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                f"Error: Total devengado ({self.total_accrued}) - "
+                f"Deducciones ({self.total_deductions}) debe ser igual a "
+                f"Líquido ({self.net_salary})"
+            )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Nómina {self.employee.first_name} {self.employee.last_name} - {self.period_start.strftime('%m/%Y')}"
+
+    class Meta:
+        verbose_name = "Nómina"
+        verbose_name_plural = "Nóminas"
+        ordering = ['-payment_date']
+        unique_together = ('company', 'employee', 'period_start')
 
