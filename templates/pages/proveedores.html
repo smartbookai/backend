@@ -96,6 +96,22 @@
 </section>
 
 <script>
+// Base drawer handlers (kept minimal). Later we extend behavior where needed.
+function openSupplierDrawer() {
+  const ov = document.getElementById('supplierOverlay');
+  const dr = document.getElementById('supplierDrawer');
+  if (ov) ov.style.display = 'block';
+  if (dr) dr.classList.add('active');
+}
+function closeSupplierDrawer() {
+  const ov = document.getElementById('supplierOverlay');
+  const dr = document.getElementById('supplierDrawer');
+  if (ov) ov.style.display = 'none';
+  if (dr) dr.classList.remove('active');
+}
+</script>
+
+<script>
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let SUPPLIERS_DATA = [];
 </script>
