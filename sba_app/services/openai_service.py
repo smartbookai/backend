@@ -379,47 +379,16 @@ def extract_payroll_data(file):
         if "pdf" in content_type:
             pdf_bytes = file.read()
 
-            # Intentar extraer texto directamente
+            # Extraer texto directamente
             text = ""
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 for page in doc:
                     text += page.get_text("text")
 
-            # Si el texto es corto o sin montos → pasar a imagen
-            if len(text.strip()) < 50 or ("€" not in text and "$" not in text):
-                print("⚠️ PDF parece escaneado → usando OCR visual.")
-                images = convert_from_bytes(pdf_bytes, fmt="png")
-                first_page = images[0]
-                buf = io.BytesIO()
-                first_page.save(buf, format="PNG")
-                buf.seek(0)
-                image_bytes = buf.read()
+            print(f"✅ Texto extraído del PDF de nómina ({len(text)} caracteres)")
 
-                # ✅ Codificar imagen en base64
-                base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": BASE_PROMPT_PAYROLL},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Extraé los datos de esta nómina y devolvé solo el JSON."},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{base64_image}"
-                                    }
-                                },
-                            ],
-                        },
-                    ],
-                    response_format={"type": "json_object"},
-                )
-            else:
-                # Si hay texto legible, usarlo directamente
-                print(f"✅ Texto extraído del PDF de nómina ({len(text)} caracteres)")
+            # Si hay texto, usarlo
+            if text.strip():
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
@@ -428,15 +397,14 @@ def extract_payroll_data(file):
                     ],
                     response_format={"type": "json_object"},
                 )
+            else:
+                print("⚠️ No se pudo extraer texto del PDF")
+                return {}
 
         # --- 🖼️ CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
-
-            # ✅ Codificar imagen en base64
             base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-            # Detectar el mime type correcto
             mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
 
             response = client.chat.completions.create(
@@ -458,11 +426,9 @@ def extract_payroll_data(file):
                 ],
                 response_format={"type": "json_object"},
             )
-
         else:
             raise ValueError("Formato de archivo no soportado")
 
-        # --- Parsear JSON seguro ---
         content = response.choices[0].message.content
         print(f"🤖 Respuesta de OpenAI (Nómina): {content}")
         result = json.loads(content)

@@ -1661,7 +1661,8 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
     from datetime import datetime, date
     import re
 
-    # 1. VALIDAR Y CORREGIR FECHAS (año incorrecto)
+    # 1. VALIDAR FECHAS - MEJORADO
+    # Solo corregir si es MUY antigua (>5 años)
     current_year = datetime.now().year
 
     for date_field in ['period_start', 'period_end', 'payment_date', 'issue_date']:
@@ -1670,17 +1671,17 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
             try:
                 parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
 
-                # Si la fecha es de más de 2 años en el pasado, probablemente está mal
-                if parsed_date.year < (current_year - 2):
+                # Solo corregir si es de más de 5 años atrás (probablemente error)
+                if parsed_date.year < (current_year - 5):
                     print(f"⚠️ Corrigiendo {date_field}: {date_str} → año {current_year}")
-                    # Mantener mes y día, cambiar año
                     corrected = parsed_date.replace(year=current_year)
                     payroll_data[date_field] = corrected.strftime('%Y-%m-%d')
+                else:
+                    print(f"✅ Fecha válida: {date_field} = {date_str}")
             except:
                 pass
 
     # 2. CONSOLIDAR BONUSES EN SALARY_SUPPLEMENTS
-    # En nóminas españolas, típicamente todo va en complementos salariales
     bonuses = safe_decimal(payroll_data.get('bonuses', '0'))
     if bonuses > 0:
         current_supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
@@ -1689,16 +1690,12 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
         payroll_data['bonuses'] = '0.00'
         print(f"✅ Consolidados bonuses ({bonuses}) en salary_supplements → {new_supplements}")
 
-    # 3. VALIDAR TOTAL DEVENGADO - CAMBIO CRÍTICO
-    # SIEMPRE confiar en total_accrued si viene de OpenAI
-    # Solo recalcular si está vacío o es 0
+    # 3. VALIDAR TOTAL DEVENGADO
     declared_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
 
     if declared_accrued > 0:
-        # Si viene total_accrued, SIEMPRE usarlo
         print(f"✅ Usando total devengado extraído: {declared_accrued}")
     else:
-        # Solo calcular si no vino
         base = safe_decimal(payroll_data.get('base_salary', '0'))
         supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
         overtime = safe_decimal(payroll_data.get('overtime', '0'))
@@ -1707,14 +1704,12 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
         print(f"⚠️ Total devengado no extraído, calculando: {calculated_accrued}")
         payroll_data['total_accrued'] = str(calculated_accrued)
 
-    # 4. VALIDAR TOTAL DEDUCCIONES - MISMO CAMBIO
+    # 4. VALIDAR TOTAL DEDUCCIONES
     declared_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
 
     if declared_deductions > 0:
-        # Si viene total_deductions, SIEMPRE usarlo
         print(f"✅ Usando total deducciones extraído: {declared_deductions}")
     else:
-        # Solo calcular si no vino
         ss_employee = safe_decimal(payroll_data.get('social_security_employee', '0'))
         irpf = safe_decimal(payroll_data.get('irpf', '0'))
         other_ded = safe_decimal(payroll_data.get('other_deductions', '0'))
@@ -1722,36 +1717,38 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
         print(f"⚠️ Total deducciones no extraído, calculando: {calculated_deductions}")
         payroll_data['total_deductions'] = str(calculated_deductions)
 
-    # 5. VALIDAR LÍQUIDO - SIEMPRE RECALCULAR basado en totales
-    final_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
-    final_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
-    calculated_net = final_accrued - final_deductions
+    # 5. VALIDAR LÍQUIDO - CAMBIO CRÍTICO
+    # SIEMPRE usar el líquido extraído por OpenAI si existe
     declared_net = safe_decimal(payroll_data.get('net_salary', '0'))
 
-    if abs(calculated_net - declared_net) > Decimal('0.10'):
-        print(f"⚠️ Recalculando net_salary: {declared_net} → {calculated_net}")
-        payroll_data['net_salary'] = str(calculated_net)
+    if declared_net > 0:
+        # Confiar en el valor extraído
+        print(f"✅ Usando líquido extraído: {declared_net}")
     else:
-        print(f"✅ Líquido coherente: {declared_net}")
+        # Solo calcular si no vino
+        final_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
+        final_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
+        calculated_net = final_accrued - final_deductions
+        print(f"⚠️ Líquido no extraído, calculando: {calculated_net}")
+        payroll_data['net_salary'] = str(calculated_net)
 
-    # 6. VALIDAR SS EMPRESA (si es muy baja, es sospechoso)
+    # 6. VALIDAR SS EMPRESA - MEJORADO
     ss_company = safe_decimal(payroll_data.get('social_security_company', '0'))
     total_accrued_final = safe_decimal(payroll_data.get('total_accrued', '0'))
 
-    # SS empresa típicamente es ~30-35% del total devengado
     if total_accrued_final > 0:
-        expected_min = total_accrued_final * Decimal('0.25')
-        expected_max = total_accrued_final * Decimal('0.40')
+        # Rango más amplio: 25-45%
+        expected_min = total_accrued_final * Decimal('0.20')
+        expected_max = total_accrued_final * Decimal('0.50')
 
         if ss_company < expected_min or ss_company > expected_max:
-            # Usar estimación conservadora: 32%
             estimated_ss = (total_accrued_final * Decimal('0.32')).quantize(Decimal('0.01'))
             print(f"⚠️ SS empresa sospechosa ({ss_company}). Estimando: {estimated_ss}")
             payroll_data['social_security_company'] = str(estimated_ss)
         else:
             print(f"✅ SS empresa en rango esperado: {ss_company}")
 
-    # 7. LIMPIAR DIRECCIÓN (quitar "C/ PALAU REIAL" si aparece - dirección empresa común)
+    # 7. LIMPIAR DIRECCIÓN
     address = employee_data.get('address', '')
     if address and 'PALAU REIAL' in address.upper():
         print(f"⚠️ Dirección parece ser de empresa, limpiando: {address}")
