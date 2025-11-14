@@ -1,4 +1,5 @@
 {% extends 'layouts/base.html' %}
+{% load static %}
 {% block title %}Facturas enviadas | SBA{% endblock %}
 {% block content %}
 <section>
@@ -47,6 +48,12 @@
   <!-- Overlay and Drawer -->
   <div id="invoiceOverlay" class="overlay-mask" onclick="closeInvoiceDrawer()"></div>
   <aside id="invoiceDrawer" class="drawer" aria-hidden="true">
+    <div class="drawer-loading-mask" hidden>
+      <div class="drawer-loading-box">
+        <img src="{% static 'images/SBA-loader.png' %}" alt="Cargando">
+        <span>Cargando...</span>
+      </div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h3 style="margin:0;font-size:18px;">Subir factura</h3>
       <button class="btn-secondary" onclick="closeInvoiceDrawer()">Cerrar</button>
@@ -314,6 +321,23 @@ function closeInvoiceDrawer() {
 }
 </script>
 <script>
+(async function(){
+  const css = `
+  .drawer-loading-mask { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(249,250,251,0.75); z-index:1000; }
+  .drawer-loading-mask[hidden] { display:none; }
+  .drawer-loading-mask.active { display:flex; }
+  .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:8px 12px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); }
+  .drawer-loading-box img { width:22px; height:22px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
+  @keyframes sba-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .drawer-loading-box img { animation: none; } }
+  `;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+})();
+function showDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.hidden=false; m.classList.add('active'); } }
+function hideDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.classList.remove('active'); m.hidden=true; } }
+</script>
+
+<script>
 async function submitInvoice(e) {
   if (e) e.preventDefault();
 
@@ -329,6 +353,7 @@ async function submitInvoice(e) {
     btn.textContent = 'Subiendo...';
   }
 
+  showDrawerLoader('invoiceDrawer');
   try {
     const fd = new FormData();
     fd.append('pdf_file', fileInput.files[0]);
@@ -354,6 +379,7 @@ async function submitInvoice(e) {
   } catch (error) {
     alert(error.message || 'Error subiendo archivo');
   } finally {
+    hideDrawerLoader('invoiceDrawer');
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Subir';
