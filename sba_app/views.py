@@ -1689,42 +1689,40 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
         payroll_data['bonuses'] = '0.00'
         print(f"✅ Consolidados bonuses ({bonuses}) en salary_supplements → {new_supplements}")
 
-    # 3. VALIDAR COHERENCIA DE TOTALES - MEJORADO
-    base = safe_decimal(payroll_data.get('base_salary', '0'))
-    supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
-    overtime = safe_decimal(payroll_data.get('overtime', '0'))
-    bonuses_final = safe_decimal(payroll_data.get('bonuses', '0'))
-
-    calculated_accrued = base + supplements + overtime + bonuses_final
+    # 3. VALIDAR TOTAL DEVENGADO - CAMBIO CRÍTICO
+    # SIEMPRE confiar en total_accrued si viene de OpenAI
+    # Solo recalcular si está vacío o es 0
     declared_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
 
-    # Solo recalcular si la diferencia es GRANDE (>5%)
     if declared_accrued > 0:
-        diff_percentage = abs(calculated_accrued - declared_accrued) / declared_accrued
-        if diff_percentage > Decimal('0.05'):  # Más del 5% de diferencia
-            print(f"⚠️ Recalculando total_accrued: {declared_accrued} → {calculated_accrued}")
-            payroll_data['total_accrued'] = str(calculated_accrued)
-        else:
-            # Confiar en el total original extraído
-            print(f"✅ Total devengado coherente: {declared_accrued}")
+        # Si viene total_accrued, SIEMPRE usarlo
+        print(f"✅ Usando total devengado extraído: {declared_accrued}")
+    else:
+        # Solo calcular si no vino
+        base = safe_decimal(payroll_data.get('base_salary', '0'))
+        supplements = safe_decimal(payroll_data.get('salary_supplements', '0'))
+        overtime = safe_decimal(payroll_data.get('overtime', '0'))
+        bonuses_final = safe_decimal(payroll_data.get('bonuses', '0'))
+        calculated_accrued = base + supplements + overtime + bonuses_final
+        print(f"⚠️ Total devengado no extraído, calculando: {calculated_accrued}")
+        payroll_data['total_accrued'] = str(calculated_accrued)
 
-    # 4. VALIDAR DEDUCCIONES
-    ss_employee = safe_decimal(payroll_data.get('social_security_employee', '0'))
-    irpf = safe_decimal(payroll_data.get('irpf', '0'))
-    other_ded = safe_decimal(payroll_data.get('other_deductions', '0'))
-
-    calculated_deductions = ss_employee + irpf + other_ded
+    # 4. VALIDAR TOTAL DEDUCCIONES - MISMO CAMBIO
     declared_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
 
     if declared_deductions > 0:
-        diff_percentage = abs(calculated_deductions - declared_deductions) / declared_deductions
-        if diff_percentage > Decimal('0.05'):
-            print(f"⚠️ Recalculando total_deductions: {declared_deductions} → {calculated_deductions}")
-            payroll_data['total_deductions'] = str(calculated_deductions)
-        else:
-            print(f"✅ Total deducciones coherente: {declared_deductions}")
+        # Si viene total_deductions, SIEMPRE usarlo
+        print(f"✅ Usando total deducciones extraído: {declared_deductions}")
+    else:
+        # Solo calcular si no vino
+        ss_employee = safe_decimal(payroll_data.get('social_security_employee', '0'))
+        irpf = safe_decimal(payroll_data.get('irpf', '0'))
+        other_ded = safe_decimal(payroll_data.get('other_deductions', '0'))
+        calculated_deductions = ss_employee + irpf + other_ded
+        print(f"⚠️ Total deducciones no extraído, calculando: {calculated_deductions}")
+        payroll_data['total_deductions'] = str(calculated_deductions)
 
-    # 5. VALIDAR LÍQUIDO A PERCIBIR
+    # 5. VALIDAR LÍQUIDO - SIEMPRE RECALCULAR basado en totales
     final_accrued = safe_decimal(payroll_data.get('total_accrued', '0'))
     final_deductions = safe_decimal(payroll_data.get('total_deductions', '0'))
     calculated_net = final_accrued - final_deductions
