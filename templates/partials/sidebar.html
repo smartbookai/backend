@@ -9,7 +9,7 @@
     </a>
     <a href="{% url 'facturas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'facturas' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-box-seam"></i>
-      <span>Facturas</span>
+      <span>Facturas recibidas</span>
     </a>
     <a href="{% url 'invoices_sent' %}" class="sidebar-link {% if request.resolver_match.url_name == 'invoices_sent' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-send"></i>
