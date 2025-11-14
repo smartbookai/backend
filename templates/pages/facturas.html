@@ -161,8 +161,8 @@
   .drawer-loading-mask { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(249,250,251,0.75); z-index:1000; }
   .drawer-loading-mask[hidden] { display:none; }
   .drawer-loading-mask.active { display:flex; }
-  .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:8px 12px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); }
-  .drawer-loading-box img { width:22px; height:22px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
+  .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:10px 24px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); min-width:300px; }
+  .drawer-loading-box img { width:48px; height:48px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
   @keyframes sba-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .drawer-loading-box img { animation: none; } }
   `;
