@@ -17,11 +17,14 @@
     </div>
 
     <div class="card table-card" style="padding:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;">
-        <div>
+      <div style="display:flex;align-items:center;padding:16px 20px;gap:12px;">
+        <div style="flex:1;min-width:0;">
           <h2 style="font-size:16px;margin:0;">Listado</h2>
         </div>
-        <!--<a href="#" class="link-blue">Ver todos</a>-->
+        <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input id="suppliersSearch" type="text" placeholder="Buscar..." aria-label="Buscar proveedores" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div style="flex:1;min-width:0;"></div>
       </div>
 
       <div class="table-container">
@@ -94,15 +97,83 @@
 
 <script>
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+let SUPPLIERS_DATA = [];
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     loadSuppliers();
+    setupSuppliersSearch();
 });
 </script>
 
 <script>
 
+function renderSuppliersTable(rows) {
+  const tbody = document.querySelector('.suppliers-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay proveedores registrados.</td></tr>';
+    return;
+  }
+
+  rows.forEach(s => {
+    const actions = IS_ADMIN
+      ? `
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary"
+                  style="padding:.35rem .6rem; font-size:12px;"
+                  onclick="editSupplier(${s.id})">
+            Editar
+          </button>
+          <button class="btn-primary"
+                  style="background:#DC2626; padding:.35rem .6rem; font-size:12px;"
+                  onclick="deleteSupplier(${s.id})">
+            Eliminar
+          </button>
+        </div>
+      `
+      : `<span style="color:#9CA3AF;">-</span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">${s.name || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${s.contact_person || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${s.phone || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${s.email || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${s.document || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${s.address || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${actions}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function setupSuppliersSearch() {
+  const input = document.getElementById('suppliersSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    const rows = filterSuppliers(term);
+    renderSuppliersTable(rows);
+  });
+}
+
+function filterSuppliers(term) {
+  if (!term) return SUPPLIERS_DATA;
+  return SUPPLIERS_DATA.filter(s => {
+    const fields = [
+      s.name,
+      s.contact_person,
+      s.phone,
+      s.email,
+      s.document,
+      s.address,
+    ];
+    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
+  });
+}
 
 function loadSuppliers() {
   fetch('/api/show-table-suppliers/', {
@@ -110,62 +181,17 @@ function loadSuppliers() {
   })
   .then(r => r.json())
   .then(data => {
-    const tbody = document.querySelector('.suppliers-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    const rows = (data.suppliers || []);
-    if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay proveedores registrados.</td></tr>';
-      return;
-    }
-
-    rows.forEach(s => {
-      const actions = IS_ADMIN
-        ? `
-          <div style="display:flex; gap:8px; justify-content:center;">
-            <button class="btn-secondary"
-                    style="padding:.35rem .6rem; font-size:12px;"
-                    onclick="editSupplier(${s.id})">
-              Editar
-            </button>
-            <button class="btn-primary"
-                    style="background:#DC2626; padding:.35rem .6rem; font-size:12px;"
-                    onclick="deleteSupplier(${s.id})">
-              Eliminar
-            </button>
-          </div>
-        `
-        : `<span style="color:#9CA3AF;">-</span>`;
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="table-cell" style="padding:14px 18px;">${s.name || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${s.contact_person || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${s.phone || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${s.email || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${s.document || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${s.address || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${actions}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    SUPPLIERS_DATA = (data.suppliers || []);
+    const input = document.getElementById('suppliersSearch');
+    const term = input ? (input.value || '').trim().toLowerCase() : '';
+    const rows = term ? filterSuppliers(term) : SUPPLIERS_DATA;
+    renderSuppliersTable(rows);
   })
   .catch(err => {
     console.error(err);
     const tbody = document.querySelector('.suppliers-tbody');
     if (tbody) tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px;">Error al cargar proveedores</td></tr>';
   });
-}
-
-// Drawer handlers
-function openSupplierDrawer() {
-  document.getElementById('supplierOverlay').style.display = 'block';
-  document.getElementById('supplierDrawer').classList.add('active');
-}
-function closeSupplierDrawer() {
-  document.getElementById('supplierOverlay').style.display = 'none';
-  document.getElementById('supplierDrawer').classList.remove('active');
 }
 function submitSupplier(e) {
   e.preventDefault();

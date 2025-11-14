@@ -12,10 +12,14 @@
     </div>
 
     <div class="card table-card" style="padding:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;">
-        <div>
+      <div style="display:flex;align-items:center;padding:16px 20px;gap:12px;">
+        <div style="flex:1;min-width:0;">
           <h2 style="font-size:16px;margin:0;">Listado</h2>
         </div>
+        <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input id="employeesSearch" type="text" placeholder="Buscar..." aria-label="Buscar empleados" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div style="flex:1;min-width:0;"></div>
       </div>
 
       <div class="table-container">
@@ -133,9 +137,73 @@
 </section>
 
 <script>
+let EMPLOYEES_DATA = [];
+
 document.addEventListener('DOMContentLoaded', function() {
   loadEmployees();
+  setupEmployeesSearch();
 });
+
+function renderEmployeesTable(rows) {
+  const tbody = document.querySelector('.employees-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="9" style="color:#6B7280;padding:18px;">No hay empleados registrados.</td></tr>';
+    return;
+  }
+
+  rows.forEach(e => {
+    const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || '-';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">${fullName}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.email || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.phone || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.document || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.job_position || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.department || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.hire_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${e.is_active ? 'Activo' : 'Inactivo'}</td>
+      <td class="table-cell" style="padding:14px 18px;">
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editEmployee(${e.id})">Editar</button>
+          <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteEmployee(${e.id})">Eliminar</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function setupEmployeesSearch() {
+  const input = document.getElementById('employeesSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    const rows = filterEmployees(term);
+    renderEmployeesTable(rows);
+  });
+}
+
+function filterEmployees(term) {
+  if (!term) return EMPLOYEES_DATA;
+  return EMPLOYEES_DATA.filter(e => {
+    const fields = [
+      e.first_name,
+      e.last_name,
+      e.email,
+      e.phone,
+      e.document,
+      e.job_position,
+      e.department,
+      e.hire_date,
+      e.is_active ? 'activo' : 'inactivo',
+    ];
+    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
+  });
+}
 
 function loadEmployees() {
   fetch('/api/show-table-employees/', {
@@ -143,37 +211,11 @@ function loadEmployees() {
   })
   .then(r => r.json())
   .then(data => {
-    const tbody = document.querySelector('.employees-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    const rows = (data.employees || []);
-    if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td class="table-cell" colspan="9" style="color:#6B7280;padding:18px;">No hay empleados registrados.</td></tr>';
-      return;
-    }
-
-    rows.forEach(e => {
-      const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || '-';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="table-cell" style="padding:14px 18px;">${fullName}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.email || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.phone || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.document || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.job_position || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.department || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.hire_date || '-'}</td>
-        <td class="table-cell" style="padding:14px 18px;">${e.is_active ? 'Activo' : 'Inactivo'}</td>
-        <td class="table-cell" style="padding:14px 18px;">
-          <div style="display:flex; gap:8px; justify-content:center;">
-            <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editEmployee(${e.id})">Editar</button>
-            <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteEmployee(${e.id})">Eliminar</button>
-          </div>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
+    EMPLOYEES_DATA = (data.employees || []);
+    const input = document.getElementById('employeesSearch');
+    const term = input ? (input.value || '').trim().toLowerCase() : '';
+    const rows = term ? filterEmployees(term) : EMPLOYEES_DATA;
+    renderEmployeesTable(rows);
   })
   .catch(err => {
     console.error(err);
@@ -188,6 +230,7 @@ function openEmployeeDrawer() {
   document.getElementById('employeeOverlay').style.display = 'block';
   document.getElementById('employeeDrawer').classList.add('active');
 }
+
 function closeEmployeeDrawer() {
   document.getElementById('employeeOverlay').style.display = 'none';
   document.getElementById('employeeDrawer').classList.remove('active');
