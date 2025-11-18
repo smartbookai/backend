@@ -2,6 +2,7 @@ import io
 import json
 import base64
 import fitz  # PyMuPDF
+from environ import logger
 from pdf2image import convert_from_bytes  # pip install pdf2image
 from django.conf import settings
 from openai import OpenAI
@@ -440,3 +441,152 @@ def extract_payroll_data(file):
         result = {}
 
     return result
+
+############################################################################generate accounting entry for purchase#####################################################
+def generate_accounting_entry_for_purchase(invoice_data, lines_data, supplier_name):
+    """
+    Genera la estructura del asiento contable para una factura de compra
+    utilizando IA para determinar las cuentas más apropiadas según el PGC español.
+    """
+    try:
+        # Preparar el contexto de las líneas
+        lines_context = []
+        for idx, line in enumerate(lines_data, 1):
+            lines_context.append(
+                f"Línea {idx}: {line.get('description', 'Sin descripción')} "
+                f"(Cantidad: {line.get('quantity', 0)}, "
+                f"Precio unitario: {line.get('unit_price', 0)}€)"
+            )
+
+        lines_text = "\n".join(lines_context) if lines_context else "Sin líneas detalladas"
+
+        prompt = f"""Eres un experto contable español. Analiza esta factura de COMPRA y genera el asiento contable según el Plan General Contable (PGC) español.
+
+DATOS DE LA FACTURA:
+- Número: {invoice_data.get('invoice_number', 'N/A')}
+- Proveedor: {supplier_name}
+- Base imponible: {invoice_data.get('base_amount', 0)}€
+- IVA: {invoice_data.get('tax_amount', 0)}€
+- Total: {invoice_data.get('total_amount', 0)}€
+
+LÍNEAS DE LA FACTURA:
+{lines_text}
+
+INSTRUCCIONES CRÍTICAS:
+1. Analiza CUIDADOSAMENTE el tipo de gasto según las líneas de la factura
+2. Determina la cuenta de gasto MÁS ESPECÍFICA del PGC español (grupos 6XX)
+3. **IMPORTANTE**: La cuenta 600 (Compras de mercaderías) SOLO se usa para productos físicos destinados a reventa
+4. Para servicios digitales, software, suscripciones, créditos online → Usa 629 (Otros servicios)
+5. Para servicios profesionales (asesoría, desarrollo, consultoría) → Usa 623
+6. Para suministros físicos (electricidad, agua, material de oficina) → Usa 628
+7. Genera el asiento contable completo
+
+GUÍA DE CUENTAS DEL PGC ESPAÑOL:
+
+**COMPRAS (600-607)** - SOLO para productos físicos:
+- 600: Compras de mercaderías (productos para revender)
+- 601: Compras de materias primas (fabricación)
+- 602: Compras de otros aprovisionamientos (materiales auxiliares)
+
+**SERVICIOS (621-629)** - Para servicios y gastos operativos:
+- 621: Arrendamientos y cánones (alquileres)
+- 622: Reparaciones y conservación (mantenimiento físico)
+- 623: Servicios de profesionales independientes (consultores, abogados, desarrolladores)
+- 624: Transportes (envíos, logística)
+- 625: Primas de seguros
+- 626: Servicios bancarios
+- 627: Publicidad, propaganda y relaciones públicas
+- 628: Suministros (electricidad, agua, teléfono, material oficina)
+- 629: Otros servicios (servicios digitales, software, suscripciones, créditos online, licencias, hosting)
+
+**OTROS GASTOS:**
+- 631: Otros tributos
+- 640: Sueldos y salarios
+- 642: Seguridad Social a cargo de la empresa
+
+**EJEMPLOS PRÁCTICOS:**
+- "Créditos de Windsurf" → 629 (servicio digital)
+- "Suscripción GitHub Pro" → 629 (servicio digital)
+- "Hosting AWS" → 629 (servicio digital)
+- "Licencia Office 365" → 629 (servicio digital)
+- "Asesoría legal" → 623 (servicio profesional)
+- "Desarrollo web" → 623 (servicio profesional)
+- "Compra de ordenadores" → 600 (si es para revender) o 217 (si es inmovilizado)
+- "Electricidad oficina" → 628 (suministro)
+- "Material de oficina" → 628 (suministro)
+
+CUENTAS FIJAS:
+- 472: H.P. IVA soportado (siempre para el IVA en facturas de compra)
+- 400: Proveedores (cuenta principal para proveedores de mercancías)
+- 410: Acreedores por prestaciones de servicios (preferible para servicios)
+
+RESPONDE SOLO CON UN JSON VÁLIDO EN ESTE FORMATO EXACTO:
+{{
+    "account_expense": "código de la cuenta de gasto (ej: 623 o 629)",
+    "expense_description": "Descripción clara y específica del gasto",
+    "account_vat_input": "472",
+    "vat_description": "IVA soportado",
+    "account_supplier": "400 o 410 según corresponda (410 preferible para servicios)",
+    "supplier_description": "Descripción para la línea del proveedor",
+    "reasoning": "Breve explicación de por qué elegiste esas cuentas, explicando por qué NO es 600 si aplica"
+}}
+
+IMPORTANTE: 
+- Responde SOLO con JSON, sin texto adicional
+- No uses markdown ni backticks
+- Asegúrate de que el JSON sea válido
+- Si tienes duda entre 600 y 629, USA 629 (es más seguro)"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Eres un experto contable español especializado en el Plan General Contable. Respondes SOLO con JSON válido, sin markdown ni texto adicional. Eres especialmente cuidadoso distinguiendo entre compras de mercaderías (600) y servicios (629)."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=800
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Limpiar posibles backticks de markdown
+        response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+        # Parsear el JSON
+        accounting_entry = json.loads(response_text)
+
+        logger.info(f"Asiento contable generado por IA para factura {invoice_data.get('invoice_number')}")
+        logger.info(f"Razonamiento: {accounting_entry.get('reasoning', 'N/A')}")
+
+        return accounting_entry
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Error al parsear JSON de OpenAI: {e}")
+        logger.error(f"Respuesta recibida: {response_text}")
+        # Retornar valores por defecto si falla el parsing
+        return {
+            "account_expense": "629",  # Otros servicios (genérico y seguro)
+            "expense_description": f"Compras - {supplier_name}",
+            "account_vat_input": "472",
+            "vat_description": "IVA soportado",
+            "account_supplier": "410",  # Acreedores por prestaciones de servicios
+            "supplier_description": f"{supplier_name}",
+            "reasoning": "Valores por defecto debido a error en análisis de IA"
+        }
+    except Exception as e:
+        logger.exception(f"Error al generar asiento contable con IA: {e}")
+        return {
+            "account_expense": "629",
+            "expense_description": f"Compras - {supplier_name}",
+            "account_vat_input": "472",
+            "vat_description": "IVA soportado",
+            "account_supplier": "410",
+            "supplier_description": f"{supplier_name}",
+            "reasoning": "Valores por defecto debido a error"
+        }
