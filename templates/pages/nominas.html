@@ -170,6 +170,15 @@
     </form>
   </aside>
 
+  <!-- Overlay global para generación de asientos contables -->
+  <div id="entryGenerationOverlay" class="overlay-mask" style="display:none;align-items:center;justify-content:center;z-index:1200;">
+    <div class="drawer-loading-box" style="display:flex;flex-direction:column;align-items:center;gap:12px;background:#FFFFFF;border:1px solid #E5E7EB;padding:20px 32px;border-radius:14px;box-shadow:0 10px 40px rgba(15,23,42,0.25);min-width:320px;">
+      <img src="{% static 'images/SBA-loader.png' %}" alt="Generando asiento" style="width:72px;height:72px;animation:sba-spin 0.9s linear infinite;transform-origin:50% 50%;">
+      <div style="font-weight:600;color:#111827;font-size:16px;">Generando asiento contable…</div>
+      <div style="color:#6B7280;font-size:13px;text-align:center;max-width:260px;">Estamos utilizando IA para calcular el asiento. Este proceso puede tardar unos segundos.</div>
+    </div>
+  </div>
+
 </section>
 
 <script>
@@ -177,7 +186,6 @@
 (function(){
   const css = `
   .drawer-loading-mask { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(249,250,251,0.75); z-index:1000; }
-  .drawer-loading-mask[hidden] { display:none; }
   .drawer-loading-mask.active { display:flex; }
   .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:10px 24px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); min-width:300px; }
   .drawer-loading-box img { width:48px; height:48px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
@@ -188,6 +196,8 @@
 })();
 function showDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.hidden=false; m.classList.add('active'); } }
 function hideDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.classList.remove('active'); m.hidden=true; } }
+function showEntryLoader(){ const o=document.getElementById('entryGenerationOverlay'); if(o){ o.style.display='flex'; }}
+function hideEntryLoader(){ const o=document.getElementById('entryGenerationOverlay'); if(o){ o.style.display='none'; }}
 </script>
 
 <script>
@@ -479,6 +489,7 @@ async function generatePayrollEntry(id) {
   if (!id) return;
   if (!confirm('¿Generar asiento contable para esta nómina?')) return;
 
+  showEntryLoader();
   try {
     const res = await fetch(`/api/payrolls/${id}/generate-entry/`, {
       method: 'POST',
@@ -501,6 +512,8 @@ async function generatePayrollEntry(id) {
     alert(data.message || 'Asiento contable generado correctamente.');
   } catch (err) {
     alert(err.message || 'Error al generar el asiento contable.');
+  } finally {
+    hideEntryLoader();
   }
 }
 </script>

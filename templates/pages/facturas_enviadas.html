@@ -150,6 +150,16 @@
       </div>
     </div>
   </template>
+
+  <!-- Overlay global para generación de asientos contables -->
+  <div id="entryGenerationOverlay" class="overlay-mask" style="display:none;align-items:center;justify-content:center;z-index:1200;">
+    <div class="drawer-loading-box" style="display:flex;flex-direction:column;align-items:center;gap:12px;background:#FFFFFF;border:1px solid #E5E7EB;padding:20px 32px;border-radius:14px;box-shadow:0 10px 40px rgba(15,23,42,0.25);min-width:320px;">
+      <img src="{% static 'images/SBA-loader.png' %}" alt="Generando asiento" style="width:72px;height:72px;animation:sba-spin 0.9s linear infinite;transform-origin:50% 50%;">
+      <div style="font-weight:600;color:#111827;font-size:16px;">Generando asiento contable…</div>
+      <div style="color:#6B7280;font-size:13px;text-align:center;max-width:260px;">Estamos utilizando IA para calcular el asiento. Este proceso puede tardar unos segundos.</div>
+    </div>
+  </div>
+
 </section>
 
 <script>
@@ -333,6 +343,8 @@ function closeInvoiceDrawer() {
 })();
 function showDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.hidden=false; m.classList.add('active'); } }
 function hideDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.classList.remove('active'); m.hidden=true; } }
+function showEntryLoader(){ const o=document.getElementById('entryGenerationOverlay'); if(o){ o.style.display='flex'; }}
+function hideEntryLoader(){ const o=document.getElementById('entryGenerationOverlay'); if(o){ o.style.display='none'; }}
 </script>
 
 <script>
@@ -416,6 +428,7 @@ async function generateSalesEntry(id) {
   if (!id) return;
   if (!confirm('¿Generar asiento contable para esta factura enviada?')) return;
 
+  showEntryLoader();
   try {
     const res = await fetch(`/api/invoices-sent/${id}/generate-entry/`, {
       method: 'POST',
@@ -438,6 +451,8 @@ async function generateSalesEntry(id) {
     alert(data.message || 'Asiento contable generado correctamente.');
   } catch (err) {
     alert(err.message || 'Error al generar el asiento contable.');
+  } finally {
+    hideEntryLoader();
   }
 }
 </script>
