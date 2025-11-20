@@ -73,6 +73,7 @@ urlpatterns = [
 
     path("api/invoices-received/<int:invoice_id>/generate-entry/", views.generate_entry_for_purchase_invoice, name="generate_entry_for_purchase_invoice"),
     path("api/invoices-sent/<int:invoice_id>/generate-entry/", views.generate_entry_for_sales_invoice, name="generate_entry_for_sales_invoice"),
+    path('api/payrolls/<int:payroll_id>/generate-entry/', views.generate_entry_for_payroll, name='generate_entry_for_payroll'),
 
 ]
 

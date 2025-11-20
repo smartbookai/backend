@@ -18,7 +18,7 @@ from django.core.files.storage import default_storage
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
-    generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales
+    generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll
 
 logger = logging.getLogger(__name__)
 
@@ -2422,6 +2422,273 @@ def generate_entry_for_sales_invoice(request, invoice_id):
         import traceback
         print(traceback.format_exc())
         logger.exception(f'Error al generar asiento para factura {invoice_id}')
+        return JsonResponse({
+            'success': False,
+            'error': f'Error al generar el asiento contable: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def generate_entry_for_payroll(request, payroll_id):
+    """
+    Genera el asiento contable para una nómina (Payroll)
+    utilizando IA para generar descripciones apropiadas.
+    """
+    company = get_current_company(request.user)
+
+    print("\n" + "=" * 80)
+    print("🔍 GENERANDO ASIENTO CONTABLE PARA NÓMINA")
+    print("=" * 80)
+
+    try:
+        # Obtener la nómina
+        payroll = Payroll.objects.select_related('employee').get(
+            id=payroll_id,
+            company=company
+        )
+
+        employee_name = f"{payroll.employee.first_name} {payroll.employee.last_name}"
+
+        print(f"\n📄 DATOS DE LA NÓMINA:")
+        print(f"   ID: {payroll.id}")
+        print(f"   Empleado: {employee_name}")
+        print(f"   Período: {payroll.period_start} - {payroll.period_end}")
+        print(f"   Total devengado: {payroll.total_accrued}€")
+        print(f"   SS empleado: {payroll.social_security_employee}€")
+        print(f"   IRPF: {payroll.irpf}€")
+        print(f"   Otras deducciones: {payroll.other_deductions}€")
+        print(f"   Líquido a pagar: {payroll.net_salary}€")
+        print(f"   SS empresa: {payroll.social_security_company}€")
+
+    except Payroll.DoesNotExist:
+        print("❌ ERROR: Nómina no encontrada")
+        return JsonResponse({
+            'success': False,
+            'error': 'Nómina no encontrada'
+        }, status=404)
+
+    # Verificar si ya tiene un asiento generado
+    if hasattr(payroll, 'entry') and payroll.entry:
+        print("⚠️ ADVERTENCIA: Esta nómina ya tiene un asiento contable generado")
+        return JsonResponse({
+            'success': False,
+            'error': 'Esta nómina ya tiene un asiento contable generado'
+        }, status=400)
+
+    # Validar que la nómina tenga los datos necesarios
+    if not payroll.total_accrued or payroll.total_accrued <= 0:
+        print("❌ ERROR: La nómina no tiene un importe válido")
+        return JsonResponse({
+            'success': False,
+            'error': 'La nómina no tiene un importe válido'
+        }, status=400)
+
+    try:
+        # Preparar datos de la nómina para la IA
+        payroll_data = {
+            'period_start': payroll.period_start.strftime('%d/%m/%Y') if payroll.period_start else '',
+            'period_end': payroll.period_end.strftime('%d/%m/%Y') if payroll.period_end else '',
+            'total_accrued': float(payroll.total_accrued),
+            'social_security_employee': float(payroll.social_security_employee),
+            'irpf': float(payroll.irpf),
+            'other_deductions': float(payroll.other_deductions),
+            'net_salary': float(payroll.net_salary),
+            'social_security_company': float(payroll.social_security_company),
+        }
+
+        # Llamar a la IA para generar descripciones
+        print(f"\n🤖 CONSULTANDO A LA IA...")
+        ai_result = generate_accounting_entry_for_payroll(
+            payroll_data=payroll_data,
+            employee_name=employee_name
+        )
+
+        print(f"\n✅ RESPUESTA DE LA IA:")
+        print(f"   Razonamiento: {ai_result.get('reasoning', 'N/A')}")
+
+        # Obtener el siguiente número de asiento para esta empresa
+        next_entry_number = AccountingEntry.get_next_entry_number(company)
+
+        print(f"\n🔢 NÚMERO DE ASIENTO: {next_entry_number}")
+
+        # Calcular totales
+        # DEBE: total_accrued + social_security_company
+        debit_total = payroll.total_accrued + payroll.social_security_company
+
+        # HABER: (SS empleado + SS empresa) + IRPF + otras deducciones + líquido
+        total_ss = payroll.social_security_employee + payroll.social_security_company
+        credit_total = total_ss + payroll.irpf + payroll.other_deductions + payroll.net_salary
+
+        # Mostrar cómo quedará el asiento
+        print(f"\n📊 ASIENTO CONTABLE A GENERAR:")
+        print(f"   Empresa: {company.name}")
+        print(f"   Número de asiento: {next_entry_number}")
+        print(f"   Fecha: {payroll.payment_date or timezone.now().date()}")
+        print(f"   Descripción: Nómina {employee_name} - {payroll.period_start.strftime('%m/%Y')}")
+        print(f"\n   LÍNEAS DEL ASIENTO:")
+
+        print(f"\n   {'CUENTA':<10} {'DESCRIPCIÓN':<50} {'DEBE':>15} {'HABER':>15}")
+        print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
+
+        # DEBE
+        print(
+            f"   {ai_result['account_salary_expense']:<10} {ai_result['salary_description'][:50]:<50} {str(payroll.total_accrued):>15} {'-':>15}")
+        print(
+            f"   {ai_result['account_social_security_expense']:<10} {ai_result['ss_expense_description'][:50]:<50} {str(payroll.social_security_company):>15} {'-':>15}")
+
+        # HABER
+        print(
+            f"   {ai_result['account_social_security_payable']:<10} {ai_result['ss_payable_description'][:50]:<50} {'-':>15} {str(total_ss):>15}")
+        if payroll.irpf > 0:
+            print(
+                f"   {ai_result['account_irpf_payable']:<10} {ai_result['irpf_description'][:50]:<50} {'-':>15} {str(payroll.irpf):>15}")
+        if payroll.other_deductions > 0:
+            print(f"   {'557':<10} {'Otras deducciones'[:50]:<50} {'-':>15} {str(payroll.other_deductions):>15}")
+        print(
+            f"   {ai_result['account_bank']:<10} {ai_result['bank_description'][:50]:<50} {'-':>15} {str(payroll.net_salary):>15}")
+
+        print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
+        print(f"   {'TOTALES':<10} {'':<50} {str(debit_total):>15} {str(credit_total):>15}")
+
+        # Verificar que esté cuadrado
+        difference = abs(debit_total - credit_total)
+        if difference > Decimal('0.01'):
+            print(f"\n   ⚠️ ADVERTENCIA: Asiento descuadrado - Diferencia: {difference}€")
+        else:
+            print(f"\n   ✅ Asiento cuadrado correctamente")
+
+        print(f"\n{'=' * 80}")
+        print("🚀 CREANDO ASIENTO EN LA BASE DE DATOS...")
+        print(f"{'=' * 80}\n")
+
+        # Crear el asiento contable con el número correlativo
+        description = f"Nómina {employee_name} - {payroll.period_start.strftime('%m/%Y')}"
+
+        entry = AccountingEntry.objects.create(
+            company=company,
+            entry_number=next_entry_number,
+            date=payroll.payment_date or timezone.now().date(),
+            description=description,
+            payroll=payroll,
+            debit_total=Decimal('0.00'),
+            credit_total=Decimal('0.00')
+        )
+
+        print(f"✅ AccountingEntry creado - ID: {entry.id} | Número: {entry.entry_number}")
+
+        # LÍNEAS DEL ASIENTO
+
+        # 1. Sueldos y salarios (DEBE)
+        line1 = AccountingEntryLine.objects.create(
+            entry=entry,
+            account_code=ai_result['account_salary_expense'],
+            description=ai_result['salary_description'],
+            debit=payroll.total_accrued,
+            credit=Decimal('0.00')
+        )
+        print(f"✅ Línea 1 - {ai_result['account_salary_expense']} - DEBE: {payroll.total_accrued}€")
+
+        # 2. SS empresa (DEBE)
+        line2 = AccountingEntryLine.objects.create(
+            entry=entry,
+            account_code=ai_result['account_social_security_expense'],
+            description=ai_result['ss_expense_description'],
+            debit=payroll.social_security_company,
+            credit=Decimal('0.00')
+        )
+        print(f"✅ Línea 2 - {ai_result['account_social_security_expense']} - DEBE: {payroll.social_security_company}€")
+
+        # 3. SS acreedores (HABER) - Total SS (empleado + empresa)
+        line3 = AccountingEntryLine.objects.create(
+            entry=entry,
+            account_code=ai_result['account_social_security_payable'],
+            description=ai_result['ss_payable_description'],
+            debit=Decimal('0.00'),
+            credit=total_ss
+        )
+        print(f"✅ Línea 3 - {ai_result['account_social_security_payable']} - HABER: {total_ss}€")
+
+        # 4. IRPF (HABER) - solo si hay retención
+        if payroll.irpf > 0:
+            line4 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code=ai_result['account_irpf_payable'],
+                description=ai_result['irpf_description'],
+                debit=Decimal('0.00'),
+                credit=payroll.irpf
+            )
+            print(f"✅ Línea 4 - {ai_result['account_irpf_payable']} - HABER: {payroll.irpf}€")
+
+        # 5. Otras deducciones (HABER) - solo si hay
+        if payroll.other_deductions > 0:
+            line5 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code='557',  # Cuenta de otras deducciones
+                description=f"Otras deducciones - {employee_name}",
+                debit=Decimal('0.00'),
+                credit=payroll.other_deductions
+            )
+            print(f"✅ Línea 5 - 557 - HABER: {payroll.other_deductions}€")
+
+        # 6. Bancos (HABER) - líquido a pagar
+        line6 = AccountingEntryLine.objects.create(
+            entry=entry,
+            account_code=ai_result['account_bank'],
+            description=ai_result['bank_description'],
+            debit=Decimal('0.00'),
+            credit=payroll.net_salary
+        )
+        print(f"✅ Línea 6 - {ai_result['account_bank']} - HABER: {payroll.net_salary}€")
+
+        # Calcular totales del asiento
+        entry.debit_total = debit_total
+        entry.credit_total = credit_total
+        entry.save()
+
+        print(f"\n✅ Totales actualizados - DEBE: {entry.debit_total}€ | HABER: {entry.credit_total}€")
+
+        # Verificar que el asiento esté cuadrado
+        if abs(entry.debit_total - entry.credit_total) > Decimal('0.01'):
+            print(f"\n❌ ERROR: Asiento descuadrado")
+            raise ValueError(
+                f"El asiento no está cuadrado: Debe={entry.debit_total}, Haber={entry.credit_total}"
+            )
+
+        print(f"\n{'=' * 80}")
+        print(f"✅ ASIENTO CONTABLE GENERADO EXITOSAMENTE")
+        print(f"   Entry ID: {entry.id}")
+        print(f"   Número de asiento: {entry.entry_number}")
+        print(f"   Empresa: {company.name}")
+        print(f"   Nómina: {employee_name} - {payroll.period_start.strftime('%m/%Y')}")
+        print(f"   Totales: DEBE={entry.debit_total}€ | HABER={entry.credit_total}€")
+        print(f"{'=' * 80}\n")
+
+        logger.info(f'Asiento {entry.entry_number} generado para nómina de {employee_name}')
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Asiento contable #{entry.entry_number} generado correctamente',
+            'entry_id': entry.id,
+            'entry_number': entry.entry_number,
+            'debit_total': str(entry.debit_total),
+            'credit_total': str(entry.credit_total),
+            'ai_reasoning': ai_result.get('reasoning', ''),
+        })
+
+    except ValueError as ve:
+        print(f"\n❌ ERROR DE VALIDACIÓN: {ve}\n")
+        logger.error(f'Error de validación en asiento para nómina {payroll_id}: {ve}')
+        return JsonResponse({
+            'success': False,
+            'error': str(ve)
+        }, status=400)
+    except Exception as e:
+        print(f"\n❌ ERROR INESPERADO: {e}\n")
+        import traceback
+        print(traceback.format_exc())
+        logger.exception(f'Error al generar asiento para nómina {payroll_id}')
         return JsonResponse({
             'success': False,
             'error': f'Error al generar el asiento contable: {str(e)}'

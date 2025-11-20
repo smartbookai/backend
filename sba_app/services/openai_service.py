@@ -740,3 +740,130 @@ IMPORTANTE:
             "vat_description": "IVA repercutido",
             "reasoning": "Valores por defecto debido a error"
         }
+
+
+def generate_accounting_entry_for_payroll(payroll_data, employee_name):
+    """
+    Genera la estructura del asiento contable para una nómina
+    utilizando IA para validar y generar descripciones apropiadas según el PGC español.
+
+    Args:
+        payroll_data: Dict con datos de la nómina
+        employee_name: Nombre del empleado
+
+    Returns:
+        Dict con la estructura del asiento contable
+    """
+    try:
+        prompt = f"""Eres un experto contable español. Analiza esta NÓMINA y genera descripciones apropiadas para el asiento contable según el Plan General Contable (PGC) español.
+
+DATOS DE LA NÓMINA:
+- Empleado: {employee_name}
+- Período: {payroll_data.get('period_start', 'N/A')} - {payroll_data.get('period_end', 'N/A')}
+- Total devengado: {payroll_data.get('total_accrued', 0)}€
+- SS empleado: {payroll_data.get('social_security_employee', 0)}€
+- IRPF: {payroll_data.get('irpf', 0)}€
+- Otras deducciones: {payroll_data.get('other_deductions', 0)}€
+- Líquido a pagar: {payroll_data.get('net_salary', 0)}€
+- SS empresa: {payroll_data.get('social_security_company', 0)}€
+
+ESTRUCTURA DEL ASIENTO DE NÓMINA EN ESPAÑA:
+
+DEBE:
+  (640) Sueldos y salarios - Total devengado
+  (642) Seguridad Social a cargo de la empresa - SS empresa
+
+HABER:
+  (476) Organismos de la Seguridad Social, acreedores - Total SS (empleado + empresa)
+  (4751) Hacienda Pública, acreedor por retenciones practicadas - IRPF
+  (572) Bancos - Líquido a pagar al empleado
+
+CUENTAS DEL PGC ESPAÑOL:
+- 640: Sueldos y salarios (gastos de personal)
+- 642: Seguridad Social a cargo de la empresa (gastos de personal)
+- 476: Organismos de la Seguridad Social, acreedores
+- 4751: Hacienda Pública, acreedor por retenciones practicadas (IRPF)
+- 572: Bancos e instituciones de crédito c/c vista, euros
+
+RESPONDE SOLO CON UN JSON VÁLIDO EN ESTE FORMATO EXACTO:
+{{
+    "account_salary_expense": "640",
+    "salary_description": "Descripción para sueldos y salarios",
+    "account_social_security_expense": "642",
+    "ss_expense_description": "Descripción para SS empresa",
+    "account_social_security_payable": "476",
+    "ss_payable_description": "Descripción para SS acreedores",
+    "account_irpf_payable": "4751",
+    "irpf_description": "Descripción para IRPF",
+    "account_bank": "572",
+    "bank_description": "Descripción para pago bancario",
+    "reasoning": "Breve explicación del asiento"
+}}
+
+IMPORTANTE: 
+- Responde SOLO con JSON, sin texto adicional
+- No uses markdown ni backticks
+- Las descripciones deben incluir el nombre del empleado y el período
+- Asegúrate de que el JSON sea válido"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Eres un experto contable español especializado en el Plan General Contable. Respondes SOLO con JSON válido, sin markdown ni texto adicional."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=800
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Limpiar posibles backticks de markdown
+        response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+        # Parsear el JSON
+        accounting_entry = json.loads(response_text)
+
+        logger.info(f"Asiento contable de NÓMINA generado por IA para empleado {employee_name}")
+        logger.info(f"Razonamiento: {accounting_entry.get('reasoning', 'N/A')}")
+
+        return accounting_entry
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Error al parsear JSON de OpenAI: {e}")
+        logger.error(f"Respuesta recibida: {response_text}")
+        # Retornar valores por defecto si falla el parsing
+        return {
+            "account_salary_expense": "640",
+            "salary_description": f"Sueldos y salarios - {employee_name}",
+            "account_social_security_expense": "642",
+            "ss_expense_description": f"Seguridad Social empresa - {employee_name}",
+            "account_social_security_payable": "476",
+            "ss_payable_description": f"Organismos SS acreedores - {employee_name}",
+            "account_irpf_payable": "4751",
+            "irpf_description": f"HP acreedor IRPF - {employee_name}",
+            "account_bank": "572",
+            "bank_description": f"Pago nómina {employee_name}",
+            "reasoning": "Valores por defecto debido a error en análisis de IA"
+        }
+    except Exception as e:
+        logger.exception(f"Error al generar asiento contable de nómina con IA: {e}")
+        return {
+            "account_salary_expense": "640",
+            "salary_description": f"Sueldos y salarios - {employee_name}",
+            "account_social_security_expense": "642",
+            "ss_expense_description": f"Seguridad Social empresa - {employee_name}",
+            "account_social_security_payable": "476",
+            "ss_payable_description": f"Organismos SS acreedores - {employee_name}",
+            "account_irpf_payable": "4751",
+            "irpf_description": f"HP acreedor IRPF - {employee_name}",
+            "account_bank": "572",
+            "bank_description": f"Pago nómina {employee_name}",
+            "reasoning": "Valores por defecto debido a error"
+        }
