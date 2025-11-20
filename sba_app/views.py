@@ -56,7 +56,68 @@ def login(request):
 
 @login_required
 def index(request):
-    return render(request, 'pages/dashboard.html')
+    # Dashboard con KPIs sencillos por empresa actual
+    company = get_current_company(request.user)
+
+    today = timezone.now().date()
+    year = today.year
+    month = today.month
+
+    # Facturas emitidas (ventas) del mes
+    sales_invoices_month = SalesInvoice.objects.filter(
+        company=company,
+        issue_date__year=year,
+        issue_date__month=month,
+    ).count()
+
+    # Facturas recibidas (compras) del mes
+    purchase_invoices_month = PurchaseInvoice.objects.filter(
+        company=company,
+        issue_date__year=year,
+        issue_date__month=month,
+    ).count()
+
+    # Nóminas del mes (por fecha de pago)
+    payrolls_month = Payroll.objects.filter(
+        company=company,
+        payment_date__year=year,
+        payment_date__month=month,
+    ).count()
+
+    # Asientos contables del mes
+    entries_month = AccountingEntry.objects.filter(
+        company=company,
+        date__year=year,
+        date__month=month,
+    ).count()
+
+    # Asientos confirmados / borrador (totales)
+    entries_confirmed_total = AccountingEntry.objects.filter(
+        company=company,
+        status='posted',
+    ).count()
+    entries_draft_total = AccountingEntry.objects.filter(
+        company=company,
+        status='draft',
+    ).count()
+
+    # Documentos sin asiento (facturas y nóminas sin AccountingEntry asociado)
+    purchase_without_entry = PurchaseInvoice.objects.filter(company=company, entry__isnull=True).count()
+    sales_without_entry = SalesInvoice.objects.filter(company=company, entry__isnull=True).count()
+    payrolls_without_entry = Payroll.objects.filter(company=company, entry__isnull=True).count()
+    docs_without_entry_total = purchase_without_entry + sales_without_entry + payrolls_without_entry
+
+    context = {
+        'sales_invoices_month': sales_invoices_month,
+        'purchase_invoices_month': purchase_invoices_month,
+        'payrolls_month': payrolls_month,
+        'entries_month': entries_month,
+        'entries_confirmed_total': entries_confirmed_total,
+        'entries_draft_total': entries_draft_total,
+        'docs_without_entry_total': docs_without_entry_total,
+    }
+
+    return render(request, 'pages/dashboard.html', context)
 
 
 def logout_view(request):

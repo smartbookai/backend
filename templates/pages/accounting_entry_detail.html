@@ -104,8 +104,10 @@
 
     <!-- Barra de acciones del asiento -->
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      {% if entry.status != 'posted' %}
       <button type="button" class="btn-secondary" onclick="onEditEntryClick()">Editar</button>
       <button type="button" class="btn-primary" style="background:#10B981;border-color:#10B981;" onclick="onConfirmEntryClick()">Confirmar</button>
+      {% endif %}
       <button type="button" class="btn-secondary" onclick="onExportEntryExcelClick()">Exportar Excel</button>
       <button type="button" class="btn-secondary" onclick="onExportEntryXhtmlClick()">Exportar XHTML</button>
     </div>

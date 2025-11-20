@@ -2,79 +2,75 @@
 {% block title %}Dashboard | SBA{% endblock %}
 {% block content %}
 <section>
-  <div class="grid grid-cols-4 gap-6">
+  <div class="grid grid-cols-4 gap-6" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.25rem;align-items:stretch;">
     <div class="card stat-card">
       <div style="display:flex;align-items:center;">
-        <div class="stat-card-icon"><i class="bi bi-send"></i></div>
+        <div class="stat-card-icon"><i class="bi bi-file-earmark-arrow-up"></i></div>
         <div>
-          <div class="stat-label">Heralds Sent</div>
-          <div class="stat-value">163</div>
+          <div class="stat-label">Facturas enviadas (mes)</div>
+          <div class="stat-value">{{ sales_invoices_month }}</div>
         </div>
       </div>
     </div>
+
     <div class="card stat-card">
       <div style="display:flex;align-items:center;">
-        <div class="stat-card-icon"><i class="bi bi-truck"></i></div>
+        <div class="stat-card-icon"><i class="bi bi-file-earmark-arrow-down"></i></div>
         <div>
-          <div class="stat-label">In Transit</div>
-          <div class="stat-value">0</div>
+          <div class="stat-label">Facturas recibidas (mes)</div>
+          <div class="stat-value">{{ purchase_invoices_month }}</div>
         </div>
       </div>
     </div>
+
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="stat-label">Nóminas (mes)</div>
+          <div class="stat-value">{{ payrolls_month }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-journal-text"></i></div>
+        <div>
+          <div class="stat-label">Asientos generados (mes)</div>
+          <div class="stat-value">{{ entries_month }}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="card stat-card">
       <div style="display:flex;align-items:center;">
         <div class="stat-card-icon"><i class="bi bi-check2-circle"></i></div>
         <div>
-          <div class="stat-label">Delivered</div>
-          <div class="stat-value">153</div>
+          <div class="stat-label">Asientos confirmados</div>
+          <div class="stat-value">{{ entries_confirmed_total }}</div>
         </div>
       </div>
     </div>
+
     <div class="card stat-card">
       <div style="display:flex;align-items:center;">
-        <div class="stat-card-icon"><i class="bi bi-arrow-counterclockwise"></i></div>
+        <div class="stat-card-icon"><i class="bi bi-pencil-square"></i></div>
         <div>
-          <div class="stat-label">Bounced</div>
-          <div class="stat-value">3</div>
+          <div class="stat-label">Asientos en borrador</div>
+          <div class="stat-value">{{ entries_draft_total }}</div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="grid grid-cols-2 gap-6 mt-6" style="display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;margin-top:1.5rem;">
-    <div class="card table-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h2 style="font-size:18px;margin:0;">Heralds in Inventory</h2>
-        <a href="#" class="link-blue">View all</a>
+    <div class="card stat-card">
+      <div style="display:flex;align-items:center;">
+        <div class="stat-card-icon"><i class="bi bi-exclamation-circle"></i></div>
+        <div>
+          <div class="stat-label">Docs. sin asiento</div>
+          <div class="stat-value">{{ docs_without_entry_total }}</div>
+        </div>
       </div>
-      <div class="table-container">
-        <table class="table" style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th class="table-header">Product</th>
-              <th class="table-header">Quantity</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="table-cell">Herald A5, 7 inch</td>
-              <td class="table-cell text-right">18</td>
-            </tr>
-            <tr>
-              <td class="table-cell">Herald A5, 7 inch</td>
-              <td class="table-cell text-right">50</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card table-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h2 style="font-size:18px;margin:0;">Merch in Inventory</h2>
-        <a href="#" class="link-blue">View all</a>
-      </div>
-      <div style="color:#6B7280;">No data</div>
     </div>
   </div>
 </section>
