@@ -17,7 +17,7 @@
           <h2 style="font-size:16px;margin:0;">Listado</h2>
         </div>
         <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
-          <input type="text" placeholder="Buscar... (pendiente)" aria-label="Buscar asientos" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+          <input id="entrySearch" type="text" placeholder="Buscar..." aria-label="Buscar asientos contables" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
         </div>
         <div style="flex:1;min-width:0;"></div>
       </div>
@@ -34,7 +34,7 @@
               <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="entries-tbody">
             {% for entry in entries %}
             <tr>
               <td>{{ entry.entry_number }}</td>
@@ -57,7 +57,7 @@
               </td>
             </tr>
             {% empty %}
-            <tr>
+            <tr class="entries-empty-row">
               <td colspan="6">No hay asientos contables todavía.</td>
             </tr>
             {% endfor %}
@@ -67,4 +67,35 @@
     </div>
   </div>
 </section>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.getElementById('entrySearch');
+  const tbody = document.querySelector('.entries-tbody');
+  if (!input || !tbody) return;
+
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const emptyRow = tbody.querySelector('.entries-empty-row');
+
+  function applyFilter(term) {
+    const normalized = (term || '').trim().toLowerCase();
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      if (row === emptyRow) return; // la fila vacía se controla aparte
+      const text = (row.textContent || '').toLowerCase();
+      const match = !normalized || text.includes(normalized);
+      row.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+
+    if (emptyRow) {
+      emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+    }
+  }
+
+  input.addEventListener('input', function(e) {
+    applyFilter(e.target.value);
+  });
+});
+</script>
 {% endblock %}

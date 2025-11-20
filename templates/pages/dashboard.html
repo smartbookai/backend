@@ -73,5 +73,41 @@
       </div>
     </div>
   </div>
+
+  <div style="margin-top:2rem;">
+    <div class="card table-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h2 style="font-size:18px;margin:0;">Resumen económico del mes</h2>
+      </div>
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="text-align:left;">Concepto</th>
+              <th class="table-header" style="text-align:right;">Mes actual</th>
+              <th class="table-header" style="text-align:right;">Mes anterior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="table-cell" style="text-align:left;">Nóminas (coste empresa)</td>
+              <td class="table-cell" style="text-align:right;">{{ payroll_cost_month|floatformat:2 }}</td>
+              <td class="table-cell" style="text-align:right;">{{ payroll_cost_prev_month|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td class="table-cell" style="text-align:left;">Pagos a proveedores (facturas recibidas)</td>
+              <td class="table-cell" style="text-align:right;">{{ purchases_amount_month|floatformat:2 }}</td>
+              <td class="table-cell" style="text-align:right;">{{ purchases_amount_prev_month|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td class="table-cell" style="text-align:left;">Ingresos por facturas enviadas</td>
+              <td class="table-cell" style="text-align:right;">{{ sales_amount_month|floatformat:2 }}</td>
+              <td class="table-cell" style="text-align:right;">{{ sales_amount_prev_month|floatformat:2 }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </section>
 {% endblock %}

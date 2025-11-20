@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.db import transaction
+from django.db.models import Sum
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
@@ -63,6 +64,14 @@ def index(request):
     year = today.year
     month = today.month
 
+    # Mes anterior (para comparativas)
+    if month == 1:
+        prev_year = year - 1
+        prev_month = 12
+    else:
+        prev_year = year
+        prev_month = month - 1
+
     # Facturas emitidas (ventas) del mes
     sales_invoices_month = SalesInvoice.objects.filter(
         company=company,
@@ -107,6 +116,55 @@ def index(request):
     payrolls_without_entry = Payroll.objects.filter(company=company, entry__isnull=True).count()
     docs_without_entry_total = purchase_without_entry + sales_without_entry + payrolls_without_entry
 
+    # Resumen económico del mes
+    payroll_agg = Payroll.objects.filter(
+        company=company,
+        payment_date__year=year,
+        payment_date__month=month,
+    ).aggregate(
+        total_accrued_sum=Sum('total_accrued'),
+        ss_company_sum=Sum('social_security_company'),
+    )
+    payroll_cost_month = (payroll_agg['total_accrued_sum'] or Decimal('0')) + (payroll_agg['ss_company_sum'] or Decimal('0'))
+
+    payroll_prev_agg = Payroll.objects.filter(
+        company=company,
+        payment_date__year=prev_year,
+        payment_date__month=prev_month,
+    ).aggregate(
+        total_accrued_sum=Sum('total_accrued'),
+        ss_company_sum=Sum('social_security_company'),
+    )
+    payroll_cost_prev_month = (payroll_prev_agg['total_accrued_sum'] or Decimal('0')) + (payroll_prev_agg['ss_company_sum'] or Decimal('0'))
+
+    purchases_agg = PurchaseInvoice.objects.filter(
+        company=company,
+        issue_date__year=year,
+        issue_date__month=month,
+    ).aggregate(total_sum=Sum('total_amount'))
+    purchases_amount_month = purchases_agg['total_sum'] or Decimal('0')
+
+    purchases_prev_agg = PurchaseInvoice.objects.filter(
+        company=company,
+        issue_date__year=prev_year,
+        issue_date__month=prev_month,
+    ).aggregate(total_sum=Sum('total_amount'))
+    purchases_amount_prev_month = purchases_prev_agg['total_sum'] or Decimal('0')
+
+    sales_agg = SalesInvoice.objects.filter(
+        company=company,
+        issue_date__year=year,
+        issue_date__month=month,
+    ).aggregate(total_sum=Sum('total_amount'))
+    sales_amount_month = sales_agg['total_sum'] or Decimal('0')
+
+    sales_prev_agg = SalesInvoice.objects.filter(
+        company=company,
+        issue_date__year=prev_year,
+        issue_date__month=prev_month,
+    ).aggregate(total_sum=Sum('total_amount'))
+    sales_amount_prev_month = sales_prev_agg['total_sum'] or Decimal('0')
+
     context = {
         'sales_invoices_month': sales_invoices_month,
         'purchase_invoices_month': purchase_invoices_month,
@@ -115,6 +173,12 @@ def index(request):
         'entries_confirmed_total': entries_confirmed_total,
         'entries_draft_total': entries_draft_total,
         'docs_without_entry_total': docs_without_entry_total,
+        'payroll_cost_month': payroll_cost_month,
+        'payroll_cost_prev_month': payroll_cost_prev_month,
+        'purchases_amount_month': purchases_amount_month,
+        'purchases_amount_prev_month': purchases_amount_prev_month,
+        'sales_amount_month': sales_amount_month,
+        'sales_amount_prev_month': sales_amount_prev_month,
     }
 
     return render(request, 'pages/dashboard.html', context)
