@@ -2723,3 +2723,74 @@ def api_confirm_accounting_entry(request, entry_id):
         'message': f'Asiento contable #{entry.entry_number} confirmado correctamente',
         'status': entry.status,
     })
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_update_accounting_entry(request, entry_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede editar asientos')
+
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.get(id=entry_id, company=company)
+    except AccountingEntry.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Asiento no encontrado'}, status=404)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = request.POST
+
+    # Cabecera
+    date_str = (payload.get('date') or '').strip()
+    if date_str:
+        try:
+            entry.date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Fecha de asiento inválida.'}, status=400)
+
+    if 'description' in payload:
+        entry.description = (payload.get('description') or '').strip()
+
+    # Líneas
+    lines_payload = payload.get('lines') or []
+    existing_lines = {l.id: l for l in entry.lines.all()}
+
+    for item in lines_payload:
+        line_id = item.get('id')
+        if not line_id or line_id not in existing_lines:
+            continue
+
+        line = existing_lines[line_id]
+        line.account_code = (item.get('account_code') or '').strip()
+        line.description = (item.get('description') or '').strip()
+        line.debit = safe_decimal(item.get('debit'))
+        line.credit = safe_decimal(item.get('credit'))
+        line.save()
+
+    # Recalcular totales y validar que cuadre
+    debit_total = Decimal('0.00')
+    credit_total = Decimal('0.00')
+    for l in entry.lines.all():
+        debit_total += l.debit or Decimal('0.00')
+        credit_total += l.credit or Decimal('0.00')
+
+    if abs(debit_total - credit_total) > Decimal('0.01'):
+        return JsonResponse({
+            'success': False,
+            'error': 'El asiento no está cuadrado después de los cambios (Debe y Haber no coinciden).',
+        }, status=400)
+
+    entry.debit_total = debit_total
+    entry.credit_total = credit_total
+    entry.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Asiento contable #{entry.entry_number} actualizado correctamente',
+        'debit_total': str(entry.debit_total),
+        'credit_total': str(entry.credit_total),
+    })

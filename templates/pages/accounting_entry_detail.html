@@ -60,7 +60,6 @@
     <div class="card" style="padding:12px 20px 16px 20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <h2 style="font-size:15px;margin:0;">Partidas del asiento contable</h2>
-        <button type="button" class="btn-secondary" style="font-size:12px;padding:4px 10px;opacity:0.6;cursor:not-allowed;">Guardar cambios (próximamente)</button>
       </div>
 
       <div class="table-container" style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
@@ -75,7 +74,7 @@
           </thead>
           <tbody>
             {% for line in entry.lines.all %}
-            <tr>
+            <tr data-entry-line-row data-line-id="{{ line.id }}">
               <td style="padding:6px 8px;">
                 <input type="text" value="{{ line.account_code }}"
                        style="width:100%;border:1px solid #E5D5DB;border-radius:4px;padding:4px 6px;font-size:12px;">
@@ -114,10 +113,6 @@
 </section>
 
 <script>
-function onEditEntryClick() {
-  alert('Función de edición avanzada de asiento pendiente de implementar.');
-}
-
 function getCookie(name) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
@@ -131,6 +126,56 @@ function getCookie(name) {
     }
   }
   return cookieValue;
+}
+
+function onEditEntryClick() {
+  if (!confirm('¿Guardar los cambios realizados en este asiento?')) return;
+
+  const dateInput = document.querySelector('input[type="date"]');
+  const descInput = document.querySelector('input[type="text"][value="{{ entry.description }}"]');
+
+  const payload = {
+    date: dateInput ? dateInput.value : '',
+    description: descInput ? descInput.value : '',
+    lines: [],
+  };
+
+  const rows = document.querySelectorAll('tr[data-entry-line-row]');
+  rows.forEach(row => {
+    const lineId = parseInt(row.getAttribute('data-line-id'), 10);
+    const inputs = row.querySelectorAll('input');
+    if (!lineId || inputs.length < 4) return;
+
+    payload.lines.push({
+      id: lineId,
+      account_code: inputs[0].value,
+      description: inputs[1].value,
+      debit: inputs[2].value,
+      credit: inputs[3].value,
+    });
+  });
+
+  fetch(`/api/accounting-entries/{{ entry.id }}/update/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken'),
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify(payload),
+  })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok || data.success === false) {
+        alert(data.error || 'Error al guardar el asiento.');
+        return;
+      }
+      alert(data.message || 'Asiento actualizado correctamente.');
+      window.location.reload();
+    })
+    .catch(err => {
+      alert(err.message || 'Error al guardar el asiento.');
+    });
 }
 
 async function onConfirmEntryClick() {

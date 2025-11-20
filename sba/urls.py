@@ -76,6 +76,7 @@ urlpatterns = [
     path('api/payrolls/<int:payroll_id>/generate-entry/', views.generate_entry_for_payroll, name='generate_entry_for_payroll'),
 
     path('api/accounting-entries/<int:entry_id>/confirm/', views.api_confirm_accounting_entry, name='api_confirm_accounting_entry'),
+    path('api/accounting-entries/<int:entry_id>/update/', views.api_update_accounting_entry, name='api_update_accounting_entry'),
 
 ]
 
