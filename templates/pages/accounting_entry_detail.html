@@ -1,0 +1,107 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+{% block title %}Asiento {{ entry.entry_number }} | SBA{% endblock %}
+{% block content %}
+<section>
+  <div style="max-width:1100px;margin:24px auto 32px;padding:0 16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+      <div>
+        <h1 style="font-size:26px;font-weight:700;margin:24px 0 6px 0;">Asiento contable #{{ entry.entry_number }}</h1>
+        <div style="color:#6B7280;margin-bottom:16px;">Empresa: {{ entry.company.name }}</div>
+      </div>
+    </div>
+
+    <!-- Cabecera del asiento -->
+    <div class="card" style="padding:16px 20px 20px 20px;margin-bottom:18px;">
+      <h2 style="font-size:15px;margin:0 0 12px 0;">Datos generales</h2>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:flex-end;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Número</label>
+          <input type="text" value="{{ entry.entry_number }}" readonly
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Fecha asiento</label>
+          <input type="date" value="{{ entry.date|date:'Y-m-d' }}"
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Estado</label>
+          <input type="text" value="{{ entry.get_status_display }}" readonly
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Origen</label>
+          <input type="text" value="{% if entry.purchase_invoice %}Factura recibida {{ entry.purchase_invoice.invoice_number }}{% elif entry.sales_invoice %}Factura enviada {{ entry.sales_invoice.invoice_number }}{% elif entry.payroll %}Nómina {{ entry.payroll.employee.full_name }}{% else %}Manual{% endif %}" readonly
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
+        </div>
+      </div>
+
+      <div style="margin-top:12px;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:flex-end;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Comentario / descripción</label>
+          <input type="text" value="{{ entry.description }}"
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Total Debe</label>
+          <input type="text" value="{{ entry.debit_total }}" readonly
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;text-align:right;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Total Haber</label>
+          <input type="text" value="{{ entry.credit_total }}" readonly
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;text-align:right;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Líneas del asiento con inputs editables -->
+    <div class="card" style="padding:12px 20px 16px 20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h2 style="font-size:15px;margin:0;">Partidas del asiento contable</h2>
+        <button type="button" class="btn-secondary" style="font-size:12px;padding:4px 10px;opacity:0.6;cursor:not-allowed;">Guardar cambios (próximamente)</button>
+      </div>
+
+      <div class="table-container" style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="padding:10px 10px;font-size:12px;width:120px;">Cuenta</th>
+              <th class="table-header" style="padding:10px 10px;font-size:12px;">Descripción</th>
+              <th class="table-header" style="padding:10px 10px;font-size:12px;width:120px;">Debe</th>
+              <th class="table-header" style="padding:10px 10px;font-size:12px;width:120px;">Haber</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in entry.lines.all %}
+            <tr>
+              <td style="padding:6px 8px;">
+                <input type="text" value="{{ line.account_code }}"
+                       style="width:100%;border:1px solid #E5D5DB;border-radius:4px;padding:4px 6px;font-size:12px;">
+              </td>
+              <td style="padding:6px 8px;">
+                <input type="text" value="{{ line.description }}"
+                       style="width:100%;border:1px solid #D1D5DB;border-radius:4px;padding:4px 6px;font-size:12px;">
+              </td>
+              <td style="padding:6px 8px;">
+                <input type="text" value="{{ line.debit }}"
+                       style="width:100%;border:1px solid #D1D5DB;border-radius:4px;padding:4px 6px;font-size:12px;text-align:right;">
+              </td>
+              <td style="padding:6px 8px;">
+                <input type="text" value="{{ line.credit }}"
+                       style="width:100%;border:1px solid #D1D5DB;border-radius:4px;padding:4px 6px;font-size:12px;text-align:right;">
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" style="padding:14px 12px;font-size:13px;color:#6B7280;">Este asiento no tiene líneas asociadas.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
