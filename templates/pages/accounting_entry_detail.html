@@ -209,7 +209,7 @@ function onExportEntryExcelClick() {
 }
 
 function onExportEntryXhtmlClick() {
-  alert('Exportación a XHTML pendiente de implementar.');
+  window.location.href = '/api/accounting-entries/{{ entry.id }}/export-xhtml/';
 }
 </script>
 {% endblock %}

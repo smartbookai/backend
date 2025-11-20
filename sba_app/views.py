@@ -2844,3 +2844,88 @@ def api_export_accounting_entry_excel(request, entry_id):
     writer.writerow(["", "TOTALES", str(entry.debit_total).replace('.', ','), str(entry.credit_total).replace('.', ',')])
 
     return response
+
+
+@login_required
+def api_export_accounting_entry_xhtml(request, entry_id):
+    """Exporta el asiento contable como un archivo XHTML descargable."""
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.select_related('company').prefetch_related('lines').get(
+            id=entry_id,
+            company=company,
+        )
+    except AccountingEntry.DoesNotExist:
+        raise Http404("Asiento no encontrado")
+
+    filename = f"asiento_{entry.entry_number or entry.id}.xhtml"
+
+    response = HttpResponse(content_type='application/xhtml+xml; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Construimos un XHTML sencillo
+    lines_html = []
+    for line in entry.lines.all():
+        lines_html.append(
+            f"<tr>"
+            f"<td>{(line.account_code or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}</td>"
+            f"<td>{(line.description or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}</td>"
+            f"<td style='text-align:right;'>{str(line.debit or Decimal('0.00')).replace('.', ',')}</td>"
+            f"<td style='text-align:right;'>{str(line.credit or Decimal('0.00')).replace('.', ',')}</td>"
+            f"</tr>"
+        )
+
+    lines_html_str = "".join(lines_html) or "<tr><td colspan='4'>Este asiento no tiene líneas.</td></tr>"
+
+    body = f"""<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'>
+<html xmlns='http://www.w3.org/1999/xhtml'>
+  <head>
+    <meta http-equiv='Content-Type' content='application/xhtml+xml; charset=UTF-8' />
+    <title>Asiento {entry.entry_number}</title>
+    <style type='text/css'>
+      body {{ font-family: Arial, sans-serif; font-size: 12px; }}
+      table {{ border-collapse: collapse; width: 100%; margin-top: 10px; }}
+      th, td {{ border: 1px solid #cccccc; padding: 4px 6px; }}
+      th {{ background-color: #f3f4f6; text-align: left; }}
+      .header-label {{ font-weight: bold; padding-right: 8px; }}
+    </style>
+  </head>
+  <body>
+    <h1>Asiento contable #{entry.entry_number}</h1>
+    <table>
+      <tr><td class='header-label'>Empresa</td><td>{entry.company.name}</td></tr>
+      <tr><td class='header-label'>Número</td><td>{entry.entry_number}</td></tr>
+      <tr><td class='header-label'>Fecha</td><td>{entry.date.strftime('%d/%m/%Y') if entry.date else ''}</td></tr>
+      <tr><td class='header-label'>Descripción</td><td>{(entry.description or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}</td></tr>
+    </table>
+
+    <h2>Partidas del asiento</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Cuenta</th>
+          <th>Descripción</th>
+          <th>Debe</th>
+          <th>Haber</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lines_html_str}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td></td>
+          <td><strong>TOTALES</strong></td>
+          <td style='text-align:right;'><strong>{str(entry.debit_total).replace('.', ',')}</strong></td>
+          <td style='text-align:right;'><strong>{str(entry.credit_total).replace('.', ',')}</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+  </body>
+</html>
+"""
+
+    response.write(body)
+    return response
