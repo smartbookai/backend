@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.db import transaction
-from django.http import JsonResponse, HttpResponseForbidden, Http404
+from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
 from django.contrib import messages
@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from django.utils import timezone
 import os
+import csv
 from django.conf import settings
 from django.core.files.storage import default_storage
 
@@ -2794,3 +2795,52 @@ def api_update_accounting_entry(request, entry_id):
         'debit_total': str(entry.debit_total),
         'credit_total': str(entry.credit_total),
     })
+
+
+@login_required
+def api_export_accounting_entry_excel(request, entry_id):
+    """Exporta un asiento contable a un archivo CSV compatible con Excel."""
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.select_related('company').prefetch_related('lines').get(
+            id=entry_id,
+            company=company,
+        )
+    except AccountingEntry.DoesNotExist:
+        raise Http404("Asiento no encontrado")
+
+    # Nombre de archivo (Excel abrirá este CSV como si fuera un Excel clásico)
+    filename = f"asiento_{entry.entry_number or entry.id}.xls"
+
+    # Usamos content_type de Excel y anteponemos BOM UTF-8 para que reconozca bien acentos
+    response = HttpResponse(content_type='application/vnd.ms-excel; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # BOM UTF-8
+    response.write('\ufeff')
+
+    writer = csv.writer(response, delimiter=';')
+
+    # Cabecera del asiento
+    writer.writerow(["ASIENTO CONTABLE"])
+    writer.writerow(["Empresa", entry.company.name])
+    writer.writerow(["Número", entry.entry_number])
+    writer.writerow(["Fecha", entry.date.strftime('%d/%m/%Y') if entry.date else ""])
+    writer.writerow(["Descripción", entry.description])
+    writer.writerow([])
+
+    # Líneas
+    writer.writerow(["Cuenta", "Descripción", "Debe", "Haber"])
+    for line in entry.lines.all():
+        writer.writerow([
+            line.account_code or "",
+            line.description or "",
+            str(line.debit or Decimal('0.00')).replace('.', ','),
+            str(line.credit or Decimal('0.00')).replace('.', ','),
+        ])
+
+    writer.writerow([])
+    writer.writerow(["", "TOTALES", str(entry.debit_total).replace('.', ','), str(entry.credit_total).replace('.', ',')])
+
+    return response

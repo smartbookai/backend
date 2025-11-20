@@ -77,6 +77,7 @@ urlpatterns = [
 
     path('api/accounting-entries/<int:entry_id>/confirm/', views.api_confirm_accounting_entry, name='api_confirm_accounting_entry'),
     path('api/accounting-entries/<int:entry_id>/update/', views.api_update_accounting_entry, name='api_update_accounting_entry'),
+    path('api/accounting-entries/<int:entry_id>/export-excel/', views.api_export_accounting_entry_excel, name='api_export_accounting_entry_excel'),
 
 ]
 
