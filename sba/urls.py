@@ -71,7 +71,8 @@ urlpatterns = [
     path('api/payrolls/<int:payroll_id>/update/', views.api_update_payroll, name='api_update_payroll'),
     path('api/payrolls/<int:payroll_id>/delete/', views.api_delete_payroll, name='api_delete_payroll'),
 
-    path("api/invoices-received/<int:invoice_id>/generate-entry/", views.generate_entry_for_purchase_invoice, name="generate_entry_for_purchase_invoice")
+    path("api/invoices-received/<int:invoice_id>/generate-entry/", views.generate_entry_for_purchase_invoice, name="generate_entry_for_purchase_invoice"),
+    path("api/invoices-sent/<int:invoice_id>/generate-entry/", views.generate_entry_for_sales_invoice, name="generate_entry_for_sales_invoice"),
 
 ]
 

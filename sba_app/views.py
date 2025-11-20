@@ -18,7 +18,7 @@ from django.core.files.storage import default_storage
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
-    generate_accounting_entry_for_purchase
+    generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales
 
 logger = logging.getLogger(__name__)
 
@@ -2152,6 +2152,261 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
                 'expense': ai_result['account_expense'],
                 'vat': ai_result['account_vat_input'],
                 'supplier': ai_result['account_supplier']
+            }
+        })
+
+    except ValueError as ve:
+        print(f"\n❌ ERROR DE VALIDACIÓN: {ve}\n")
+        logger.error(f'Error de validación en asiento para factura {invoice_id}: {ve}')
+        return JsonResponse({
+            'success': False,
+            'error': str(ve)
+        }, status=400)
+    except Exception as e:
+        print(f"\n❌ ERROR INESPERADO: {e}\n")
+        import traceback
+        print(traceback.format_exc())
+        logger.exception(f'Error al generar asiento para factura {invoice_id}')
+        return JsonResponse({
+            'success': False,
+            'error': f'Error al generar el asiento contable: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def generate_entry_for_sales_invoice(request, invoice_id):
+    """
+    Genera el asiento contable para una factura de venta (SalesInvoice)
+    utilizando IA para determinar las cuentas contables apropiadas.
+    """
+    company = get_current_company(request.user)
+
+    print("\n" + "=" * 80)
+    print("🔍 GENERANDO ASIENTO CONTABLE PARA FACTURA DE VENTA")
+    print("=" * 80)
+
+    try:
+        # Obtener la factura de venta con sus líneas
+        invoice = SalesInvoice.objects.select_related('client').get(
+            id=invoice_id,
+            company=company
+        )
+
+        print(f"\n📄 DATOS DE LA FACTURA:")
+        print(f"   ID: {invoice.id}")
+        print(f"   Número: {invoice.invoice_number}")
+        print(f"   Cliente: {invoice.client.name if invoice.client else 'N/A'}")
+        print(f"   Fecha emisión: {invoice.issue_date}")
+        print(f"   Base imponible: {invoice.base_amount}€")
+        print(f"   IVA: {invoice.tax_amount}€")
+        print(f"   Total: {invoice.total_amount}€")
+
+    except SalesInvoice.DoesNotExist:
+        print("❌ ERROR: Factura no encontrada")
+        return JsonResponse({
+            'success': False,
+            'error': 'Factura no encontrada'
+        }, status=404)
+
+    # Verificar si ya tiene un asiento generado
+    if hasattr(invoice, 'entry') and invoice.entry:
+        print("⚠️ ADVERTENCIA: Esta factura ya tiene un asiento contable generado")
+        return JsonResponse({
+            'success': False,
+            'error': 'Esta factura ya tiene un asiento contable generado'
+        }, status=400)
+
+    # Validar que la factura tenga los datos necesarios
+    if not invoice.total_amount or invoice.total_amount <= 0:
+        print("❌ ERROR: La factura no tiene un importe válido")
+        return JsonResponse({
+            'success': False,
+            'error': 'La factura no tiene un importe válido'
+        }, status=400)
+
+    try:
+        # Preparar datos de la factura para la IA
+        invoice_data = {
+            'invoice_number': invoice.invoice_number or 'SIN-NUMERO',
+            'base_amount': float(invoice.base_amount) if invoice.base_amount else 0,
+            'tax_amount': float(invoice.tax_amount) if invoice.tax_amount else 0,
+            'total_amount': float(invoice.total_amount) if invoice.total_amount else 0,
+        }
+
+        # Obtener líneas de la factura
+        lines = InvoiceLine.objects.filter(sales_invoice=invoice)
+        lines_data = [
+            {
+                'description': line.description or 'Sin descripción',
+                'quantity': float(line.quantity) if line.quantity else 0,
+                'unit_price': float(line.unit_price) if line.unit_price else 0,
+            }
+            for line in lines
+        ]
+
+        print(f"\n📋 LÍNEAS DE LA FACTURA ({len(lines_data)} líneas):")
+        for idx, line in enumerate(lines_data, 1):
+            print(f"   Línea {idx}:")
+            print(f"      - Descripción: {line['description']}")
+            print(f"      - Cantidad: {line['quantity']}")
+            print(f"      - Precio unitario: {line['unit_price']}€")
+            print(f"      - Subtotal: {line['quantity'] * line['unit_price']}€")
+
+        client_name = invoice.client.name if invoice.client else 'Cliente desconocido'
+
+        # Llamar a la IA para determinar las cuentas contables
+        print(f"\n🤖 CONSULTANDO A LA IA...")
+        ai_result = generate_accounting_entry_for_sales(
+            invoice_data=invoice_data,
+            lines_data=lines_data,
+            client_name=client_name
+        )
+
+        print(f"\n✅ RESPUESTA DE LA IA:")
+        print(f"   Cuenta de cliente: {ai_result['account_customer']}")
+        print(f"   Descripción cliente: {ai_result['customer_description']}")
+        print(f"   Cuenta de ingreso: {ai_result['account_income']}")
+        print(f"   Descripción ingreso: {ai_result['income_description']}")
+        print(f"   Cuenta IVA repercutido: {ai_result['account_vat_output']}")
+        print(f"   Descripción IVA: {ai_result['vat_description']}")
+        print(f"   Razonamiento: {ai_result.get('reasoning', 'N/A')}")
+
+        # Obtener el siguiente número de asiento para esta empresa
+        next_entry_number = AccountingEntry.get_next_entry_number(company)
+
+        print(f"\n🔢 NÚMERO DE ASIENTO: {next_entry_number}")
+
+        # Mostrar cómo quedará el asiento
+        print(f"\n📊 ASIENTO CONTABLE A GENERAR:")
+        print(f"   Empresa: {company.name}")
+        print(f"   Número de asiento: {next_entry_number}")
+        print(f"   Fecha: {invoice.issue_date or timezone.now().date()}")
+        print(f"   Descripción: Factura venta {invoice.invoice_number} - {client_name}")
+        print(f"\n   LÍNEAS DEL ASIENTO:")
+
+        # Calcular totales (invertidos respecto a facturas de compra)
+        debit_total = invoice.total_amount  # Cliente va al DEBE
+        credit_total = (invoice.base_amount or Decimal('0.00')) + (invoice.tax_amount or Decimal('0.00'))
+
+        print(f"\n   {'CUENTA':<10} {'DESCRIPCIÓN':<50} {'DEBE':>15} {'HABER':>15}")
+        print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
+
+        # Línea 1: Cliente (DEBE)
+        print(
+            f"   {ai_result['account_customer']:<10} {ai_result['customer_description'][:50]:<50} {str(invoice.total_amount):>15} {'-':>15}")
+
+        # Línea 2: Ingreso (HABER)
+        if invoice.base_amount and invoice.base_amount > 0:
+            print(
+                f"   {ai_result['account_income']:<10} {ai_result['income_description'][:50]:<50} {'-':>15} {str(invoice.base_amount):>15}")
+
+        # Línea 3: IVA repercutido (HABER)
+        if invoice.tax_amount and invoice.tax_amount > 0:
+            print(
+                f"   {ai_result['account_vat_output']:<10} {ai_result['vat_description'][:50]:<50} {'-':>15} {str(invoice.tax_amount):>15}")
+
+        print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
+        print(f"   {'TOTALES':<10} {'':<50} {str(debit_total):>15} {str(credit_total):>15}")
+
+        # Verificar que esté cuadrado
+        difference = abs(debit_total - credit_total)
+        if difference > Decimal('0.01'):
+            print(f"\n   ⚠️ ADVERTENCIA: Asiento descuadrado - Diferencia: {difference}€")
+        else:
+            print(f"\n   ✅ Asiento cuadrado correctamente")
+
+        print(f"\n{'=' * 80}")
+        print("🚀 CREANDO ASIENTO EN LA BASE DE DATOS...")
+        print(f"{'=' * 80}\n")
+
+        # Crear el asiento contable con el número correlativo
+        description = f"Factura venta {invoice.invoice_number} - {client_name}"
+
+        entry = AccountingEntry.objects.create(
+            company=company,
+            entry_number=next_entry_number,
+            date=invoice.issue_date or timezone.now().date(),
+            description=description,
+            sales_invoice=invoice,
+            debit_total=Decimal('0.00'),
+            credit_total=Decimal('0.00')
+        )
+
+        print(f"✅ AccountingEntry creado - ID: {entry.id} | Número: {entry.entry_number}")
+
+        # Línea 1: Cliente (DEBE)
+        line1 = AccountingEntryLine.objects.create(
+            entry=entry,
+            account_code=ai_result['account_customer'],
+            description=ai_result['customer_description'],
+            debit=invoice.total_amount,
+            credit=Decimal('0.00')
+        )
+        print(f"✅ Línea 1 creada - ID: {line1.id} - {ai_result['account_customer']} - DEBE: {invoice.total_amount}€")
+
+        # Línea 2: Ingreso (HABER)
+        if invoice.base_amount and invoice.base_amount > 0:
+            line2 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code=ai_result['account_income'],
+                description=ai_result['income_description'],
+                debit=Decimal('0.00'),
+                credit=invoice.base_amount
+            )
+            print(f"✅ Línea 2 creada - ID: {line2.id} - {ai_result['account_income']} - HABER: {invoice.base_amount}€")
+
+        # Línea 3: IVA repercutido (HABER)
+        if invoice.tax_amount and invoice.tax_amount > 0:
+            line3 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code=ai_result['account_vat_output'],
+                description=ai_result['vat_description'],
+                debit=Decimal('0.00'),
+                credit=invoice.tax_amount
+            )
+            print(
+                f"✅ Línea 3 creada - ID: {line3.id} - {ai_result['account_vat_output']} - HABER: {invoice.tax_amount}€")
+
+        # Calcular totales del asiento
+        entry.debit_total = debit_total
+        entry.credit_total = credit_total
+        entry.save()
+
+        print(f"\n✅ Totales actualizados - DEBE: {entry.debit_total}€ | HABER: {entry.credit_total}€")
+
+        # Verificar que el asiento esté cuadrado
+        if abs(entry.debit_total - entry.credit_total) > Decimal('0.01'):
+            print(f"\n❌ ERROR: Asiento descuadrado")
+            raise ValueError(
+                f"El asiento no está cuadrado: Debe={entry.debit_total}, Haber={entry.credit_total}"
+            )
+
+        print(f"\n{'=' * 80}")
+        print(f"✅ ASIENTO CONTABLE GENERADO EXITOSAMENTE")
+        print(f"   Entry ID: {entry.id}")
+        print(f"   Número de asiento: {entry.entry_number}")
+        print(f"   Empresa: {company.name}")
+        print(f"   Factura: {invoice.invoice_number}")
+        print(f"   Totales: DEBE={entry.debit_total}€ | HABER={entry.credit_total}€")
+        print(f"{'=' * 80}\n")
+
+        logger.info(
+            f'Asiento {entry.entry_number} generado para {company.name} - Factura venta {invoice.invoice_number}')
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Asiento contable #{entry.entry_number} generado correctamente',
+            'entry_id': entry.id,
+            'entry_number': entry.entry_number,
+            'debit_total': str(entry.debit_total),
+            'credit_total': str(entry.credit_total),
+            'ai_reasoning': ai_result.get('reasoning', ''),
+            'accounts_used': {
+                'customer': ai_result['account_customer'],
+                'income': ai_result['account_income'],
+                'vat': ai_result['account_vat_output']
             }
         })
 

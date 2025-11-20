@@ -590,3 +590,153 @@ IMPORTANTE:
             "supplier_description": f"{supplier_name}",
             "reasoning": "Valores por defecto debido a error"
         }
+
+
+def generate_accounting_entry_for_sales(invoice_data, lines_data, client_name):
+    """
+    Genera la estructura del asiento contable para una factura de VENTA
+    utilizando IA para determinar las cuentas más apropiadas según el PGC español.
+
+    Args:
+        invoice_data: Dict con datos de la factura (invoice_number, base_amount, tax_amount, total_amount)
+        lines_data: List de dicts con las líneas de la factura (description, quantity, unit_price)
+        client_name: Nombre del cliente
+
+    Returns:
+        Dict con la estructura del asiento contable
+    """
+    try:
+        # Preparar el contexto de las líneas
+        lines_context = []
+        for idx, line in enumerate(lines_data, 1):
+            lines_context.append(
+                f"Línea {idx}: {line.get('description', 'Sin descripción')} "
+                f"(Cantidad: {line.get('quantity', 0)}, "
+                f"Precio unitario: {line.get('unit_price', 0)}€)"
+            )
+
+        lines_text = "\n".join(lines_context) if lines_context else "Sin líneas detalladas"
+
+        prompt = f"""Eres un experto contable español. Analiza esta factura de VENTA y genera el asiento contable según el Plan General Contable (PGC) español.
+
+DATOS DE LA FACTURA:
+- Número: {invoice_data.get('invoice_number', 'N/A')}
+- Cliente: {client_name}
+- Base imponible: {invoice_data.get('base_amount', 0)}€
+- IVA: {invoice_data.get('tax_amount', 0)}€
+- Total: {invoice_data.get('total_amount', 0)}€
+
+LÍNEAS DE LA FACTURA:
+{lines_text}
+
+INSTRUCCIONES CRÍTICAS:
+1. Esta es una FACTURA DE VENTA (ingresos de la empresa)
+2. Analiza CUIDADOSAMENTE el tipo de ingreso según las líneas de la factura
+3. Determina la cuenta de ingreso MÁS ESPECÍFICA del PGC español (grupos 7XX)
+
+ASIENTO TÍPICO DE FACTURA DE VENTA:
+DEBE:
+  (430) Clientes - Total factura
+HABER:
+  (7XX) Ingresos - Base imponible
+  (477) IVA repercutido - IVA
+
+CUENTAS DE INGRESOS DEL PGC ESPAÑOL (grupos 7XX):
+
+**VENTAS (700-709)** - Para venta de productos:
+- 700: Ventas de mercaderías (productos comprados para revender)
+- 701: Ventas de productos terminados (producción propia)
+- 702: Ventas de productos semiterminados
+- 703: Ventas de subproductos y residuos
+- 704: Ventas de envases y embalajes
+- 705: Prestaciones de servicios
+
+**OTROS INGRESOS (740-759):**
+- 740: Subvenciones, donaciones y legados
+- 752: Ingresos por arrendamientos
+- 753: Ingresos de propiedad industrial
+- 754: Ingresos por comisiones
+- 755: Ingresos por servicios al personal
+
+**EJEMPLOS PRÁCTICOS:**
+- "Venta de productos" → 700 (mercaderías) o 701 (producción propia)
+- "Servicio de consultoría" → 705 (prestaciones de servicios)
+- "Desarrollo de software" → 705 (prestaciones de servicios)
+- "Arrendamiento de local" → 752 (ingresos por arrendamientos)
+- "Comisión por intermediación" → 754 (ingresos por comisiones)
+- "Curso de formación" → 705 (prestaciones de servicios)
+
+CUENTAS FIJAS:
+- 430: Clientes (cuenta principal - siempre en el DEBE)
+- 477: H.P. IVA repercutido (siempre para el IVA en facturas de venta - en el HABER)
+
+RESPONDE SOLO CON UN JSON VÁLIDO EN ESTE FORMATO EXACTO:
+{{
+    "account_customer": "430",
+    "customer_description": "Descripción para la línea del cliente",
+    "account_income": "código de la cuenta de ingreso (ej: 700, 705)",
+    "income_description": "Descripción clara del ingreso",
+    "account_vat_output": "477",
+    "vat_description": "IVA repercutido",
+    "reasoning": "Breve explicación de por qué elegiste esas cuentas"
+}}
+
+IMPORTANTE: 
+- Responde SOLO con JSON, sin texto adicional
+- No uses markdown ni backticks
+- Asegúrate de que el JSON sea válido
+- Diferencia claramente entre venta de productos (700) y servicios (705)"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Eres un experto contable español especializado en el Plan General Contable. Respondes SOLO con JSON válido, sin markdown ni texto adicional."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=800
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Limpiar posibles backticks de markdown
+        response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+        # Parsear el JSON
+        accounting_entry = json.loads(response_text)
+
+        logger.info(f"Asiento contable de VENTA generado por IA para factura {invoice_data.get('invoice_number')}")
+        logger.info(f"Razonamiento: {accounting_entry.get('reasoning', 'N/A')}")
+
+        return accounting_entry
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Error al parsear JSON de OpenAI: {e}")
+        logger.error(f"Respuesta recibida: {response_text}")
+        # Retornar valores por defecto si falla el parsing
+        return {
+            "account_customer": "430",
+            "customer_description": f"{client_name}",
+            "account_income": "705",  # Prestaciones de servicios (genérico y seguro)
+            "income_description": f"Ventas - {client_name}",
+            "account_vat_output": "477",
+            "vat_description": "IVA repercutido",
+            "reasoning": "Valores por defecto debido a error en análisis de IA"
+        }
+    except Exception as e:
+        logger.exception(f"Error al generar asiento contable de venta con IA: {e}")
+        return {
+            "account_customer": "430",
+            "customer_description": f"{client_name}",
+            "account_income": "705",
+            "income_description": f"Ventas - {client_name}",
+            "account_vat_output": "477",
+            "vat_description": "IVA repercutido",
+            "reasoning": "Valores por defecto debido a error"
+        }
