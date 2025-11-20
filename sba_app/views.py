@@ -104,6 +104,35 @@ def nominas(request):
     return render(request, 'pages/nominas.html')
 
 
+@login_required
+def accounting_entries(request):
+    company = get_current_company(request.user)
+    entries = (
+        AccountingEntry.objects
+        .filter(company=company)
+        .select_related('sales_invoice', 'purchase_invoice', 'payroll__employee')
+        .order_by('-date', '-id')
+    )
+    return render(request, 'pages/accounting_entries.html', {
+        'entries': entries,
+    })
+
+
+@login_required
+def accounting_entry_detail(request, entry_id):
+    company = get_current_company(request.user)
+    try:
+        entry = AccountingEntry.objects.select_related(
+            'sales_invoice', 'purchase_invoice', 'payroll__employee'
+        ).get(id=entry_id, company=company)
+    except AccountingEntry.DoesNotExist:
+        raise Http404("Asiento no encontrado")
+
+    return render(request, 'pages/accounting_entry_detail.html', {
+        'entry': entry,
+    })
+
+
 def get_current_company(user):
     return CompanyUser.objects.select_related('company').get(user=user).company
 
@@ -1991,8 +2020,15 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         print(f"   Descripción proveedor: {ai_result['supplier_description']}")
         print(f"   Razonamiento: {ai_result.get('reasoning', 'N/A')}")
 
+        # 🆕 OBTENER EL SIGUIENTE NÚMERO DE ASIENTO PARA ESTA EMPRESA
+        next_entry_number = AccountingEntry.get_next_entry_number(company)
+
+        print(f"\n🔢 NÚMERO DE ASIENTO: {next_entry_number}")
+
         # Mostrar cómo quedará el asiento
         print(f"\n📊 ASIENTO CONTABLE A GENERAR:")
+        print(f"   Empresa: {company.name}")
+        print(f"   Número de asiento: {next_entry_number}")  # ← NUEVO
         print(f"   Fecha: {invoice.issue_date or timezone.now().date()}")
         print(f"   Descripción: Factura compra {invoice.invoice_number} - {supplier_name}")
         print(f"\n   LÍNEAS DEL ASIENTO:")
@@ -2032,11 +2068,12 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         print("🚀 CREANDO ASIENTO EN LA BASE DE DATOS...")
         print(f"{'=' * 80}\n")
 
-        # Crear el asiento contable con las cuentas sugeridas por la IA
+        # Crear el asiento contable con el número correlativo
         description = f"Factura compra {invoice.invoice_number} - {supplier_name}"
 
         entry = AccountingEntry.objects.create(
             company=company,
+            entry_number=next_entry_number,  # ← CRÍTICO: Asignar el número correlativo
             date=invoice.issue_date or timezone.now().date(),
             description=description,
             purchase_invoice=invoice,
@@ -2044,7 +2081,7 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
             credit_total=Decimal('0.00')
         )
 
-        print(f"✅ AccountingEntry creado - ID: {entry.id}")
+        print(f"✅ AccountingEntry creado - ID: {entry.id} | Número: {entry.entry_number}")
 
         # Línea 1: Gasto (DEBE)
         if invoice.base_amount and invoice.base_amount > 0:
@@ -2095,16 +2132,19 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         print(f"\n{'=' * 80}")
         print(f"✅ ASIENTO CONTABLE GENERADO EXITOSAMENTE")
         print(f"   Entry ID: {entry.id}")
+        print(f"   Número de asiento: {entry.entry_number}")  # ← NUEVO
+        print(f"   Empresa: {company.name}")
         print(f"   Factura: {invoice.invoice_number}")
         print(f"   Totales: DEBE={entry.debit_total}€ | HABER={entry.credit_total}€")
         print(f"{'=' * 80}\n")
 
-        logger.info(f'Asiento contable {entry.id} generado exitosamente para factura {invoice.invoice_number}')
+        logger.info(f'Asiento {entry.entry_number} generado para {company.name} - Factura {invoice.invoice_number}')
 
         return JsonResponse({
             'success': True,
-            'message': f'Asiento contable generado correctamente para la factura {invoice.invoice_number}',
+            'message': f'Asiento contable #{entry.entry_number} generado correctamente',
             'entry_id': entry.id,
+            'entry_number': entry.entry_number,  # ← NUEVO
             'debit_total': str(entry.debit_total),
             'credit_total': str(entry.credit_total),
             'ai_reasoning': ai_result.get('reasoning', ''),

@@ -35,10 +35,13 @@
       <i class="bi bi-person-badge"></i>
       <span>Empleados</span>
     </a>
+    <a href="{% url 'accounting_entries' %}" class="sidebar-link {% if request.resolver_match.url_name == 'accounting_entries' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-journal-text"></i>
+      <span>Asientos contables</span>
+    </a>
     <!--<a href="{% url 'reportes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'store' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-bag"></i>
       <span>Reportes</span>
     </a>-->
   </nav>
 </aside>
-

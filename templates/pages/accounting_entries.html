@@ -1,0 +1,70 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+{% block title %}Asientos contables | SBA{% endblock %}
+{% block content %}
+<section>
+  <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+      <div>
+        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Asientos contables</h1>
+        <div style="color:#6B7280;margin-bottom:20px;">Asientos generados para la compañía</div>
+      </div>
+    </div>
+
+    <div class="card table-card" style="padding:0;">
+      <div style="display:flex;align-items:center;padding:16px 20px;gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <h2 style="font-size:16px;margin:0;">Listado</h2>
+        </div>
+        <div style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input type="text" placeholder="Buscar... (pendiente)" aria-label="Buscar asientos" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div style="flex:1;min-width:0;"></div>
+      </div>
+
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="padding:14px 18px;">Número</th>
+              <th class="table-header" style="padding:14px 18px;">Fecha</th>
+              <th class="table-header" style="padding:14px 18px;">Descripción</th>
+              <th class="table-header" style="padding:14px 18px;">Origen</th>
+              <th class="table-header" style="padding:14px 18px;">Estado</th>
+              <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+            <tr>
+              <td>{{ entry.entry_number }}</td>
+              <td>{{ entry.date|date:'d/m/Y' }}</td>
+              <td style="text-align:left;">{{ entry.description }}</td>
+              <td>
+                {% if entry.purchase_invoice %}
+                  Factura recibida · {{ entry.purchase_invoice.invoice_number }}
+                {% elif entry.sales_invoice %}
+                  Factura enviada · {{ entry.sales_invoice.invoice_number }}
+                {% elif entry.payroll %}
+                  Nómina · {{ entry.payroll.employee.first_name }} {{ entry.payroll.employee.last_name }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>{{ entry.get_status_display }}</td>
+              <td class="text-right">
+                <a href="{% url 'accounting_entry_detail' entry.id %}" class="btn-secondary">Ver</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6">No hay asientos contables todavía.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

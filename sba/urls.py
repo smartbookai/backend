@@ -19,6 +19,8 @@ urlpatterns = [
     path('reportes/', views.reportes, name='reportes'),
     path('empleados/', views.empleados, name='empleados'),
     path('nominas/', views.nominas, name='nominas'),
+    path('asientos-contables/', views.accounting_entries, name='accounting_entries'),
+    path('asientos-contables/<int:entry_id>/', views.accounting_entry_detail, name='accounting_entry_detail'),
 
     #supplier API endpoints
     path('api/show-table-suppliers/', views.api_show_table_suppliers, name='api_show_table_suppliers'),

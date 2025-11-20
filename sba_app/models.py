@@ -165,6 +165,7 @@ class InvoiceLine(models.Model):
 
 class AccountingEntry(models.Model):
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='entries')
+    entry_number = models.IntegerField(verbose_name="Número de asiento",help_text="Número correlativo del asiento por empresa",default=1)
     date = models.DateField(default=timezone.now)                       # Fecha del asiento
     description = models.CharField(max_length=255)                      # Descripción general
     sales_invoice = models.OneToOneField('SalesInvoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='entry')
@@ -173,11 +174,35 @@ class AccountingEntry(models.Model):
 
     debit_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     credit_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    status = models.CharField(max_length=20, choices=[('draft', 'Borrador'), ('posted', 'Confirmado')], default='draft')
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ('company', 'entry_number')
+        ordering = ['company', '-entry_number']
+        verbose_name = "Asiento Contable"
+        verbose_name_plural = "Asientos Contables"
+
     def __str__(self):
         return f"Entry {self.id} ({self.company.name})"
+
+    @staticmethod
+    def get_next_entry_number(company):
+        """
+        Obtiene el siguiente número de asiento para una empresa.
+        """
+        last_entry = (
+            AccountingEntry.objects
+            .filter(company=company)
+            .select_for_update()
+            .order_by('-entry_number')
+            .first()
+        )
+
+        if last_entry:
+            return last_entry.entry_number + 1
+        return 1
 
 
 class AccountingEntryLine(models.Model):
