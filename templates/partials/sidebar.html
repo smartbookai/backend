@@ -4,39 +4,39 @@
   </div>
   <nav>
     <a href="{% url 'index' %}" class="sidebar-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-speedometer2"></i>
+      <i class="bi bi-graph-up"></i>
       <span>Dashboard</span>
     </a>
     <a href="{% url 'facturas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'facturas' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-box-seam"></i>
+      <i class="bi bi-receipt-cutoff"></i>
       <span>Facturas recibidas</span>
     </a>
     <a href="{% url 'invoices_sent' %}" class="sidebar-link {% if request.resolver_match.url_name == 'invoices_sent' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-send"></i>
+      <i class="bi bi-receipt"></i>
       <span>Facturas enviadas</span>
     </a>
     <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'nominas' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-people"></i>
+      <i class="bi bi-cash-stack"></i>
       <span>Nominas</span>
     </a>
     <a href="{% url 'proveedores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'proveedores' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-receipt"></i>
+      <i class="bi bi-building"></i>
       <span>Proveedores</span>
     </a>
     <a href="{% url 'trabajadores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'trabajadores' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-truck"></i>
+      <i class="bi bi-people"></i>
       <span>Usuarios</span>
     </a>
     <a href="{% url 'clientes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'clientes' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-person-badge"></i>
+      <i class="bi bi-person-lines-fill"></i>
       <span>Clientes</span>
     </a>
     <a href="{% url 'empleados' %}" class="sidebar-link {% if request.resolver_match.url_name == 'empleados' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-person-badge"></i>
+      <i class="bi bi-person-workspace"></i>
       <span>Empleados</span>
     </a>
     <a href="{% url 'accounting_entries' %}" class="sidebar-link {% if request.resolver_match.url_name == 'accounting_entries' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-journal-text"></i>
+      <i class="bi bi-journal-check"></i>
       <span>Asientos contables</span>
     </a>
     <!--<a href="{% url 'reportes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'store' %}active{% endif %}" style="text-decoration:none;">
