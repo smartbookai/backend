@@ -102,6 +102,69 @@
         </table>
       </div>
     </div>
+
+    <!-- Barra de acciones del asiento -->
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button type="button" class="btn-secondary" onclick="onEditEntryClick()">Editar</button>
+      <button type="button" class="btn-primary" style="background:#10B981;border-color:#10B981;" onclick="onConfirmEntryClick()">Confirmar</button>
+      <button type="button" class="btn-secondary" onclick="onExportEntryExcelClick()">Exportar Excel</button>
+      <button type="button" class="btn-secondary" onclick="onExportEntryXhtmlClick()">Exportar XHTML</button>
+    </div>
   </div>
 </section>
+
+<script>
+function onEditEntryClick() {
+  alert('Función de edición avanzada de asiento pendiente de implementar.');
+}
+
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+async function onConfirmEntryClick() {
+  if (!confirm('¿Confirmar este asiento contable?')) return;
+
+  try {
+    const res = await fetch(`/api/accounting-entries/{{ entry.id }}/confirm/`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      alert(data.error || 'Error al confirmar el asiento contable.');
+      return;
+    }
+
+    alert(data.message || 'Asiento contable confirmado correctamente.');
+    window.location.reload();
+  } catch (err) {
+    alert(err.message || 'Error al confirmar el asiento contable.');
+  }
+}
+
+function onExportEntryExcelClick() {
+  alert('Exportación a Excel pendiente de implementar.');
+}
+
+function onExportEntryXhtmlClick() {
+  alert('Exportación a XHTML pendiente de implementar.');
+}
+</script>
 {% endblock %}

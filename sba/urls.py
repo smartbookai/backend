@@ -75,6 +75,8 @@ urlpatterns = [
     path("api/invoices-sent/<int:invoice_id>/generate-entry/", views.generate_entry_for_sales_invoice, name="generate_entry_for_sales_invoice"),
     path('api/payrolls/<int:payroll_id>/generate-entry/', views.generate_entry_for_payroll, name='generate_entry_for_payroll'),
 
+    path('api/accounting-entries/<int:entry_id>/confirm/', views.api_confirm_accounting_entry, name='api_confirm_accounting_entry'),
+
 ]
 
 if settings.DEBUG:

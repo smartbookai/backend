@@ -2693,3 +2693,33 @@ def generate_entry_for_payroll(request, payroll_id):
             'success': False,
             'error': f'Error al generar el asiento contable: {str(e)}'
         }, status=500)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_confirm_accounting_entry(request, entry_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede confirmar asientos')
+
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.get(id=entry_id, company=company)
+    except AccountingEntry.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Asiento no encontrado'}, status=404)
+
+    if entry.status == 'posted':
+        return JsonResponse({
+            'success': False,
+            'error': 'El asiento ya está confirmado',
+        }, status=400)
+
+    entry.status = 'posted'
+    entry.save(update_fields=['status'])
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Asiento contable #{entry.entry_number} confirmado correctamente',
+        'status': entry.status,
+    })
