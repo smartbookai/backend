@@ -111,7 +111,7 @@ def accounting_entries(request):
         AccountingEntry.objects
         .filter(company=company)
         .select_related('sales_invoice', 'purchase_invoice', 'payroll__employee')
-        .order_by('-date', '-id')
+        .order_by('-entry_number', '-id')
     )
     return render(request, 'pages/accounting_entries.html', {
         'entries': entries,
