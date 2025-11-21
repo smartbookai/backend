@@ -16,6 +16,8 @@ import os
 import csv
 from django.conf import settings
 from django.core.files.storage import default_storage
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry
@@ -2972,8 +2974,8 @@ def api_export_accounting_entry_excel(request, entry_id):
 
 
 @login_required
-def api_export_accounting_entry_xhtml(request, entry_id):
-    """Exporta el asiento contable como un archivo XHTML descargable."""
+def api_export_accounting_entry_csv(request, entry_id):
+    """Exporta el asiento contable como CSV estándar."""
     company = get_current_company(request.user)
 
     try:
@@ -2984,7 +2986,127 @@ def api_export_accounting_entry_xhtml(request, entry_id):
     except AccountingEntry.DoesNotExist:
         raise Http404("Asiento no encontrado")
 
-    filename = f"asiento_{entry.entry_number or entry.id}.xhtml"
+    filename = f"asiento_{entry.entry_number or entry.id}.csv"
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # BOM UTF-8 para que Excel interprete bien acentos
+    response.write('\ufeff')
+
+    writer = csv.writer(response, delimiter=';')
+
+    writer.writerow(["ASIENTO CONTABLE"])
+    writer.writerow(["Empresa", entry.company.name])
+    writer.writerow(["Número", entry.entry_number])
+    writer.writerow(["Fecha", entry.date.strftime('%d/%m/%Y') if entry.date else ""])
+    writer.writerow(["Descripción", entry.description])
+    writer.writerow([])
+
+    writer.writerow(["Cuenta", "Descripción", "Debe", "Haber"])
+    for line in entry.lines.all():
+        writer.writerow([
+            line.account_code or "",
+            line.description or "",
+            str(line.debit or Decimal('0.00')).replace('.', ','),
+            str(line.credit or Decimal('0.00')).replace('.', ','),
+        ])
+
+    writer.writerow([])
+    writer.writerow(["", "TOTALES", str(entry.debit_total).replace('.', ','), str(entry.credit_total).replace('.', ',')])
+
+    return response
+
+
+@login_required
+def api_export_accounting_entry_pdf(request, entry_id):
+    """Exporta el asiento contable a un PDF sencillo."""
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.select_related('company').prefetch_related('lines').get(
+            id=entry_id,
+            company=company,
+        )
+    except AccountingEntry.DoesNotExist:
+        raise Http404("Asiento no encontrado")
+
+    filename = f"asiento_{entry.entry_number or entry.id}.pdf"
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    p = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+
+    y = height - 40
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(40, y, f"Asiento contable #{entry.entry_number}")
+
+    p.setFont("Helvetica", 10)
+    y -= 25
+    p.drawString(40, y, f"Empresa: {entry.company.name}")
+    y -= 15
+    p.drawString(40, y, f"Número: {entry.entry_number}")
+    y -= 15
+    p.drawString(40, y, f"Fecha: {entry.date.strftime('%d/%m/%Y') if entry.date else ''}")
+    y -= 15
+    p.drawString(40, y, f"Descripción: {entry.description or ''}")
+
+    y -= 30
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(40, y, "Cuenta")
+    p.drawString(140, y, "Descripción")
+    p.drawString(380, y, "Debe")
+    p.drawString(450, y, "Haber")
+
+    y -= 15
+    p.setFont("Helvetica", 9)
+
+    for line in entry.lines.all():
+        if y < 60:
+            p.showPage()
+            y = height - 40
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(40, y, "Cuenta")
+            p.drawString(140, y, "Descripción")
+            p.drawString(380, y, "Debe")
+            p.drawString(450, y, "Haber")
+            y -= 15
+            p.setFont("Helvetica", 9)
+
+        p.drawString(40, y, (line.account_code or ""))
+        p.drawString(140, y, (line.description or "")[:40])
+        p.drawRightString(420, y, str(line.debit or Decimal('0.00')))
+        p.drawRightString(500, y, str(line.credit or Decimal('0.00')))
+        y -= 14
+
+    y -= 20
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(140, y, "TOTALES")
+    p.drawRightString(420, y, str(entry.debit_total))
+    p.drawRightString(500, y, str(entry.credit_total))
+
+    p.showPage()
+    p.save()
+
+    return response
+
+
+@login_required
+def api_export_accounting_entry_xtml(request, entry_id):
+    """Exporta el asiento contable como un archivo XTML descargable (contenido XHTML)."""
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.select_related('company').prefetch_related('lines').get(
+            id=entry_id,
+            company=company,
+        )
+    except AccountingEntry.DoesNotExist:
+        raise Http404("Asiento no encontrado")
+
+    filename = f"asiento_{entry.entry_number or entry.id}.xtml"
 
     response = HttpResponse(content_type='application/xhtml+xml; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'

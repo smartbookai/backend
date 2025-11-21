@@ -109,7 +109,9 @@
       <button type="button" class="btn-primary" style="background:#10B981;border-color:#10B981;" onclick="onConfirmEntryClick()">Confirmar</button>
       {% endif %}
       <button type="button" class="btn-secondary" onclick="onExportEntryExcelClick()">Exportar Excel</button>
-      <button type="button" class="btn-secondary" onclick="onExportEntryXhtmlClick()">Exportar XHTML</button>
+      <button type="button" class="btn-secondary" onclick="onExportEntryCsvClick()">Exportar CSV</button>
+      <button type="button" class="btn-secondary" onclick="onExportEntryPdfClick()">Exportar PDF</button>
+      <button type="button" class="btn-secondary" onclick="onExportEntryXtmlClick()">Exportar XTML</button>
     </div>
   </div>
 </section>
@@ -210,8 +212,16 @@ function onExportEntryExcelClick() {
   window.location.href = '/api/accounting-entries/{{ entry.id }}/export-excel/';
 }
 
-function onExportEntryXhtmlClick() {
-  window.location.href = '/api/accounting-entries/{{ entry.id }}/export-xhtml/';
+function onExportEntryCsvClick() {
+  window.location.href = '/api/accounting-entries/{{ entry.id }}/export-csv/';
+}
+
+function onExportEntryPdfClick() {
+  window.location.href = '/api/accounting-entries/{{ entry.id }}/export-pdf/';
+}
+
+function onExportEntryXtmlClick() {
+  window.location.href = '/api/accounting-entries/{{ entry.id }}/export-xtml/';
 }
 </script>
 {% endblock %}

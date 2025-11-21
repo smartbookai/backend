@@ -78,7 +78,9 @@ urlpatterns = [
     path('api/accounting-entries/<int:entry_id>/confirm/', views.api_confirm_accounting_entry, name='api_confirm_accounting_entry'),
     path('api/accounting-entries/<int:entry_id>/update/', views.api_update_accounting_entry, name='api_update_accounting_entry'),
     path('api/accounting-entries/<int:entry_id>/export-excel/', views.api_export_accounting_entry_excel, name='api_export_accounting_entry_excel'),
-    path('api/accounting-entries/<int:entry_id>/export-xhtml/', views.api_export_accounting_entry_xhtml, name='api_export_accounting_entry_xhtml'),
+    path('api/accounting-entries/<int:entry_id>/export-csv/', views.api_export_accounting_entry_csv, name='api_export_accounting_entry_csv'),
+    path('api/accounting-entries/<int:entry_id>/export-pdf/', views.api_export_accounting_entry_pdf, name='api_export_accounting_entry_pdf'),
+    path('api/accounting-entries/<int:entry_id>/export-xtml/', views.api_export_accounting_entry_xtml, name='api_export_accounting_entry_xtml'),
 
 ]
 
