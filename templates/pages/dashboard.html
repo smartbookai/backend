@@ -109,5 +109,65 @@
       </div>
     </div>
   </div>
+
+  <div style="margin-top:2rem;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem;align-items:flex-start;">
+    <div class="card table-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h2 style="font-size:18px;margin:0;">Facturas recientes</h2>
+      </div>
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="text-align:left;">Factura</th>
+              <th class="table-header" style="text-align:left;">Cliente</th>
+              <th class="table-header" style="text-align:right;">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="table-cell" style="text-align:left;">#001234</td>
+              <td class="table-cell" style="text-align:left;">Empresa ABC S.L.</td>
+              <td class="table-cell" style="text-align:right;">1.250,00 €</td>
+            </tr>
+            <tr>
+              <td class="table-cell" style="text-align:left;">#001235</td>
+              <td class="table-cell" style="text-align:left;">Comercial XYZ</td>
+              <td class="table-cell" style="text-align:right;">890,50 €</td>
+            </tr>
+            <tr>
+              <td class="table-cell" style="text-align:left;">#001236</td>
+              <td class="table-cell" style="text-align:left;">Servicios DEF</td>
+              <td class="table-cell" style="text-align:right;">2.100,00 €</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="padding:1.25rem;">
+      <div style="margin-bottom:0.75rem;">
+        <h2 style="font-size:18px;margin:0;">Acciones rápidas</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.75rem;">
+        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+          <i class="bi bi-file-earmark-arrow-up" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
+          <span>Subir factura enviada</span>
+        </button>
+        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+          <i class="bi bi-file-earmark-arrow-down" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
+          <span>Subir factura recibida</span>
+        </button>
+        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+          <i class="bi bi-building" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
+          <span>Nuevo proveedor</span>
+        </button>
+        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+          <i class="bi bi-person-plus" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
+          <span>Nuevo usuario</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </section>
 {% endblock %}
