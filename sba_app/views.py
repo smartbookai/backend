@@ -186,6 +186,61 @@ def index(request):
     return render(request, 'pages/dashboard.html', context)
 
 
+@login_required
+def api_dashboard_last_invoices(request):
+    company = get_current_company(request.user)
+
+    sales_qs = (
+        SalesInvoice.objects
+        .select_related('client')
+        .filter(company=company)
+        .order_by('-created_at')[:3]
+    )
+
+    purchase_qs = (
+        PurchaseInvoice.objects
+        .select_related('supplier')
+        .filter(company=company)
+        .order_by('-created_at')[:3]
+    )
+
+    combined = []
+    for inv in sales_qs:
+        combined.append({
+            'created_at': inv.created_at,
+            'type': 'sent',
+            'number': inv.invoice_number or '',
+            'party': inv.client.name if inv.client else '',
+            'amount': f"{inv.total_amount:.2f}" if inv.total_amount is not None else '',
+            'issue_date': inv.issue_date.strftime('%d/%m/%Y') if inv.issue_date else '',
+        })
+
+    for inv in purchase_qs:
+        combined.append({
+            'created_at': inv.created_at,
+            'type': 'received',
+            'number': inv.invoice_number or '',
+            'party': inv.supplier.name if inv.supplier else '',
+            'amount': f"{inv.total_amount:.2f}" if inv.total_amount is not None else '',
+            'issue_date': inv.issue_date.strftime('%d/%m/%Y') if inv.issue_date else '',
+        })
+
+    combined_sorted = sorted(combined, key=lambda x: x['created_at'], reverse=True)[:3]
+
+    payload = [
+        {
+            'type': item['type'],
+            'number': item['number'],
+            'party': item['party'],
+            'amount': item['amount'],
+            'issue_date': item['issue_date'],
+        }
+        for item in combined_sorted
+    ]
+
+    return JsonResponse({'invoices': payload})
+
+
 def logout_view(request):
     """Logs out the user and redirects to the login page."""
     logout(request)

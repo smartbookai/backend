@@ -71,6 +71,7 @@ urlpatterns = [
     path('api/payrolls/<int:payroll_id>/update/', views.api_update_payroll, name='api_update_payroll'),
     path('api/payrolls/<int:payroll_id>/delete/', views.api_delete_payroll, name='api_delete_payroll'),
 
+    #accounting entries API endpoints
     path("api/invoices-received/<int:invoice_id>/generate-entry/", views.generate_entry_for_purchase_invoice, name="generate_entry_for_purchase_invoice"),
     path("api/invoices-sent/<int:invoice_id>/generate-entry/", views.generate_entry_for_sales_invoice, name="generate_entry_for_sales_invoice"),
     path('api/payrolls/<int:payroll_id>/generate-entry/', views.generate_entry_for_payroll, name='generate_entry_for_payroll'),
@@ -82,11 +83,12 @@ urlpatterns = [
     path('api/accounting-entries/<int:entry_id>/export-pdf/', views.api_export_accounting_entry_pdf, name='api_export_accounting_entry_pdf'),
     path('api/accounting-entries/<int:entry_id>/export-xtml/', views.api_export_accounting_entry_xtml, name='api_export_accounting_entry_xtml'),
 
+    #dashboard API endpoints
+    path('api/dashboard/last-invoices/', views.api_dashboard_last_invoices, name='api_dashboard_last_invoices'),
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -120,25 +120,14 @@
           <thead>
             <tr>
               <th class="table-header" style="text-align:left;">Factura</th>
-              <th class="table-header" style="text-align:left;">Cliente</th>
+              <th class="table-header" style="text-align:left;">Cliente / Proveedor</th>
+              <th class="table-header" style="text-align:center;">Tipo</th>
               <th class="table-header" style="text-align:right;">Importe</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="recent-invoices-body">
             <tr>
-              <td class="table-cell" style="text-align:left;">#001234</td>
-              <td class="table-cell" style="text-align:left;">Empresa ABC S.L.</td>
-              <td class="table-cell" style="text-align:right;">1.250,00 €</td>
-            </tr>
-            <tr>
-              <td class="table-cell" style="text-align:left;">#001235</td>
-              <td class="table-cell" style="text-align:left;">Comercial XYZ</td>
-              <td class="table-cell" style="text-align:right;">890,50 €</td>
-            </tr>
-            <tr>
-              <td class="table-cell" style="text-align:left;">#001236</td>
-              <td class="table-cell" style="text-align:left;">Servicios DEF</td>
-              <td class="table-cell" style="text-align:right;">2.100,00 €</td>
+              <td class="table-cell" colspan="4" style="text-align:center;">Cargando facturas recientes...</td>
             </tr>
           </tbody>
         </table>
@@ -170,4 +159,79 @@
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const tbody = document.getElementById('recent-invoices-body');
+    if (!tbody) return;
+
+    fetch('/api/dashboard/last-invoices/')
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('Error al cargar las facturas');
+        }
+        return response.json();
+      })
+      .then(function (data) {
+        const invoices = data.invoices || [];
+        tbody.innerHTML = '';
+
+        if (!invoices.length) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 4;
+          cell.className = 'table-cell';
+          cell.style.textAlign = 'center';
+          cell.textContent = 'No hay facturas recientes.';
+          row.appendChild(cell);
+          tbody.appendChild(row);
+          return;
+        }
+
+        invoices.forEach(function (inv) {
+          const row = document.createElement('tr');
+
+          const numberCell = document.createElement('td');
+          numberCell.className = 'table-cell';
+          numberCell.style.textAlign = 'left';
+          numberCell.textContent = inv.number || '';
+
+          const partyCell = document.createElement('td');
+          partyCell.className = 'table-cell';
+          partyCell.style.textAlign = 'left';
+          partyCell.textContent = inv.party || '';
+
+          const typeCell = document.createElement('td');
+          typeCell.className = 'table-cell';
+          typeCell.style.textAlign = 'center';
+          typeCell.textContent = inv.type === 'sent' ? 'Enviada' : 'Recibida';
+
+          const amountCell = document.createElement('td');
+          amountCell.className = 'table-cell';
+          amountCell.style.textAlign = 'right';
+          amountCell.textContent = inv.amount || '';
+
+          row.appendChild(numberCell);
+          row.appendChild(partyCell);
+          row.appendChild(typeCell);
+          row.appendChild(amountCell);
+          tbody.appendChild(row);
+        });
+      })
+      .catch(function () {
+        tbody.innerHTML = '';
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.className = 'table-cell';
+        cell.style.textAlign = 'center';
+        cell.textContent = 'Error al cargar facturas recientes.';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+      });
+  });
+</script>
 {% endblock %}
