@@ -191,6 +191,10 @@ document.addEventListener('DOMContentLoaded', function() {
   loadPurchases();
   setupPurchaseDropzone();
   setupPurchaseSearch();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('openDrawer') === 'purchase') {
+    openPurchaseDrawer();
+  }
 });
 
 function renderPurchasesTable(rows) {

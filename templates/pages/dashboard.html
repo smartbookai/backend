@@ -139,19 +139,19 @@
         <h2 style="font-size:18px;margin:0;">Acciones rápidas</h2>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.75rem;">
-        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+        <button type="button" class="btn btn-light" onclick="window.location.href='/invoices-sent/?openDrawer=invoice'" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
           <i class="bi bi-file-earmark-arrow-up" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
           <span>Subir factura enviada</span>
         </button>
-        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+        <button type="button" class="btn btn-light" onclick="window.location.href='/facturas/?openDrawer=purchase'" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
           <i class="bi bi-file-earmark-arrow-down" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
           <span>Subir factura recibida</span>
         </button>
-        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+        <button type="button" class="btn btn-light" onclick="window.location.href='/proveedores/?openDrawer=supplier'" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
           <i class="bi bi-building" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
           <span>Nuevo proveedor</span>
         </button>
-        <button type="button" class="btn btn-light" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
+        <button type="button" class="btn btn-light" onclick="window.location.href='/trabajadores/?openDrawer=worker'" style="height:100px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d1d5db;background:#f9fafb;">
           <i class="bi bi-person-plus" style="font-size:20px;margin-bottom:0.35rem;color:#6b7280;"></i>
           <span>Nuevo usuario</span>
         </button>

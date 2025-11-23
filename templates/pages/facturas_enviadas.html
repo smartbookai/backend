@@ -170,6 +170,10 @@ document.addEventListener('DOMContentLoaded', function() {
   loadInvoices();
   setupPdfDropzone();
   setupInvoiceSearch();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('openDrawer') === 'invoice') {
+    openInvoiceDrawer();
+  }
 });
 
 async function loadInvoices() {

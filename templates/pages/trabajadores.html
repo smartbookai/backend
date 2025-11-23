@@ -5,7 +5,7 @@
   <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
       <div>
-        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Trabajadores</h1>
+        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Usuarios</h1>
         <div style="color:#6B7280;margin-bottom:20px;">De la compañía</div>
       </div>
       {% if request.user.company_user.role == 'admin' %}
@@ -50,7 +50,7 @@
   <div id="workerOverlay" class="overlay-mask" onclick="closeWorkerDrawer()"></div>
   <aside id="workerDrawer" class="drawer" aria-hidden="true">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="margin:0;font-size:18px;">Crear trabajador</h3>
+      <h3 style="margin:0;font-size:18px;">Crear usuario</h3>
       <button class="btn-secondary" onclick="closeWorkerDrawer()">Cerrar</button>
     </div>
     <form id="workerForm" onsubmit="submitWorker(event)" enctype="multipart/form-data">
@@ -131,6 +131,10 @@ let WORKERS_DATA = [];
 document.addEventListener('DOMContentLoaded', function() {
   loadWorkers();
   setupWorkersSearch();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('openDrawer') === 'worker') {
+    openWorkerDrawer();
+  }
 });
 
 function renderWorkersTable(rows) {
