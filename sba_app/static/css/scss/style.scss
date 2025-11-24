@@ -44,12 +44,19 @@ $red: #EF4444;
 $border-gray: #E5E7EB;
 $border-radius: 8px;
 $shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$accent-purple: #bd5fcc;
+$sidebar-gray: #b4b4b4;
 
 // Base styles
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+// Section titles with purple accent
+.section-title-purple {
+  color: $accent-purple;
 }
 
 body {
@@ -92,11 +99,12 @@ body {
 // Stat card
 .stat-card {
   padding: 1.5rem;
+  background-color: $accent-purple;
   
   &-icon {
     width: 3.2rem;
     height: 3.2rem;
-    background: $text-dark;
+    background: #ffffff;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -104,7 +112,7 @@ body {
     margin-right: 0.75rem;
     
     i {
-      color: $accent-yellow;
+      color: $accent-purple;
       font-size: 1.25rem;
     }
   }
@@ -114,7 +122,7 @@ body {
 .stat {
   &-label {
     font-size: 15px;
-    color: $gray-500;
+    color: #FFFFFF;
     font-weight: 400;
     letter-spacing: 0;
   }
@@ -122,7 +130,7 @@ body {
   &-value {
     font-size: 1.8em;
     font-weight: 600;
-    color: $text-dark;
+    color: #FFFFFF;
     line-height: 1.2;
     letter-spacing: 0;
   }
@@ -152,6 +160,26 @@ body {
 // Table card
 .table-card {
   padding: 1.5rem;
+}
+
+// Summary cards (economic resume, recent invoices, quick actions)
+.summary-card {
+  background-color: $accent-purple;
+  color: #FFFFFF;
+
+  .section-title-purple {
+    color: #FFFFFF;
+  }
+
+  .table-container {
+    background-color: #FFFFFF;
+    color: $text-dark;
+  }
+
+  .table-header,
+  .table-cell {
+    color: $text-dark;
+  }
 }
 
 // Table styling
@@ -196,7 +224,7 @@ body {
 // Sidebar
 .sidebar {
   width: 18rem;
-  background: white;
+  background: #F3F4F6;
   border-right: 1px solid $border-color;
   height: 100vh;
   position: fixed;
@@ -208,13 +236,13 @@ body {
     display: flex;
     align-items: center;
     padding: 1rem;
-    color: $gray-600;
+    color: $accent-purple;
     font-weight: 500;
     transition: all 0.2s;
     
     &:hover {
       background: $bg-gray;
-      color: $text-dark;
+      color: $accent-purple;
       
       svg path {
         stroke: #000;
@@ -222,8 +250,13 @@ body {
     }
     
     &.active {
-      background: $bg-gray;
-      color: $text-dark;
+      background: $accent-purple;
+      color: #ffffff;
+      border-left: 3px solid $accent-purple;
+
+      svg path {
+        stroke: #ffffff;
+      }
     }
     
     span {
@@ -246,7 +279,7 @@ body {
 
 // Header
 .header {
-  background: white;
+  background: #ffffff;
   padding: 1rem 2rem;
   border-bottom: 1px solid $border-color;
   display: flex;

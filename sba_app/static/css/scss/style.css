@@ -11,6 +11,10 @@ body {
   color: #111827;
 }
 
+.section-title-purple {
+  color: #bd5fcc;
+}
+
 .card {
   background: white;
   border-radius: 0.5rem;
@@ -37,11 +41,13 @@ body {
 
 .stat-card {
   padding: 1.5rem;
+  background-color: #bd5fcc;
+  color: #FFFFFF;
 }
 .stat-card-icon {
   width: 3.2rem;
   height: 3.2rem;
-  background: #111827;
+  background: #ffffff;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -49,20 +55,20 @@ body {
   margin-right: 0.75rem;
 }
 .stat-card-icon i {
-  color: #DDFF00;
+  color: #bd5fcc;
   font-size: 1.25rem;
 }
 
 .stat-label {
   font-size: 15px;
-  color: #6B7280;
+  color: #FFFFFF;
   font-weight: 400;
   letter-spacing: 0;
 }
 .stat-value {
   font-size: 1.8em;
   font-weight: 600;
-  color: #111827;
+  color: #FFFFFF;
   line-height: 1.2;
   letter-spacing: 0;
 }
@@ -71,20 +77,24 @@ body {
   padding: 1.5rem;
 }
 
-.progress-label {
-  font-size: 15px;
-  color: #6B7280;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-.progress-value {
-  font-size: 1.875rem;
-  font-weight: 600;
-  color: #111827;
-}
-
 .table-card {
   padding: 1.5rem;
+}
+
+.summary-card {
+  background-color: #bd5fcc;
+  color: #FFFFFF;
+}
+.summary-card .section-title-purple {
+  color: #FFFFFF;
+}
+.summary-card .table-container {
+  background-color: #FFFFFF;
+  color: #111827;
+}
+.summary-card .table-header,
+.summary-card .table-cell {
+  color: #111827;
 }
 
 .table {
@@ -122,7 +132,7 @@ body {
 
 .sidebar {
   width: 18rem;
-  background: white;
+  background: #F3F4F6;
   border-right: 1px solid #E5E7EB;
   height: 100vh;
   position: fixed;
@@ -134,20 +144,24 @@ body {
   display: flex;
   align-items: center;
   padding: 1.25rem;
-  color: #4F545B;
+  color: #bd5fcc;
   font-weight: 500;
   transition: all 0.2s;
 }
 .sidebar-link:hover {
-  background: #F9FAFB;
-  color: #111827;
+  background: #F3F4F6;
+  color: #bd5fcc;
 }
 .sidebar-link:hover svg path {
   stroke: #000;
 }
 .sidebar-link.active {
-  background: #F9FAFB;
-  color: #111827;
+  background: #bd5fcc;
+  color: #ffffff;
+  border-left: 3px solid #bd5fcc;
+}
+.sidebar-link.active svg path {
+  stroke: #ffffff;
 }
 .sidebar-link span {
   font-size: 17px;
@@ -164,7 +178,7 @@ body {
 }
 
 .header {
-  background: white;
+  background: #ffffff;
   padding: 1rem 2rem;
   border-bottom: 1px solid #E5E7EB;
   display: flex;
