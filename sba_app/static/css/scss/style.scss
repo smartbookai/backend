@@ -44,7 +44,7 @@ $red: #EF4444;
 $border-gray: #E5E7EB;
 $border-radius: 8px;
 $shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-$accent-purple: #bd5fcc;
+$accent-purple: #62328A;
 $sidebar-gray: #b4b4b4;
 
 // Base styles
@@ -322,8 +322,8 @@ body {
   border-bottom: 2px solid transparent;
   
   &.active {
-    color: $blue-link;
-    border-bottom-color: $blue-link;
+    color: $accent-purple;
+    border-bottom-color: $accent-purple;
   }
 }
 

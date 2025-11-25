@@ -12,7 +12,7 @@ body {
 }
 
 .section-title-purple {
-  color: #bd5fcc;
+  color: #62328A;
 }
 
 .card {
@@ -41,7 +41,7 @@ body {
 
 .stat-card {
   padding: 1.5rem;
-  background-color: #bd5fcc;
+  background-color: #62328A;
   color: #FFFFFF;
 }
 .stat-card-icon {
@@ -55,7 +55,7 @@ body {
   margin-right: 0.75rem;
 }
 .stat-card-icon i {
-  color: #bd5fcc;
+  color: #62328A;
   font-size: 1.25rem;
 }
 
@@ -82,7 +82,7 @@ body {
 }
 
 .summary-card {
-  background-color: #bd5fcc;
+  background-color: #62328A;
   color: #FFFFFF;
 }
 .summary-card .section-title-purple {
@@ -144,21 +144,21 @@ body {
   display: flex;
   align-items: center;
   padding: 1.25rem;
-  color: #bd5fcc;
+  color: #62328A;
   font-weight: 500;
   transition: all 0.2s;
 }
 .sidebar-link:hover {
   background: #F3F4F6;
-  color: #bd5fcc;
+  color: #62328A;
 }
 .sidebar-link:hover svg path {
   stroke: #000;
 }
 .sidebar-link.active {
-  background: #bd5fcc;
+  background: #62328A;
   color: #ffffff;
-  border-left: 3px solid #bd5fcc;
+  border-left: 3px solid #62328A;
 }
 .sidebar-link.active svg path {
   stroke: #ffffff;
@@ -215,8 +215,8 @@ body {
   border-bottom: 2px solid transparent;
 }
 .tab-button.active {
-  color: #2563EB;
-  border-bottom-color: #2563EB;
+  color: #62328A;
+  border-bottom-color: #62328A;
 }
 
 .notification-bell {
