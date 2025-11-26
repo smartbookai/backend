@@ -458,9 +458,6 @@ def api_delete_supplier(request, supplier_id):
     return JsonResponse({'success': True})
 
 
-# ==========================
-# Clients CRUD (company-scoped)
-# ==========================
 @login_required
 def api_show_table_clients(request):
     company = get_current_company(request.user)
@@ -765,16 +762,8 @@ def api_update_worker(request, worker_id):
             # User
             user.first_name = data.get('first_name') or ''
             user.last_name = data.get('last_name') or ''
-            # Si NO querés permitir cambiar email/username, no lo toques.
-            # Si lo permitís:
-            # new_email = (data.get('email') or '').strip().lower()
-            # if new_email and new_email != user.username:
-            #     if User.objects.filter(username=new_email).exclude(pk=user.pk).exists():
-            #         return JsonResponse({'error': 'Ya existe un usuario con ese email.'}, status=400)
-            #     user.username = new_email
-            #     user.email = new_email
 
-            # Password (opcional)
+            # Password
             pwd = data.get('password') or ''
             pwd2 = data.get('password_confirm') or ''
             if pwd or pwd2:
@@ -793,7 +782,6 @@ def api_update_worker(request, worker_id):
             profile.phone = data.get('phone') or None
             dob = data.get('date_of_birth') or ''
             if dob:
-                # viene como YYYY-MM-DD
                 try:
                     profile.date_of_birth = datetime.strptime(dob, '%Y-%m-%d').date()
                 except ValueError:
@@ -1007,38 +995,27 @@ def api_update_invoice_sent(request, invoice_id):
 
 
 def safe_decimal(value):
-    """
-    Convierte el valor a Decimal seguro. Si es None, vacío o inválido, devuelve Decimal('0').
-    Maneja formato europeo (1.234,56) y americano (1,234.56)
-    """
     try:
         if value is None or str(value).strip() == "":
             return Decimal("0")
 
         value_str = str(value).strip()
 
-        # Detectar formato: si tiene coma Y punto, determinar cuál es separador decimal
         if "," in value_str and "." in value_str:
-            # Si la coma está después del punto: formato americano 1,234.56
             if value_str.rindex(",") < value_str.rindex("."):
-                value_str = value_str.replace(",", "")  # Quitar separador de miles
-            # Si el punto está después de la coma: formato europeo 1.234,56
+                value_str = value_str.replace(",", "")
             else:
                 value_str = value_str.replace(".", "").replace(",", ".")
-        # Solo tiene coma: puede ser separador decimal europeo (1,50) o separador de miles americano (1,234)
         elif "," in value_str:
-            # Si hay más de 3 dígitos después de la coma, es separador de miles
             parts = value_str.split(",")
             if len(parts[-1]) == 3 and len(parts) > 1:
-                value_str = value_str.replace(",", "")  # Separador de miles: 1,234
+                value_str = value_str.replace(",", "")
             else:
-                value_str = value_str.replace(",", ".")  # Separador decimal: 1,50
-        # Solo tiene punto: puede ser separador decimal (1.50) o separador de miles (1.234)
+                value_str = value_str.replace(",", ".")
         elif "." in value_str:
             parts = value_str.split(".")
             if len(parts[-1]) == 3 and len(parts) > 1 and len(parts[0]) <= 3:
-                value_str = value_str.replace(".", "")  # Separador de miles: 1.234
-            # Si no, es separador decimal, dejarlo como está
+                value_str = value_str.replace(".", "")
 
         return Decimal(value_str)
     except (InvalidOperation, TypeError, ValueError):
@@ -1059,7 +1036,6 @@ def api_create_invoice_sent(request):
         return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
     try:
-        # 🧠 Paso 1: Extraer datos con OpenAI (PDF o imagen)
         result = extract_invoice_data(file)
 
         if not result:
@@ -1072,11 +1048,6 @@ def api_create_invoice_sent(request):
         client_data = result.get("client", {}) or {}
         lines_data = result.get("lines", []) or []
 
-        #print(f"📊 Datos extraídos - Invoice: {invoice_data}")
-        #print(f"👤 Cliente: {client_data}")
-        #print(f"📝 Líneas: {lines_data}")
-
-        # 🧍 Paso 2: Buscar o crear cliente
         client = None
         filters = {"company": company}
 
@@ -1099,7 +1070,6 @@ def api_create_invoice_sent(request):
                 document_number=client_data.get("document_number"),
             )
 
-        # 🧾 Paso 3: Crear factura
         invoice = SalesInvoice.objects.create(
             company=company,
             client=client,
@@ -1114,7 +1084,6 @@ def api_create_invoice_sent(request):
             notes=invoice_data.get("notes") or "",
         )
 
-        # 📝 Paso 4: Crear líneas de factura
         created_lines = []
         if lines_data:
             for line_data in lines_data:
@@ -1133,7 +1102,6 @@ def api_create_invoice_sent(request):
                     "vat_rate": str(line.vat_rate),
                     "subtotal": str(line.subtotal()),
                 })
-                #print(f"✅ Línea creada: {line.description} - Qty: {line.quantity} - Price: {line.unit_price}")
         else:
             print("⚠️ No se encontraron líneas en la factura")
 
@@ -1150,7 +1118,6 @@ def api_create_invoice_sent(request):
         import traceback
         print("🔥 ERROR en api_create_invoice_sent:", traceback.format_exc())
 
-        # ✅ CRÍTICO: Forzar rollback explícito
         transaction.set_rollback(True)
 
         return JsonResponse({"success": False, "message": str(e)}, status=500)
