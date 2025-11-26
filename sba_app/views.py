@@ -1044,6 +1044,8 @@ def api_create_invoice_sent(request):
                 "message": "No se pudo extraer información de la factura."
             }, status=400)
 
+        tokens = result.get("tokens")
+
         invoice_data = result.get("invoice", {}) or {}
         client_data = result.get("client", {}) or {}
         lines_data = result.get("lines", []) or []
@@ -1083,6 +1085,10 @@ def api_create_invoice_sent(request):
             total_amount=safe_decimal(invoice_data.get("total_amount")),
             notes=invoice_data.get("notes") or "",
         )
+
+        if tokens is not None:
+            invoice.tokens = tokens
+            invoice.save(update_fields=["tokens"])
 
         created_lines = []
         if lines_data:
