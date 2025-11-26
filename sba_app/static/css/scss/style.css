@@ -1393,11 +1393,13 @@ a, input, select, button {
     top: 0;
     width: 80vw;
     height: 100vh;
-    background: white;
+    background: #F3F4F6;
     border-right: 1px solid #E5E7EB;
     border-bottom: none;
     z-index: 9000;
     transition: left 0.3s;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .sidebar.active {
     left: 0;
