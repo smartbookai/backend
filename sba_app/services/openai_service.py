@@ -223,17 +223,16 @@ PURCHASE_INVOICE_PROMPT = (
     "- Si no encontrás un dato, ponelo como null\n"
     "- Para las líneas (lines), extraé TODOS los ítems/productos/servicios de la factura\n"
     "- Si no hay IVA especificado en la línea, usa \"0.00\" en vat_rate\n"
-    "- Cantidad (quantity) por defecto es \"1.00\" si no está especificada\n"
-    "- NO inventes valores\n"
 )
 
 
 def extract_purchase_invoice_data(file):
     content_type = file.content_type.lower()
     result = {}
+    tokens = None
 
     try:
-        # --- 🧾 CASO 1: PDF ---
+        # --- CASO 1: PDF ---
         if "pdf" in content_type:
             pdf_bytes = file.read()
 
@@ -256,11 +255,15 @@ def extract_purchase_invoice_data(file):
                     ],
                     response_format={"type": "json_object"},
                 )
+
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    tokens = getattr(usage, "total_tokens", None)
             else:
                 print("⚠️ No se pudo extraer texto del PDF")
-                return {}
+                return {"tokens": None}
 
-        # --- 🖼️ CASO 2: Imagen (JPG / PNG) ---
+        # --- CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
             base64_image = base64.b64encode(image_bytes).decode('utf-8')
@@ -286,99 +289,26 @@ def extract_purchase_invoice_data(file):
                 ],
                 response_format={"type": "json_object"},
             )
+
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                tokens = getattr(usage, "total_tokens", None)
         else:
             raise ValueError("Formato de archivo no soportado")
 
         content = response.choices[0].message.content
         print(f"🤖 Respuesta de OpenAI (Purchase): {content}")
         result = json.loads(content)
+        result["tokens"] = tokens
 
     except Exception as e:
         print(f"⚠️ Error en extract_purchase_invoice_data: {e}")
         import traceback
         print(traceback.format_exc())
-        result = {}
+        result = {"tokens": None}
 
     return result
 
-
-#############################################Here stars the code for payroll extraction#####################################################
-# 🧠 Prompt para extracción de nóminas
-BASE_PROMPT_PAYROLL = (
-    "Sos un extractor de datos de nóminas españolas. "
-    "Analizá CUIDADOSAMENTE el contenido de la nómina y devolvé un JSON EXACTO con esta estructura.\n\n"
-    "REGLAS CRÍTICAS:\n"
-    "- SOLO extraé datos que VEAS CLARAMENTE en el documento\n"
-    "- Si NO estás 100% seguro de un dato, poné null\n"
-    "- NO inventes, supongas o deduzcas información\n"
-    "- NO completes datos faltantes con información lógica\n"
-    "- Si un campo está borroso o no visible, poné null\n\n"
-
-    "UBICACIONES ESPECÍFICAS EN NÓMINAS ESPAÑOLAS:\n"
-    "- DIRECCIÓN TRABAJADOR: Buscar en la parte superior del documento, junto al nombre del trabajador\n"
-    "- DIRECCIÓN EMPRESA: Buscar en la sección 'EMPRESA' o 'DOMICILIO EMPRESA' (NO usar esta para el trabajador)\n"
-    "- SS EMPRESA: Buscar en la tabla inferior 'APORTACIÓN EMPRESARIAL' y SUMAR todas las líneas:\n"
-    "  * Contingencias comunes\n"
-    "  * MEI (Mecanismo Equidad Intergeneracional)\n"
-    "  * AT y EP (Accidentes de trabajo)\n"
-    "  * Desempleo\n"
-    "  * Formación Profesional\n"
-    "  * Fondo Garantía Salarial\n"
-    "  NO usar el campo 'COSTE EMPRESA' que incluye salario + aportaciones\n\n"
-
-    "ESTRUCTURA ESPERADA:\n"
-    "{\n"
-    "  \"employee\": {\n"
-    "    \"first_name\": \"string\" (buscar en sección TRABAJADOR, parte superior),\n"
-    "    \"last_name\": \"string\" (buscar en sección TRABAJADOR, parte superior),\n"
-    "    \"document_type\": \"DNI\" o \"NIE\" o \"Pasaporte\" (buscar DNI/NIF/NIE),\n"
-    "    \"document_number\": \"string\" (número de documento del trabajador),\n"
-    "    \"email\": null (raramente está en nóminas),\n"
-    "    \"phone\": null (raramente está en nóminas),\n"
-    "    \"date_of_birth\": null (raramente está en nóminas),\n"
-    "    \"address\": \"string\" (buscar domicilio del TRABAJADOR en la parte superior, NO la dirección de la empresa),\n"
-    "    \"job_position\": \"string\" (buscar categoría profesional/grupo profesional),\n"
-    "    \"department\": null (raramente visible),\n"
-    "    \"contract_type\": \"indefinido\" o \"temporal\" o null,\n"
-    "    \"hire_date\": \"YYYY-MM-DD\" (buscar fecha de antigüedad/alta) o null,\n"
-    "    \"social_security_number\": \"string\" (buscar Nº Afiliación SS o NAF),\n"
-    "    \"bank_account\": null (raramente visible),\n"
-    "    \"collective_agreement\": \"string\" (buscar convenio) o null\n"
-    "  },\n"
-    "  \"payroll\": {\n"
-    "    \"period_start\": \"YYYY-MM-DD\" (buscar período de liquidación - día 1),\n"
-    "    \"period_end\": \"YYYY-MM-DD\" (buscar período de liquidación - último día),\n"
-    "    \"payment_date\": \"YYYY-MM-DD\" (buscar fecha de pago) o usar period_end,\n"
-    "    \"issue_date\": \"YYYY-MM-DD\" (buscar fecha de emisión/elaboración),\n"
-    "    \"base_salary\": \"0.00\" (buscar en DEVENGOS > Salario base),\n"
-    "    \"salary_supplements\": \"0.00\" (suma de todos los complementos en DEVENGOS, NO incluir salario base),\n"
-    "    \"overtime\": \"0.00\" (buscar horas extras),\n"
-    "    \"bonuses\": \"0.00\" (buscar gratificaciones/pagas),\n"
-    "    \"total_accrued\": \"0.00\" (buscar TOTAL DEVENGADO o T. DEVENGADO),\n"
-    "    \"social_security_employee\": \"0.00\" (buscar en DEDUCCIONES > Cotización Contingencias Comunes),\n"
-    "    \"irpf\": \"0.00\" (buscar en DEDUCCIONES > IRPF o Tributación),\n"
-    "    \"other_deductions\": \"0.00\" (suma de otras deducciones: MEI, Formación, Desempleo del trabajador),\n"
-    "    \"total_deductions\": \"0.00\" (buscar TOTAL A DEDUCIR o T. A DEDUCIR),\n"
-    "    \"net_salary\": \"0.00\" (buscar LÍQUIDO A PERCIBIR),\n"
-    "    \"social_security_company\": \"0.00\" (buscar en la tabla inferior y SUMAR todas las 'APORTACIÓN EMPRESARIAL': Contingencias comunes + MEI + AT/EP + Desempleo + Formación + Fondo Garantía. NO usar 'COSTE EMPRESA'),\n"
-    "    \"notes\": null\n"
-    "  }\n"
-    "}\n\n"
-    "IMPORTANTE - FORMATO DE NÚMEROS:\n"
-    "- CRÍTICO: NO uses NUNCA comas en los números\n"
-    "- Formato CORRECTO: \"1412.06\"\n"
-    "- Formato INCORRECTO: \"1,412.06\"\n"
-    "- Los montos deben ser strings sin comas: \"1500.00\", \"0.00\"\n"
-    "- USA punto como separador decimal\n"
-    "- NO uses comas como separador de miles\n"
-    "- Si no encontrás un monto CLARAMENTE, usa \"0.00\"\n"
-    "- Si no encontrás un dato, ponelo como null\n"
-    "- Las fechas deben estar en formato YYYY-MM-DD\n"
-    "- Para social_security_company: SUMAR líneas de aportación empresarial, NO usar COSTE EMPRESA\n"
-    "- Para address del employee: Buscar SOLO en la sección del trabajador (parte superior), ignorar dirección de empresa\n"
-    "- Si la imagen está borrosa o ilegible, responde con null en los campos poco claros\n"
-    "- NUNCA inventes información\n"
-)
 
 def extract_payroll_data(file):
     """

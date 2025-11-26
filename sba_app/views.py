@@ -1090,6 +1090,10 @@ def api_create_invoice_sent(request):
             invoice.tokens = tokens
             invoice.save(update_fields=["tokens"])
 
+        if tokens is not None:
+            invoice.tokens = tokens
+            invoice.save(update_fields=["tokens"])
+
         created_lines = []
         if lines_data:
             for line_data in lines_data:
@@ -1358,6 +1362,8 @@ def api_create_invoice_received(request):
                 "message": "No se pudo extraer información de la factura."
             }, status=400)
 
+        tokens = result.get("tokens")
+
         invoice_data = result.get("invoice", {}) or {}
         supplier_data = result.get("supplier", {}) or {}  # ← Ahora viene como "supplier"
         lines_data = result.get("lines", []) or []
@@ -1399,6 +1405,10 @@ def api_create_invoice_received(request):
             total_amount=safe_decimal(invoice_data.get("total_amount")),
             notes=invoice_data.get("notes") or "",
         )
+
+        if tokens is not None:
+            invoice.tokens = tokens
+            invoice.save(update_fields=["tokens"])
 
         # 📝 Paso 4: Crear líneas de factura
         created_lines = []
