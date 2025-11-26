@@ -12,15 +12,17 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </head>
+<body>
 
-<div class="row align-items-center justify-content-center mt-5 pt-5 text-center flex-column">
-    <p style="width: 100px">SBA</p>
+<div class="auth-shell">
+    <div class="auth-logo">SBA</div>
+    <div class="auth-subtitle">SmartBook AI</div>
 
-    <div class="col-md-5 text-center mb-3" id="resetPwdContent" style="display: none;">
+    <div class="text-center mb-3" id="resetPwdContent" style="display: none;">
         <h5 class="mb-3">Reset your password</h5>
         <p id="reset-p">To reset your password enter the email you used to create your account. We will send you a code so you can recover your account.</p>
     </div>
-    <div class="col-md-3">
+    <div class="auth-card-wrapper">
         <div class="login-container">
             <!-- SVG Icons Definition -->
             <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
@@ -67,12 +69,12 @@
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="login">
                 <div class="mb-3 text-start">
-                    <label for="username" class="form-label">Username</label>
+                    <label for="username" class="form-label white-text">Username</label>
                     <input type="text" class="form-control" id="username" name="username"
                            placeholder="Ingrese su email" required>
                 </div>
                 <div class="mb-3 text-start">
-                    <label for="password" class="form-label">Password</label>
+                    <label for="password" class="form-label white-text">Password</label>
                     <input type="password" class="form-control" id="password" name="password"
                            placeholder="Ingrese su password" required>
                 </div>
@@ -122,9 +124,9 @@
                 <div class="mb-3 text-start">
                     <label for="repeat_new_pwd" class="form-label">Confirm new password</label>
                     <input type="password" class="form-control" id="repeat_new_pwd" name="repeat_new_pwd"
-                           placeholder="Confirm your new password" required>
+                           placeholder="Repeat your new password" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100 mt-2">Set new password</button>
+                <button type="submit" class="btn btn-primary w-100 mt-2">Save new password</button>
             </form>
         </div>
     </div>
@@ -164,7 +166,7 @@ $(document).ready(function() {
     $('form').on('submit', function(e) {
         const formId = $(this).attr('id');
 
-        // Add specific form handling here if needed
+        // Extra validation for new password
         if (formId === 'newPwdForm') {
             const newPwd = $('#new_pwd').val();
             const repeatPwd = $('#repeat_new_pwd').val();
@@ -175,13 +177,13 @@ $(document).ready(function() {
                 return false;
             }
         }
-    });
 
-    {% if form_status == 'code_sent' %}
-        showForm('#sendCodeForm', 'Enter the code we sent you via email.');
-    {% elif form_status == 'code_verified' %}
-        showForm('#newPwdForm', 'Enter a new password.');
-    {% endif %}
+        {% if form_status == 'code_sent' %}
+            showForm('#sendCodeForm', 'Enter the code we sent you via email.');
+        {% elif form_status == 'code_verified' %}
+            showForm('#newPwdForm', 'Enter a new password.');
+        {% endif %}
+    });
 });
 </script>
 
@@ -194,4 +196,93 @@ $(document).ready(function() {
     .transition {
         transition: all 0.2s ease-in-out;
     }
+
+    /* Auth layout */
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #b4b4b4;
+        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+
+    .auth-shell {
+        text-align: center;
+    }
+
+    .auth-logo {
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #62328A;
+        margin-bottom: 4px;
+    }
+
+    .auth-subtitle {
+        font-size: 20px;
+        color: #111827;
+        margin-bottom: 24px;
+    }
+
+    .auth-card-wrapper {
+        display: flex;
+        justify-content: center;
+    }
+
+    .login-container {
+        background: #62328A;
+        border: 1px solid #b4b4b4;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        padding: 24px 0 20px;
+        width: 360px;
+        max-width: 100%;
+    }
+
+    .login-container form {
+        padding: 0 24px;
+    }
+
+    .login-container .alert {
+        margin: 0 24px 12px 24px;
+        text-align: left;
+    }
+
+    .form-control {
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .form-control:focus {
+        border-color: #62328A;
+        box-shadow: 0 0 0 1px rgba(98,50,138,0.2);
+    }
+
+    .btn-primary {
+        background-color: #111111;
+        border-color: #111111;
+        border-radius: 0;
+        font-weight: 500;
+    }
+
+    .btn-primary:hover,
+    .btn-primary:focus {
+        background-color: #000000;
+        border-color: #000000;
+    }
+
+    @media (max-width: 480px) {
+        .login-container {
+            width: 100%;
+            margin: 0 16px;
+        }
+    }
+
+    .white-text {
+        color: #ffffff;
+    }
 </style>
+
+</body>
+</html>

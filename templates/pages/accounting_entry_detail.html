@@ -12,26 +12,26 @@
     </div>
 
     <!-- Cabecera del asiento -->
-    <div class="card" style="padding:16px 20px 20px 20px;margin-bottom:18px;">
+    <div class="card" style="padding:16px 20px 20px 20px;margin-bottom:18px;background:#62328A;color:#ffffff;">
       <h2 style="font-size:15px;margin:0 0 12px 0;">Datos generales</h2>
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:flex-end;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Número</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Número</label>
           <input type="text" value="{{ entry.entry_number }}" readonly
                  style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Fecha asiento</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Fecha asiento</label>
           <input type="date" value="{{ entry.date|date:'Y-m-d' }}"
                  style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Estado</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Estado</label>
           <input type="text" value="{{ entry.get_status_display }}" readonly
                  style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Origen</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Origen</label>
           <input type="text" value="{% if entry.purchase_invoice %}Factura recibida {{ entry.purchase_invoice.invoice_number }}{% elif entry.sales_invoice %}Factura enviada {{ entry.sales_invoice.invoice_number }}{% elif entry.payroll %}Nómina {{ entry.payroll.employee.full_name }}{% else %}Manual{% endif %}" readonly
                  style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;">
         </div>
@@ -39,25 +39,25 @@
 
       <div style="margin-top:12px;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:flex-end;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Comentario / descripción</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Comentario / descripción</label>
           <input type="text" value="{{ entry.description }}"
                  style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Total Debe</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Total Debe</label>
           <input type="text" value="{{ entry.debit_total }}" readonly
-                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;text-align:right;">
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;text-align:right;">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#4B5563;margin-bottom:4px;">Total Haber</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#ffffff;margin-bottom:4px;">Total Haber</label>
           <input type="text" value="{{ entry.credit_total }}" readonly
-                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;background-color:#F9FAFB;text-align:right;">
+                 style="width:100%;border:1px solid #D1D5DB;border-radius:6px;padding:6px 8px;font-size:13px;text-align:right;">
         </div>
       </div>
     </div>
 
     <!-- Líneas del asiento con inputs editables -->
-    <div class="card" style="padding:12px 20px 16px 20px;">
+    <div class="card" style="padding:12px 20px 16px 20px;background:#62328A;color:#ffffff;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <h2 style="font-size:15px;margin:0;">Partidas del asiento contable</h2>
       </div>
@@ -108,10 +108,10 @@
       <button type="button" class="btn-secondary" onclick="onEditEntryClick()">Editar</button>
       <button type="button" class="btn-primary" style="background:#10B981;border-color:#10B981;" onclick="onConfirmEntryClick()">Confirmar</button>
       {% endif %}
-      <button type="button" class="btn-secondary" onclick="onExportEntryExcelClick()">Exportar Excel</button>
-      <button type="button" class="btn-secondary" onclick="onExportEntryCsvClick()">Exportar CSV</button>
-      <button type="button" class="btn-secondary" onclick="onExportEntryPdfClick()">Exportar PDF</button>
-      <button type="button" class="btn-secondary" onclick="onExportEntryXtmlClick()">Exportar XTML</button>
+      <button type="button" class="btn-secondary" style="background:#62328A;color:#ffffff;border-color:#62328A;" onclick="onExportEntryExcelClick()">Exportar Excel</button>
+      <button type="button" class="btn-secondary" style="background:#62328A;color:#ffffff;border-color:#62328A;" onclick="onExportEntryCsvClick()">Exportar CSV</button>
+      <button type="button" class="btn-secondary" style="background:#62328A;color:#ffffff;border-color:#62328A;" onclick="onExportEntryPdfClick()">Exportar PDF</button>
+      <button type="button" class="btn-secondary" style="background:#62328A;color:#ffffff;border-color:#62328A;" onclick="onExportEntryXtmlClick()">Exportar XTML</button>
     </div>
   </div>
 </section>
