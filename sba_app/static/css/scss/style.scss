@@ -1207,6 +1207,29 @@ a, input, select, button {
           }
       }
   }
+
+  .table-header-bar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .table-header-title {
+    flex: 1 1 100%;
+  }
+
+  .table-header-search {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .table-header-search input {
+    width: 100% !important;
+  }
+
+  .page-header-row + .card.table-card {
+    margin-top: 24px !important;
+  }
 } 
 .cart-card svg{
   width: 100%;
