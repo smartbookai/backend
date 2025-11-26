@@ -311,7 +311,7 @@ def extract_purchase_invoice_data(file):
 
 
 #############################################Here stars the code for payroll extraction#####################################################
-# 🧠 Prompt para extracción de nóminas
+# Prompt para extracción de nóminas
 BASE_PROMPT_PAYROLL = (
     "Sos un extractor de datos de nóminas españolas. "
     "Analizá CUIDADOSAMENTE el contenido de la nómina y devolvé un JSON EXACTO con esta estructura.\n\n"
@@ -395,9 +395,10 @@ def extract_payroll_data(file):
     """
     content_type = file.content_type.lower()
     result = {}
+    tokens = None
 
     try:
-        # --- 🧾 CASO 1: PDF ---
+        # --- CASO 1: PDF ---
         if "pdf" in content_type:
             pdf_bytes = file.read()
 
@@ -417,7 +418,7 @@ def extract_payroll_data(file):
                 buf.seek(0)
                 image_bytes = buf.read()
 
-                # ✅ Codificar imagen en base64
+                # Codificar imagen en base64
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
                 response = client.chat.completions.create(
@@ -439,6 +440,10 @@ def extract_payroll_data(file):
                     ],
                     response_format={"type": "json_object"},
                 )
+
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    tokens = getattr(usage, "total_tokens", None)
             else:
                 # Si hay texto legible, usarlo directamente
                 print(f"✅ Texto extraído del PDF de nómina ({len(text)} caracteres)")
@@ -451,11 +456,15 @@ def extract_payroll_data(file):
                     response_format={"type": "json_object"},
                 )
 
-        # --- 🖼️ CASO 2: Imagen (JPG / PNG) ---
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    tokens = getattr(usage, "total_tokens", None)
+
+        # --- CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
 
-            # ✅ Codificar imagen en base64
+            # Codificar imagen en base64
             base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
             # Detectar el mime type correcto
@@ -481,6 +490,9 @@ def extract_payroll_data(file):
                 response_format={"type": "json_object"},
             )
 
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                tokens = getattr(usage, "total_tokens", None)
         else:
             raise ValueError("Formato de archivo no soportado")
 
@@ -488,12 +500,13 @@ def extract_payroll_data(file):
         content = response.choices[0].message.content
         print(f"🤖 Respuesta de OpenAI (Nómina): {content}")
         result = json.loads(content)
+        result["tokens"] = tokens
 
     except Exception as e:
         print(f"⚠️ Error en extract_payroll_data: {e}")
         import traceback
         print(traceback.format_exc())
-        result = {}
+        result = {"tokens": None}
 
     return result
 

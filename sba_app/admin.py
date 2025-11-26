@@ -127,7 +127,7 @@ class PayrollAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Notas', {
-            'fields': ('notes',)
+            'fields': ('notes', 'tokens')
         }),
         ('Metadata', {
             'fields': ('created_at', 'updated_at'),

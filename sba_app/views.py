@@ -1976,6 +1976,8 @@ def api_create_payroll(request):
                 "message": "No se pudo extraer información de la nómina."
             }, status=400)
 
+        tokens = result.get("tokens")
+
         payroll_data = result.get("payroll", {}) or {}
         employee_data = result.get("employee", {}) or {}
 
@@ -2069,6 +2071,10 @@ def api_create_payroll(request):
 
             notes=payroll_data.get("notes") or "",
         )
+
+        if tokens is not None:
+            payroll.tokens = tokens
+            payroll.save(update_fields=["tokens"])
 
         return JsonResponse({
             "success": True,
