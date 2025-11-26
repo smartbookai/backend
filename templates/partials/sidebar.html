@@ -2,7 +2,7 @@
 
 <aside class="sidebar" id="sidebar">
   <div class="d-flex align-items-center gap-2 px-3 mb-3" style="display:flex;align-items:center;justify-content:flex-start;text-align:left;gap:.5rem;">
-      <img src="{% static 'images/sba_sidebar_logo.png' %}" alt="SBA" style="max-height:80px;height:auto;object-fit:contain;display:block;margin:0;">
+      <img src="{% static 'images/sba_sidebar_logo.png' %}" alt="SBA" style="max-height:120px;height:auto;object-fit:contain;display:block;margin:0;">
   </div>
   <nav>
     <a href="{% url 'index' %}" class="sidebar-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}" style="text-decoration:none;">
