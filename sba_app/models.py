@@ -122,6 +122,7 @@ class BaseInvoice(models.Model):
 # Facturas emitidas (ventas)
 class SalesInvoice(BaseInvoice):
     client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='sales_invoices')
+    tokens = models.PositiveIntegerField(null=True,blank=True,default=None)
 
     class Meta:
         verbose_name = "Sales Invoice"
@@ -137,6 +138,7 @@ class PurchaseInvoice(BaseInvoice):
     account_expense = models.CharField(max_length=20, null=True, blank=True)
     account_supplier = models.CharField(max_length=20, null=True, blank=True)
     account_vat_input = models.CharField(max_length=20, null=True, blank=True)
+    tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
 
     class Meta:
         verbose_name = "Purchase Invoice"
@@ -177,6 +179,7 @@ class AccountingEntry(models.Model):
     status = models.CharField(max_length=20, choices=[('draft', 'Borrador'), ('posted', 'Confirmado')], default='draft')
 
     created_at = models.DateTimeField(auto_now_add=True)
+    tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
 
     class Meta:
         unique_together = ('company', 'entry_number')
@@ -295,6 +298,7 @@ class Payroll(models.Model):
     notes = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
 
     def save(self, *args, **kwargs):
         # Validación: Total devengado = deducciones + líquido
