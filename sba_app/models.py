@@ -125,8 +125,8 @@ class SalesInvoice(BaseInvoice):
     tokens = models.PositiveIntegerField(null=True,blank=True,default=None)
 
     class Meta:
-        verbose_name = "Sales Invoice"
-        verbose_name_plural = "Sales Invoices"
+        verbose_name = "Factura enviada"
+        verbose_name_plural = "Facturas enviadas"
         unique_together = ('company', 'invoice_number')
 
 
@@ -141,8 +141,8 @@ class PurchaseInvoice(BaseInvoice):
     tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
 
     class Meta:
-        verbose_name = "Purchase Invoice"
-        verbose_name_plural = "Purchase Invoices"
+        verbose_name = "Factura recibida"
+        verbose_name_plural = "Facturas recibidas"
         unique_together = ('company', 'invoice_number')
 
 
