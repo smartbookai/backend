@@ -85,6 +85,9 @@ urlpatterns = [
 
     #dashboard API endpoints
     path('api/dashboard/last-invoices/', views.api_dashboard_last_invoices, name='api_dashboard_last_invoices'),
+
+    #terms and conditions API endpoint
+    path('api/accept-terms/', views.api_accept_terms, name='api_accept_terms'),
 ]
 
 if settings.DEBUG:

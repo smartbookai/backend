@@ -3220,3 +3220,14 @@ def api_export_accounting_entry_xtml(request, entry_id):
 
     response.write(body)
     return response
+
+
+@login_required
+@require_POST
+def api_accept_terms(request):
+    """Endpoint para aceptar los términos y condiciones."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.terms_accepted = True
+    profile.terms_accepted_at = timezone.now()
+    profile.save()
+    return JsonResponse({'success': True})

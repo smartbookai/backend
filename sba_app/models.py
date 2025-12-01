@@ -16,6 +16,8 @@ class UserProfile(models.Model):
     marital_status = models.CharField(max_length=50, null=True, blank=True)
     nationality = models.CharField(max_length=100, null=True, blank=True)
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
+    terms_accepted = models.BooleanField(default=False, verbose_name="Términos aceptados")
+    terms_accepted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de aceptación")
 
     def __str__(self):
         return str(self.user.email)

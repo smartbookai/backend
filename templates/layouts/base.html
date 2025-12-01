@@ -30,10 +30,129 @@
     .form-field input,
     .form-field select,
     .form-field textarea { border:1px solid #E5E7EB; border-radius:8px; padding:10px 12px; width:100%; box-sizing:border-box; }
+
+    /* Terms Modal */
+    .terms-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(17,24,39,.7);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .terms-modal {
+      background: #fff;
+      border-radius: 12px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+    }
+    .terms-modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .terms-modal-header h2 {
+      margin: 0;
+      font-size: 20px;
+      color: #111827;
+    }
+    .terms-modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+    }
+    .terms-modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #E5E7EB;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .terms-checkbox-wrapper {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .terms-checkbox-wrapper input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      cursor: pointer;
+    }
+    .terms-checkbox-wrapper label {
+      font-size: 14px;
+      color: #374151;
+      cursor: pointer;
+    }
+    .terms-accept-btn {
+      background: #62328A;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .terms-accept-btn:disabled {
+      background: #D1D5DB;
+      cursor: not-allowed;
+    }
+    .terms-accept-btn:not(:disabled):hover {
+      background: #4c2570;
+    }
   </style>
   {% block extra_head %}{% endblock %}
 </head>
 <body>
+  {% if user.is_authenticated and user.profile and not user.profile.terms_accepted %}
+  <!-- Terms and Conditions Modal -->
+  <div class="terms-modal-overlay" id="termsModalOverlay">
+    <div class="terms-modal">
+      <div class="terms-modal-header">
+        <h2><i class="bi bi-file-earmark-text" style="margin-right:8px;"></i>Términos y Condiciones</h2>
+      </div>
+      <div class="terms-modal-body">
+        <p><strong>Bienvenido a SBA</strong></p>
+        <p>Antes de continuar, por favor lea y acepte nuestros términos y condiciones de uso:</p>
+        
+        <h4>1. Aceptación de los Términos</h4>
+        <p>Al acceder y utilizar esta plataforma, usted acepta estar sujeto a estos términos y condiciones de uso, todas las leyes y regulaciones aplicables, y acepta que es responsable del cumplimiento de las leyes locales aplicables.</p>
+        
+        <h4>2. Uso de la Plataforma</h4>
+        <p>Esta plataforma está diseñada para la gestión contable y administrativa de su empresa. Usted se compromete a utilizar la plataforma únicamente para fines legítimos y de acuerdo con estos términos.</p>
+        
+        <h4>3. Privacidad y Protección de Datos</h4>
+        <p>Nos comprometemos a proteger su privacidad y los datos de su empresa. La información proporcionada será tratada de acuerdo con nuestra política de privacidad y la normativa vigente de protección de datos (RGPD).</p>
+        
+        <h4>4. Responsabilidad</h4>
+        <p>El usuario es responsable de la veracidad y exactitud de los datos introducidos en la plataforma. SBA no se hace responsable de errores derivados de información incorrecta proporcionada por el usuario.</p>
+        
+        <h4>5. Propiedad Intelectual</h4>
+        <p>Todos los contenidos de esta plataforma, incluyendo textos, gráficos, logos, iconos y software, son propiedad de SBA o de sus proveedores de contenido y están protegidos por las leyes de propiedad intelectual.</p>
+        
+        <h4>6. Modificaciones</h4>
+        <p>SBA se reserva el derecho de modificar estos términos en cualquier momento. Las modificaciones entrarán en vigor desde su publicación en la plataforma.</p>
+      </div>
+      <div class="terms-modal-footer">
+        <div class="terms-checkbox-wrapper">
+          <input type="checkbox" id="termsCheckbox">
+          <label for="termsCheckbox">He leído y acepto los términos y condiciones de uso</label>
+        </div>
+        <button type="button" class="terms-accept-btn" id="termsAcceptBtn" disabled>Aceptar y continuar</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% include 'partials/sidebar.html' %}
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <main class="main-content">
@@ -91,6 +210,51 @@
       if (parts.length === 2) return parts.pop().split(';').shift();
     }
   </script>
+  {% if user.is_authenticated and user.profile and not user.profile.terms_accepted %}
+  <script>
+    (function() {
+      const checkbox = document.getElementById('termsCheckbox');
+      const acceptBtn = document.getElementById('termsAcceptBtn');
+      const overlay = document.getElementById('termsModalOverlay');
+
+      if (!checkbox || !acceptBtn) return;
+
+      checkbox.addEventListener('change', function() {
+        acceptBtn.disabled = !this.checked;
+      });
+
+      acceptBtn.addEventListener('click', function() {
+        if (!checkbox.checked) return;
+        
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = 'Procesando...';
+
+        fetch('/api/accept-terms/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            overlay.style.display = 'none';
+          } else {
+            alert('Error al aceptar los términos. Por favor, intente nuevamente.');
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Aceptar y continuar';
+          }
+        })
+        .catch(() => {
+          alert('Error de conexión. Por favor, intente nuevamente.');
+          acceptBtn.disabled = false;
+          acceptBtn.textContent = 'Aceptar y continuar';
+        });
+      });
+    })();
+  </script>
+  {% endif %}
   {% endblock %}
 </body>
 </html>
