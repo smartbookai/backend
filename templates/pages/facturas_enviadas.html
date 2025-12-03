@@ -49,9 +49,10 @@
   <div id="invoiceOverlay" class="overlay-mask" onclick="closeInvoiceDrawer()"></div>
   <aside id="invoiceDrawer" class="drawer" aria-hidden="true">
     <div class="drawer-loading-mask" hidden>
-      <div class="drawer-loading-box">
+      <div class="drawer-loading-box" style="flex-direction:column;text-align:center;">
         <img src="{% static 'images/SBA-loader.png' %}" alt="Cargando">
-        <span>Cargando...</span>
+        <span id="invoiceLoaderTitle" style="font-weight:600;">Procesando...</span>
+        <span id="invoiceLoaderFile" style="font-size:12px;color:#6B7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -60,11 +61,12 @@
     </div>
     <form id="invoiceForm" onsubmit="submitInvoice(event)" enctype="multipart/form-data">
       <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
-        <div style="color:#6B7280;font-size:16px;">Arrastrá y soltá el archivo aquí</div>
-        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta los archivos aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivos</div>
         <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
-        <input id="pdfInput" name="pdf_file" type="file" accept="application/pdf,image/*" style="display:none;" />
+        <input id="pdfInput" name="pdf_files" type="file" accept="application/pdf,image/*" multiple style="display:none;" />
         <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
+        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closeInvoiceDrawer()">Cancelar</button>
@@ -242,38 +244,71 @@ function renderInvoicesTable(rows) {
   });
 }
 
+const MAX_INVOICE_FILES = 10;
+let selectedInvoiceFiles = []; // Acumulador de archivos
+
 function setupPdfDropzone() {
   const dz = document.getElementById('pdfDropzone');
   const input = document.getElementById('pdfInput');
   const nameEl = document.getElementById('pdfFileName');
   if (!dz || !input) return;
 
-  const setFile = (file) => {
-    if (!file) return;
-    const isPdf = file.type === 'application/pdf';
-    const isImage = file.type.startsWith('image/');
-    if (!isPdf && !isImage) {
-      nameEl.textContent = 'Archivo inválido: solo PDF o imagen (JPG/PNG)';
-      nameEl.style.color = '#DC2626';
-      input.value = '';
+  const updateDisplay = () => {
+    if (selectedInvoiceFiles.length === 0) {
+      nameEl.textContent = '';
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      nameEl.textContent = 'El archivo supera 10MB';
-      nameEl.style.color = '#DC2626';
-      input.value = '';
-      return;
-    }
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    input.files = dt.files;
-    nameEl.textContent = file.name;
+    let msg = selectedInvoiceFiles.length === 1 
+      ? selectedInvoiceFiles[0].name 
+      : `${selectedInvoiceFiles.length} archivos seleccionados`;
+    nameEl.innerHTML = msg;
     nameEl.style.color = '#374151';
   };
 
-  dz.addEventListener('click', () => input.click());
-  input.addEventListener('change', (e) => setFile(e.target.files[0]));
+  const addFiles = (files) => {
+    if (!files || files.length === 0) return;
+    
+    const errors = [];
 
+    for (const file of files) {
+      // Verificar si ya existe (por nombre y tamaño)
+      const exists = selectedInvoiceFiles.some(f => f.name === file.name && f.size === file.size);
+      if (exists) {
+        errors.push(`${file.name}: ya seleccionado`);
+        continue;
+      }
+
+      if (selectedInvoiceFiles.length >= MAX_INVOICE_FILES) {
+        errors.push(`${file.name}: límite de ${MAX_INVOICE_FILES} archivos alcanzado`);
+        continue;
+      }
+
+      const isPdf = file.type === 'application/pdf';
+      const isImage = file.type.startsWith('image/');
+      if (!isPdf && !isImage) {
+        errors.push(`${file.name}: formato inválido`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`${file.name}: supera 10MB`);
+        continue;
+      }
+      
+      selectedInvoiceFiles.push(file);
+    }
+
+    updateDisplay();
+    
+    if (errors.length > 0) {
+      console.log('Errores al agregar archivos:', errors);
+    }
+  };
+
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => {
+    addFiles(e.target.files);
+    input.value = ''; // Limpiar para permitir re-seleccionar el mismo archivo
+  });
   ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -287,9 +322,15 @@ function setupPdfDropzone() {
     dz.style.borderColor = '#D1D5DB';
   }));
   dz.addEventListener('drop', (e) => {
-    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    setFile(file);
+    const files = e.dataTransfer && e.dataTransfer.files;
+    addFiles(files);
   });
+}
+
+function clearInvoiceFiles() {
+  selectedInvoiceFiles = [];
+  const nameEl = document.getElementById('pdfFileName');
+  if (nameEl) nameEl.textContent = '';
 }
 
 function setupInvoiceSearch() {
@@ -318,14 +359,13 @@ function filterInvoices(term) {
   });
 }
 
-// Drawer handlers (stub)
+// Drawer handlers
 function openInvoiceDrawer() {
   document.getElementById('invoiceOverlay').style.display = 'block';
   document.getElementById('invoiceDrawer').classList.add('active');
+  clearInvoiceFiles();
   const input = document.getElementById('pdfInput');
-  const nameEl = document.getElementById('pdfFileName');
   if (input) input.value = '';
-  if (nameEl) nameEl.textContent = '';
 }
 function closeInvoiceDrawer() {
   document.getElementById('invoiceOverlay').style.display = 'none';
@@ -355,49 +395,72 @@ function hideEntryLoader(){ const o=document.getElementById('entryGenerationOver
 async function submitInvoice(e) {
   if (e) e.preventDefault();
 
-  const fileInput = document.getElementById('pdfInput');
-  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-    alert('Seleccioná un archivo PDF o imagen.');
+  if (selectedInvoiceFiles.length === 0) {
+    alert('Seleccioná al menos un archivo PDF o imagen.');
+    return;
+  }
+
+  const files = [...selectedInvoiceFiles];
+  if (files.length > MAX_INVOICE_FILES) {
+    alert(`Máximo ${MAX_INVOICE_FILES} archivos permitidos.`);
     return;
   }
 
   const btn = (e && e.submitter) || document.querySelector('#invoiceForm button[type="submit"]');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Subiendo...';
-  }
+  if (btn) { btn.disabled = true; }
 
   showDrawerLoader('invoiceDrawer');
-  try {
-    const fd = new FormData();
-    fd.append('pdf_file', fileInput.files[0]);
 
-    const res = await fetch('/api/invoices-sent/create/', {
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': getCookie('csrftoken'),
-      },
-      body: fd
-    });
+  let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Error al subir la factura');
+  const loaderTitle = document.getElementById('invoiceLoaderTitle');
+  const loaderFile = document.getElementById('invoiceLoaderFile');
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (btn) btn.textContent = `Procesando ${i + 1} de ${files.length}...`;
+    if (loaderTitle) loaderTitle.textContent = `Procesando ${i + 1} de ${files.length}...`;
+    if (loaderFile) loaderFile.textContent = file.name;
+
+    try {
+      const fd = new FormData();
+      fd.append('pdf_file', file);
+
+      const res = await fetch('/api/invoices-sent/create/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: fd
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Error desconocido');
+      }
+      successCount++;
+    } catch (error) {
+      errorCount++;
+      errors.push(`${file.name}: ${error.message}`);
     }
+  }
 
+  hideDrawerLoader('invoiceDrawer');
+  if (btn) { btn.disabled = false; btn.textContent = 'Subir'; }
+
+  // Mostrar resumen
+  if (errorCount === 0) {
+    alert(`✅ ${successCount} factura(s) procesada(s) correctamente.`);
     await loadInvoices();
     closeInvoiceDrawer();
-    fileInput.value = '';
-    const nameEl = document.getElementById('pdfFileName');
-    if (nameEl) nameEl.textContent = '';
-  } catch (error) {
-    alert(error.message || 'Error subiendo archivo');
-  } finally {
-    hideDrawerLoader('invoiceDrawer');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Subir';
-    }
+    clearInvoiceFiles();
+  } else {
+    let msg = `Procesadas: ${successCount} exitosa(s), ${errorCount} con error(es).\n\nErrores:\n`;
+    msg += errors.join('\n');
+    alert(msg);
+    await loadInvoices();
   }
 }
 
