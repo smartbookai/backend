@@ -9,9 +9,7 @@
         <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Facturas recibidas</h1>
         <div style="color:#6B7280;margin-bottom:20px;">Proveedores de la compañía</div>
       </div>
-      {% if request.user.company_user.role == 'admin' %}
       <button type="button" class="btn-primary" onclick="openPurchaseDrawer()">Subir Factura</button>
-      {% endif %}
     </div>
 
     <div class="card table-card" style="padding:0;margin-top:12px;">
