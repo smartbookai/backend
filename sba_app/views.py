@@ -2900,6 +2900,29 @@ def api_confirm_accounting_entry(request, entry_id):
 @login_required
 @require_POST
 @transaction.atomic
+def api_delete_accounting_entry(request, entry_id):
+    if not ensure_admin(request.user):
+        return HttpResponseForbidden('Solo admin puede eliminar asientos')
+
+    company = get_current_company(request.user)
+
+    try:
+        entry = AccountingEntry.objects.get(id=entry_id, company=company)
+    except AccountingEntry.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Asiento no encontrado'}, status=404)
+
+    entry_number = entry.entry_number
+    entry.delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Asiento contable #{entry_number} eliminado correctamente',
+    })
+
+
+@login_required
+@require_POST
+@transaction.atomic
 def api_update_accounting_entry(request, entry_id):
     if not ensure_admin(request.user):
         return HttpResponseForbidden('Solo admin puede editar asientos')

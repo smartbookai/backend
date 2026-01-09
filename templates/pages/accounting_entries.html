@@ -52,8 +52,9 @@
                 {% endif %}
               </td>
               <td>{{ entry.get_status_display }}</td>
-              <td class="text-right">
+              <td class="text-right" style="display:flex;gap:8px;justify-content:flex-end;">
                 <a href="{% url 'accounting_entry_detail' entry.id %}" class="btn-secondary">Ver</a>
+                <button type="button" class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteEntry({{ entry.id }}, '{{ entry.entry_number }}')">Eliminar</button>
               </td>
             </tr>
             {% empty %}
@@ -67,7 +68,34 @@
     </div>
   </div>
 </section>
+{% csrf_token %}
 <script>
+function deleteEntry(entryId, entryNumber) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar el asiento #${entryNumber}?`)) {
+    return;
+  }
+
+  fetch(`/api/accounting-entries/${entryId}/delete/`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}',
+      'Content-Type': 'application/json',
+    },
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      window.location.reload();
+    } else {
+      alert(data.error || 'Error al eliminar el asiento');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al eliminar el asiento');
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const input = document.getElementById('entrySearch');
   const tbody = document.querySelector('.entries-tbody');
