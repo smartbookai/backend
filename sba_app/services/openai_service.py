@@ -9,10 +9,12 @@ from openai import OpenAI
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-# 🧠 Prompt base que instruye al modelo
+# Prompt base que instruye al modelo
 BASE_PROMPT = (
-    "Sos un extractor de datos de facturas. "
-    "Analizá el contenido y devolvé un JSON EXACTO con esta estructura:\n\n"
+    "Sos un extractor de datos de facturas EMITIDAS (de venta). "
+    "Esta es una factura donde el EMISOR vende al CLIENTE. "
+    "El CLIENTE es quien RECIBE y PAGA la factura.\n\n"
+    "Analizá la imagen de la factura y devolvé un JSON EXACTO con esta estructura:\n\n"
     "{\n"
     "  \"invoice\": {\n"
     "    \"invoice_number\": \"string\",\n"
@@ -42,16 +44,26 @@ BASE_PROMPT = (
     "    }\n"
     "  ]\n"
     "}\n\n"
+    "INSTRUCCIONES PARA FACTURAS ESPAÑOLAS:\n"
+    "- Buscar 'Nº Factura', 'Factura Nº', 'Número' para invoice_number\n"
+    "- Buscar 'Fecha Factura', 'Fecha', 'Fecha de emisión' para issue_date\n"
+    "- Buscar 'Fecha Vto', 'Vencimiento', 'Fecha de vencimiento' para due_date\n"
+    "- Buscar 'Base Imponible', 'B. Imponible', 'Importe' para base_amount\n"
+    "- Buscar 'IVA', 'Iva', '%Iva' para tax_amount (el monto, no el porcentaje)\n"
+    "- Buscar 'Total Factura', 'TOTAL', 'Importes' para total_amount\n"
+    "- El CLIENT es quien aparece en 'DIRECCIÓN POSTAL', 'Cliente', 'Destinatario'\n"
+    "- Buscar 'CIF', 'NIF', 'DNI' del cliente para document_number\n\n"
     "IMPORTANTE:\n"
     "- Los montos deben ser strings con formato numérico: \"1750.00\", \"0.00\", etc.\n"
     "- NO uses comas como separador de miles\n"
     "- USA punto como separador decimal\n"
+    "- Convertí fechas DD/MM/YYYY a formato YYYY-MM-DD\n"
     "- Si no encontrás un monto, usa \"0.00\"\n"
     "- Si no encontrás un dato, ponelo como null\n"
     "- Para las líneas (lines), extraé TODOS los ítems/productos/servicios de la factura\n"
     "- Si no hay IVA especificado en la línea, usa \"0.00\" en vat_rate\n"
     "- Cantidad (quantity) por defecto es \"1.00\" si no está especificada\n"
-    "- NO inventes valores\n"
+    "- NO inventes valores, solo extraé lo que VES en la imagen\n"
 )
 
 
@@ -70,60 +82,44 @@ def extract_invoice_data(file):
         if "pdf" in content_type:
             pdf_bytes = file.read()
 
-            # Intentar extraer texto directamente
-            text = ""
+            # Siempre convertir PDF a imagen para mejor extracción
+            # Usamos PyMuPDF (fitz) que no requiere Poppler
+            print("📄 Convirtiendo PDF a imagen con PyMuPDF...")
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                for page in doc:
-                    text += page.get_text("text")
+                first_page = doc[0]
+                # Renderizar a mayor resolución (2x zoom = ~144 DPI)
+                mat = fitz.Matrix(2, 2)
+                pix = first_page.get_pixmap(matrix=mat)
+                image_bytes = pix.tobytes("png")
+                print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
+                print(f"📦 Tamaño de imagen en bytes: {len(image_bytes)}")
 
-            # Si el texto es corto o sin montos → pasar a imagen
-            if len(text.strip()) < 50 or ("€" not in text and "$" not in text):
-                print("⚠️ PDF parece escaneado → usando OCR visual.")
-                images = convert_from_bytes(pdf_bytes, fmt="png")
-                first_page = images[0]
-                buf = io.BytesIO()
-                first_page.save(buf, format="PNG")
-                buf.seek(0)
-                image_bytes = buf.read()
+            base64_image = base64.b64encode(image_bytes).decode('utf-8')
+            print(f"🔤 Tamaño de base64: {len(base64_image)} caracteres")
 
-                # CORREGIDO: Codificar imagen en base64
-                base64_image = base64.b64encode(image_bytes).decode('utf-8')
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": BASE_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
+                            },
+                        ],
+                    },
+                ],
+                response_format={"type": "json_object"},
+            )
 
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": BASE_PROMPT},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{base64_image}"
-                                    }
-                                },
-                            ],
-                        },
-                    ],
-                    response_format={"type": "json_object"},
-                )
-
-                usage = getattr(response, "usage", None)
-                if usage is not None:
-                    tokens = getattr(usage, "total_tokens", None)
-
-            else:
-                # Si hay texto legible, usarlo directamente
-                print(f"✅ Texto extraído del PDF ({len(text)} caracteres)")
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": BASE_PROMPT},
-                        {"role": "user", "content": f"Extraé los datos de esta factura incluyendo todas las líneas:\n\n{text}"},
-                    ],
-                    response_format={"type": "json_object"},
-                )
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                tokens = getattr(usage, "total_tokens", None)
 
         # --- CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
@@ -236,32 +232,41 @@ def extract_purchase_invoice_data(file):
         if "pdf" in content_type:
             pdf_bytes = file.read()
 
-            # Intentar extraer texto directamente
-            text = ""
+            # Siempre convertir PDF a imagen para mejor extracción
+            # Usamos PyMuPDF (fitz) que no requiere Poppler
+            print("📄 Convirtiendo PDF a imagen con PyMuPDF (Purchase)...")
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                for page in doc:
-                    text += page.get_text("text")
+                first_page = doc[0]
+                mat = fitz.Matrix(2, 2)
+                pix = first_page.get_pixmap(matrix=mat)
+                image_bytes = pix.tobytes("png")
+                print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
 
-            print(f"✅ Texto extraído del PDF ({len(text)} caracteres)")
+            base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-            # Si hay texto, usarlo
-            if text.strip():
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
-                        {"role": "user",
-                         "content": f"Extraé los datos de esta factura RECIBIDA. El supplier es quien EMITE la factura:\n\n{text}"},
-                    ],
-                    response_format={"type": "json_object"},
-                )
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA. El supplier es quien EMITE la factura."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
+                            },
+                        ],
+                    },
+                ],
+                response_format={"type": "json_object"},
+            )
 
-                usage = getattr(response, "usage", None)
-                if usage is not None:
-                    tokens = getattr(usage, "total_tokens", None)
-            else:
-                print("⚠️ No se pudo extraer texto del PDF")
-                return {"tokens": None}
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                tokens = getattr(usage, "total_tokens", None)
 
         # --- CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
@@ -411,14 +416,13 @@ def extract_payroll_data(file):
             # Si el texto es corto o sin montos → pasar a imagen
             if len(text.strip()) < 50 or ("€" not in text and "$" not in text):
                 print("⚠️ PDF parece escaneado → usando OCR visual.")
-                images = convert_from_bytes(pdf_bytes, fmt="png")
-                first_page = images[0]
-                buf = io.BytesIO()
-                first_page.save(buf, format="PNG")
-                buf.seek(0)
-                image_bytes = buf.read()
+                with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                    first_page = doc[0]
+                    mat = fitz.Matrix(2, 2)
+                    pix = first_page.get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
 
-                # Codificar imagen en base64
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
                 response = client.chat.completions.create(
