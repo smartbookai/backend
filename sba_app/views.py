@@ -2165,9 +2165,11 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
 
     try:
         # Preparar datos de la factura para la IA
+        discount_amount = invoice.discount_amount or Decimal('0.00')
         invoice_data = {
             'invoice_number': invoice.invoice_number or 'SIN-NUMERO',
             'base_amount': float(invoice.base_amount) if invoice.base_amount else 0,
+            'discount_amount': float(discount_amount),
             'tax_amount': float(invoice.tax_amount) if invoice.tax_amount else 0,
             'total_amount': float(invoice.total_amount) if invoice.total_amount else 0,
         }
@@ -2305,9 +2307,21 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         )
         print(f"✅ Línea 3 creada - ID: {line3.id} - {ai_result['account_supplier']} - HABER: {invoice.total_amount}€")
 
-        # Calcular totales del asiento
+        # Línea 4: Descuento sobre compras (HABER) - Solo si hay descuento
+        if discount_amount and discount_amount > Decimal('0.00'):
+            line4 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code='606',  # Descuentos sobre compras por pronto pago
+                description=f'Descuento en factura {invoice.invoice_number}',
+                debit=Decimal('0.00'),
+                credit=discount_amount
+            )
+            print(f"✅ Línea 4 creada - ID: {line4.id} - 606 - HABER: {discount_amount}€ (Descuento)")
+
+        # Calcular totales del asiento (incluyendo descuento en el HABER)
+        credit_total_final = (invoice.total_amount or Decimal('0.00')) + discount_amount
         entry.debit_total = debit_total
-        entry.credit_total = credit_total
+        entry.credit_total = credit_total_final
         entry.save()
 
         print(f"\n✅ Totales actualizados - DEBE: {entry.debit_total}€ | HABER: {entry.credit_total}€")
@@ -2418,9 +2432,11 @@ def generate_entry_for_sales_invoice(request, invoice_id):
 
     try:
         # Preparar datos de la factura para la IA
+        discount_amount = invoice.discount_amount or Decimal('0.00')
         invoice_data = {
             'invoice_number': invoice.invoice_number or 'SIN-NUMERO',
             'base_amount': float(invoice.base_amount) if invoice.base_amount else 0,
+            'discount_amount': float(discount_amount),
             'tax_amount': float(invoice.tax_amount) if invoice.tax_amount else 0,
             'total_amount': float(invoice.total_amount) if invoice.total_amount else 0,
         }
@@ -2559,8 +2575,20 @@ def generate_entry_for_sales_invoice(request, invoice_id):
             print(
                 f"✅ Línea 3 creada - ID: {line3.id} - {ai_result['account_vat_output']} - HABER: {invoice.tax_amount}€")
 
-        # Calcular totales del asiento
-        entry.debit_total = debit_total
+        # Línea 4: Descuento sobre ventas (DEBE) - Solo si hay descuento
+        if discount_amount and discount_amount > Decimal('0.00'):
+            line4 = AccountingEntryLine.objects.create(
+                entry=entry,
+                account_code='706',  # Descuentos sobre ventas por pronto pago
+                description=f'Descuento en factura {invoice.invoice_number}',
+                debit=discount_amount,
+                credit=Decimal('0.00')
+            )
+            print(f"✅ Línea 4 creada - ID: {line4.id} - 706 - DEBE: {discount_amount}€ (Descuento)")
+
+        # Calcular totales del asiento (incluyendo descuento en el DEBE)
+        debit_total_final = (invoice.total_amount or Decimal('0.00')) + discount_amount
+        entry.debit_total = debit_total_final
         entry.credit_total = credit_total
         entry.save()
 

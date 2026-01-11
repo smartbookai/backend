@@ -538,12 +538,15 @@ def generate_accounting_entry_for_purchase(invoice_data, lines_data, supplier_na
 
         lines_text = "\n".join(lines_context) if lines_context else "Sin líneas detalladas"
 
+        discount_amount = invoice_data.get('discount_amount', 0) or 0
+        
         prompt = f"""Eres un experto contable español. Analiza esta factura de COMPRA y genera el asiento contable según el Plan General Contable (PGC) español.
 
 DATOS DE LA FACTURA:
 - Número: {invoice_data.get('invoice_number', 'N/A')}
 - Proveedor: {supplier_name}
 - Base imponible: {invoice_data.get('base_amount', 0)}€
+- Descuento: {discount_amount}€
 - IVA: {invoice_data.get('tax_amount', 0)}€
 - Total: {invoice_data.get('total_amount', 0)}€
 
