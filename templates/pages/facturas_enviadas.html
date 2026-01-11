@@ -104,6 +104,14 @@
         <input type="text" name="base_amount">
       </div>
       <div class="form-field">
+        <label>Descuento (monto)</label>
+        <input type="text" name="discount_amount" placeholder="Ej: 14.25">
+      </div>
+      <div class="form-field">
+        <label>Descuento (%)</label>
+        <input type="text" name="discount_percentage" placeholder="Ej: 5.00">
+      </div>
+      <div class="form-field">
         <label>Impuestos</label>
         <input type="text" name="tax_amount">
       </div>
@@ -558,6 +566,8 @@ async function editInvoice(id) {
     form.elements['due_date'].value = inv.due_date || '';
     form.elements['payment_method'].value = inv.payment_method || '';
     form.elements['base_amount'].value = inv.base_amount || '';
+    form.elements['discount_amount'].value = inv.discount_amount || '';
+    form.elements['discount_percentage'].value = inv.discount_percentage || '';
     form.elements['tax_amount'].value = inv.tax_amount || '';
     form.elements['total_amount'].value = inv.total_amount || '';
     form.elements['client_name'].value = (inv.client && inv.client.name) || '';
@@ -587,6 +597,8 @@ async function submitInvoiceEdit(e) {
     due_date: form.elements['due_date'].value,
     payment_method: form.elements['payment_method'].value,
     base_amount: form.elements['base_amount'].value,
+    discount_amount: form.elements['discount_amount'].value,
+    discount_percentage: form.elements['discount_percentage'].value,
     tax_amount: form.elements['tax_amount'].value,
     total_amount: form.elements['total_amount'].value,
     client_name: form.elements['client_name'].value,
