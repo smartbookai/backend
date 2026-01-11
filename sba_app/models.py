@@ -101,6 +101,8 @@ class BaseInvoice(models.Model):
     payment_method = models.CharField(max_length=100, null=True, blank=True)  # Forma de pago
 
     base_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))  # Base imponible
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Descuento aplicado (monto)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Descuento aplicado (porcentaje)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))   # Total de impuestos
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00')) # Total factura
 

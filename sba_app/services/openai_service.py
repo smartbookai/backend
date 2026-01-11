@@ -22,6 +22,8 @@ BASE_PROMPT = (
     "    \"due_date\": \"YYYY-MM-DD\" o null,\n"
     "    \"payment_method\": \"string\" o null,\n"
     "    \"base_amount\": \"1750.00\",\n"
+    "    \"discount_amount\": \"0.00\" o null,\n"
+    "    \"discount_percentage\": \"5.00\" o null,\n"
     "    \"tax_amount\": \"0.00\",\n"
     "    \"total_amount\": \"1750.00\",\n"
     "    \"notes\": \"string\" o null\n"
@@ -51,6 +53,7 @@ BASE_PROMPT = (
     "- Buscar 'Base Imponible', 'B. Imponible', 'Importe' para base_amount\n"
     "- Buscar 'IVA', 'Iva', '%Iva' para tax_amount (el monto, no el porcentaje)\n"
     "- Buscar 'Total Factura', 'TOTAL', 'Importes' para total_amount\n"
+    "- Buscar 'Descuento', 'Dto', 'Discount', 'Rappel' para discount_amount (el monto del descuento, no el porcentaje)\n"
     "- El CLIENT es quien aparece en 'DIRECCIÓN POSTAL', 'Cliente', 'Destinatario'\n"
     "- Buscar 'CIF', 'NIF', 'DNI' del cliente para document_number\n\n"
     "IMPORTANTE:\n"
@@ -185,6 +188,8 @@ PURCHASE_INVOICE_PROMPT = (
     "    \"due_date\": \"YYYY-MM-DD\" o null,\n"
     "    \"payment_method\": \"string\" o null,\n"
     "    \"base_amount\": \"10.00\",\n"
+    "    \"discount_amount\": \"0.00\" o null,\n"
+    "    \"discount_percentage\": \"5.00\" o null,\n"
     "    \"tax_amount\": \"2.10\",\n"
     "    \"total_amount\": \"12.10\",\n"
     "    \"notes\": \"string\" o null\n"
@@ -219,6 +224,7 @@ PURCHASE_INVOICE_PROMPT = (
     "- Si no encontrás un dato, ponelo como null\n"
     "- Para las líneas (lines), extraé TODOS los ítems/productos/servicios de la factura\n"
     "- Si no hay IVA especificado en la línea, usa \"0.00\" en vat_rate\n"
+    "- Buscar 'Descuento', 'Dto', 'Discount', 'Rappel' para discount_amount (el monto del descuento como valor positivo, no el porcentaje). Si no hay descuento, usa null\n"
 )
 
 

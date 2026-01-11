@@ -1072,6 +1072,11 @@ def api_create_invoice_sent(request):
                 document_number=client_data.get("document_number"),
             )
 
+        discount_value = invoice_data.get("discount_amount")
+        discount_amount = safe_decimal(discount_value) if discount_value else None
+        discount_pct_value = invoice_data.get("discount_percentage")
+        discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+
         invoice = SalesInvoice.objects.create(
             company=company,
             client=client,
@@ -1081,6 +1086,8 @@ def api_create_invoice_sent(request):
             due_date=invoice_data.get("due_date") or None,
             payment_method=invoice_data.get("payment_method"),
             base_amount=safe_decimal(invoice_data.get("base_amount")),
+            discount_amount=discount_amount,
+            discount_percentage=discount_percentage,
             tax_amount=safe_decimal(invoice_data.get("tax_amount")),
             total_amount=safe_decimal(invoice_data.get("total_amount")),
             notes=invoice_data.get("notes") or "",
@@ -1392,6 +1399,11 @@ def api_create_invoice_received(request):
             )
 
         # 🧾 Paso 3: Crear factura recibida (PurchaseInvoice)
+        discount_value = invoice_data.get("discount_amount")
+        discount_amount = safe_decimal(discount_value) if discount_value else None
+        discount_pct_value = invoice_data.get("discount_percentage")
+        discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+
         invoice = PurchaseInvoice.objects.create(
             company=company,
             supplier=supplier,
@@ -1401,6 +1413,8 @@ def api_create_invoice_received(request):
             due_date=invoice_data.get("due_date") or None,
             payment_method=invoice_data.get("payment_method"),
             base_amount=safe_decimal(invoice_data.get("base_amount")),
+            discount_amount=discount_amount,
+            discount_percentage=discount_percentage,
             tax_amount=safe_decimal(invoice_data.get("tax_amount")),
             total_amount=safe_decimal(invoice_data.get("total_amount")),
             notes=invoice_data.get("notes") or "",
