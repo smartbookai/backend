@@ -2954,30 +2954,39 @@ def api_update_accounting_entry(request, entry_id):
     lines_payload = payload.get('lines') or []
     existing_lines = {l.id: l for l in entry.lines.all()}
 
+    # Preparar cambios en memoria sin guardar
+    lines_to_update = []
+    payload_line_ids = set()
     for item in lines_payload:
         line_id = item.get('id')
         if not line_id or line_id not in existing_lines:
             continue
 
+        payload_line_ids.add(line_id)
         line = existing_lines[line_id]
         line.account_code = (item.get('account_code') or '').strip()
         line.description = (item.get('description') or '').strip()
         line.debit = safe_decimal(item.get('debit'))
         line.credit = safe_decimal(item.get('credit'))
-        line.save()
+        lines_to_update.append(line)
 
-    # Recalcular totales y validar que cuadre
+    # Calcular totales con los nuevos valores (sin guardar aún)
     debit_total = Decimal('0.00')
     credit_total = Decimal('0.00')
-    for l in entry.lines.all():
-        debit_total += l.debit or Decimal('0.00')
-        credit_total += l.credit or Decimal('0.00')
+    for line in existing_lines.values():
+        debit_total += line.debit or Decimal('0.00')
+        credit_total += line.credit or Decimal('0.00')
 
+    # Validar que cuadre ANTES de guardar
     if abs(debit_total - credit_total) > Decimal('0.01'):
         return JsonResponse({
             'success': False,
             'error': 'El asiento no está cuadrado después de los cambios (Debe y Haber no coinciden).',
         }, status=400)
+
+    # Solo guardar si la validación pasó
+    for line in lines_to_update:
+        line.save()
 
     entry.debit_total = debit_total
     entry.credit_total = credit_total
