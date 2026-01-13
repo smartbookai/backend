@@ -2283,17 +2283,19 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         print(f"   Descripción: Factura compra {invoice.invoice_number} - {supplier_name}")
         print(f"\n   LÍNEAS DEL ASIENTO:")
 
-        # Calcular totales
-        debit_total = (invoice.base_amount or Decimal('0.00')) + (invoice.tax_amount or Decimal('0.00'))
+        # Calcular totales - El gasto es la base neta (base - descuento)
+        base_neta_preview = (invoice.base_amount or Decimal('0.00')) - discount_amount
+        debit_total = base_neta_preview + (invoice.tax_amount or Decimal('0.00'))
         credit_total = invoice.total_amount
 
         print(f"\n   {'CUENTA':<10} {'DESCRIPCIÓN':<50} {'DEBE':>15} {'HABER':>15}")
         print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
 
-        # Línea 1: Gasto (DEBE)
-        if invoice.base_amount and invoice.base_amount > 0:
+        # Línea 1: Gasto (DEBE) - Usar base neta
+        base_neta = (invoice.base_amount or Decimal('0.00')) - discount_amount
+        if base_neta > 0:
             print(
-                f"   {ai_result['account_expense']:<10} {ai_result['expense_description'][:50]:<50} {str(invoice.base_amount):>15} {'-':>15}")
+                f"   {ai_result['account_expense']:<10} {ai_result['expense_description'][:50]:<50} {str(base_neta):>15} {'-':>15}")
 
         # Línea 2: IVA soportado (DEBE)
         if invoice.tax_amount and invoice.tax_amount > 0:
@@ -2333,16 +2335,17 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
 
         print(f"✅ AccountingEntry creado - ID: {entry.id} | Número: {entry.entry_number}")
 
-        # Línea 1: Gasto (DEBE)
-        if invoice.base_amount and invoice.base_amount > 0:
+        # Línea 1: Gasto (DEBE) - Usar base neta (ya con descuento aplicado)
+        base_neta = (invoice.base_amount or Decimal('0.00')) - discount_amount
+        if base_neta > 0:
             line1 = AccountingEntryLine.objects.create(
                 entry=entry,
                 account_code=ai_result['account_expense'],
                 description=ai_result['expense_description'],
-                debit=invoice.base_amount,
+                debit=base_neta,
                 credit=Decimal('0.00')
             )
-            print(f"✅ Línea 1 creada - ID: {line1.id} - {ai_result['account_expense']} - DEBE: {invoice.base_amount}€")
+            print(f"✅ Línea 1 creada - ID: {line1.id} - {ai_result['account_expense']} - DEBE: {base_neta}€")
 
         # Línea 2: IVA soportado (DEBE)
         if invoice.tax_amount and invoice.tax_amount > 0:
@@ -2365,19 +2368,8 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
         )
         print(f"✅ Línea 3 creada - ID: {line3.id} - {ai_result['account_supplier']} - HABER: {invoice.total_amount}€")
 
-        # Línea 4: Descuento sobre compras (HABER) - Solo si hay descuento
-        if discount_amount and discount_amount > Decimal('0.00'):
-            line4 = AccountingEntryLine.objects.create(
-                entry=entry,
-                account_code='606',  # Descuentos sobre compras por pronto pago
-                description=f'Descuento en factura {invoice.invoice_number}',
-                debit=Decimal('0.00'),
-                credit=discount_amount
-            )
-            print(f"✅ Línea 4 creada - ID: {line4.id} - 606 - HABER: {discount_amount}€ (Descuento)")
-
-        # Calcular totales del asiento (incluyendo descuento en el HABER)
-        credit_total_final = (invoice.total_amount or Decimal('0.00')) + discount_amount
+        # Calcular totales del asiento (sin línea separada de descuento)
+        credit_total_final = invoice.total_amount or Decimal('0.00')
         entry.debit_total = debit_total
         entry.credit_total = credit_total_final
         entry.save()
@@ -2550,9 +2542,10 @@ def generate_entry_for_sales_invoice(request, invoice_id):
         print(f"   Descripción: Factura venta {invoice.invoice_number} - {client_name}")
         print(f"\n   LÍNEAS DEL ASIENTO:")
 
-        # Calcular totales (invertidos respecto a facturas de compra)
+        # Calcular totales - El ingreso es la base neta (base - descuento)
+        base_neta_preview = (invoice.base_amount or Decimal('0.00')) - discount_amount
         debit_total = invoice.total_amount  # Cliente va al DEBE
-        credit_total = (invoice.base_amount or Decimal('0.00')) + (invoice.tax_amount or Decimal('0.00'))
+        credit_total = base_neta_preview + (invoice.tax_amount or Decimal('0.00'))
 
         print(f"\n   {'CUENTA':<10} {'DESCRIPCIÓN':<50} {'DEBE':>15} {'HABER':>15}")
         print(f"   {'-' * 10} {'-' * 50} {'-' * 15} {'-' * 15}")
@@ -2561,10 +2554,11 @@ def generate_entry_for_sales_invoice(request, invoice_id):
         print(
             f"   {ai_result['account_customer']:<10} {ai_result['customer_description'][:50]:<50} {str(invoice.total_amount):>15} {'-':>15}")
 
-        # Línea 2: Ingreso (HABER)
-        if invoice.base_amount and invoice.base_amount > 0:
+        # Línea 2: Ingreso (HABER) - Usar base neta (ya con descuento aplicado)
+        base_neta = (invoice.base_amount or Decimal('0.00')) - discount_amount
+        if base_neta > 0:
             print(
-                f"   {ai_result['account_income']:<10} {ai_result['income_description'][:50]:<50} {'-':>15} {str(invoice.base_amount):>15}")
+                f"   {ai_result['account_income']:<10} {ai_result['income_description'][:50]:<50} {'-':>15} {str(base_neta):>15}")
 
         # Línea 3: IVA repercutido (HABER)
         if invoice.tax_amount and invoice.tax_amount > 0:
@@ -2610,16 +2604,17 @@ def generate_entry_for_sales_invoice(request, invoice_id):
         )
         print(f"✅ Línea 1 creada - ID: {line1.id} - {ai_result['account_customer']} - DEBE: {invoice.total_amount}€")
 
-        # Línea 2: Ingreso (HABER)
-        if invoice.base_amount and invoice.base_amount > 0:
+        # Línea 2: Ingreso (HABER) - Usar base neta (ya con descuento aplicado)
+        base_neta = (invoice.base_amount or Decimal('0.00')) - discount_amount
+        if base_neta > 0:
             line2 = AccountingEntryLine.objects.create(
                 entry=entry,
                 account_code=ai_result['account_income'],
                 description=ai_result['income_description'],
                 debit=Decimal('0.00'),
-                credit=invoice.base_amount
+                credit=base_neta
             )
-            print(f"✅ Línea 2 creada - ID: {line2.id} - {ai_result['account_income']} - HABER: {invoice.base_amount}€")
+            print(f"✅ Línea 2 creada - ID: {line2.id} - {ai_result['account_income']} - HABER: {base_neta}€")
 
         # Línea 3: IVA repercutido (HABER)
         if invoice.tax_amount and invoice.tax_amount > 0:
@@ -2633,19 +2628,8 @@ def generate_entry_for_sales_invoice(request, invoice_id):
             print(
                 f"✅ Línea 3 creada - ID: {line3.id} - {ai_result['account_vat_output']} - HABER: {invoice.tax_amount}€")
 
-        # Línea 4: Descuento sobre ventas (DEBE) - Solo si hay descuento
-        if discount_amount and discount_amount > Decimal('0.00'):
-            line4 = AccountingEntryLine.objects.create(
-                entry=entry,
-                account_code='706',  # Descuentos sobre ventas por pronto pago
-                description=f'Descuento en factura {invoice.invoice_number}',
-                debit=discount_amount,
-                credit=Decimal('0.00')
-            )
-            print(f"✅ Línea 4 creada - ID: {line4.id} - 706 - DEBE: {discount_amount}€ (Descuento)")
-
-        # Calcular totales del asiento (incluyendo descuento en el DEBE)
-        debit_total_final = (invoice.total_amount or Decimal('0.00')) + discount_amount
+        # Calcular totales del asiento (sin línea separada de descuento)
+        debit_total_final = invoice.total_amount or Decimal('0.00')
         entry.debit_total = debit_total_final
         entry.credit_total = credit_total
         entry.save()
