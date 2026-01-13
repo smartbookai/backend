@@ -1075,7 +1075,9 @@ def api_create_invoice_sent(request):
             )
 
         discount_value = invoice_data.get("discount_amount")
-        discount_amount = safe_decimal(discount_value) if discount_value else None
+        discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+        # Guardar siempre como valor positivo (OpenAI a veces extrae negativos)
+        discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
         discount_pct_value = invoice_data.get("discount_percentage")
         discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
 
@@ -1085,7 +1087,7 @@ def api_create_invoice_sent(request):
         total_amount = safe_decimal(invoice_data.get("total_amount"))
 
         # Validar y recalcular IVA si hay descuento
-        discount_for_calc = discount_amount or Decimal('0.00')
+        discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
         if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
             # Calcular base neta (después del descuento)
             base_neta = base_amount - discount_for_calc
@@ -1431,7 +1433,9 @@ def api_create_invoice_received(request):
 
         # 🧾 Paso 3: Crear factura recibida (PurchaseInvoice)
         discount_value = invoice_data.get("discount_amount")
-        discount_amount = safe_decimal(discount_value) if discount_value else None
+        discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+        # Guardar siempre como valor positivo (OpenAI a veces extrae negativos)
+        discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
         discount_pct_value = invoice_data.get("discount_percentage")
         discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
 
@@ -1441,7 +1445,7 @@ def api_create_invoice_received(request):
         total_amount = safe_decimal(invoice_data.get("total_amount"))
 
         # Validar y recalcular IVA si hay descuento
-        discount_for_calc = discount_amount or Decimal('0.00')
+        discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
         if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
             # Calcular base neta (después del descuento)
             base_neta = base_amount - discount_for_calc
@@ -2219,7 +2223,7 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
 
     try:
         # Preparar datos de la factura para la IA
-        discount_amount = invoice.discount_amount or Decimal('0.00')
+        discount_amount = abs(invoice.discount_amount) if invoice.discount_amount else Decimal('0.00')
         invoice_data = {
             'invoice_number': invoice.invoice_number or 'SIN-NUMERO',
             'base_amount': float(invoice.base_amount) if invoice.base_amount else 0,
@@ -2486,7 +2490,7 @@ def generate_entry_for_sales_invoice(request, invoice_id):
 
     try:
         # Preparar datos de la factura para la IA
-        discount_amount = invoice.discount_amount or Decimal('0.00')
+        discount_amount = abs(invoice.discount_amount) if invoice.discount_amount else Decimal('0.00')
         invoice_data = {
             'invoice_number': invoice.invoice_number or 'SIN-NUMERO',
             'base_amount': float(invoice.base_amount) if invoice.base_amount else 0,

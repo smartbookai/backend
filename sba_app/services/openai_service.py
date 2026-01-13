@@ -53,7 +53,7 @@ BASE_PROMPT = (
     "- Buscar 'Base Imponible', 'B. Imponible', 'Importe' para base_amount\n"
     "- Buscar 'IVA', 'Iva', '%Iva' para tax_amount (el monto, no el porcentaje)\n"
     "- Buscar 'Total Factura', 'TOTAL', 'Importes' para total_amount\n"
-    "- Buscar 'Descuento', 'Dto', 'Discount', 'Rappel' para discount_amount (el monto del descuento, no el porcentaje)\n"
+    "- Buscar 'Descuento', 'Dto', 'Discount', 'Rappel' para discount_amount (el monto del descuento, no el porcentaje). SIEMPRE como valor POSITIVO, nunca negativo.\n"
     "- El CLIENT es quien aparece en 'DIRECCIÓN POSTAL', 'Cliente', 'Destinatario'\n"
     "- Buscar 'CIF', 'NIF', 'DNI' del cliente para document_number\n\n"
     "IMPORTANTE:\n"
