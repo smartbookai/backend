@@ -1135,9 +1135,10 @@ def api_create_invoice_sent(request):
 
     except IntegrityError as e:
         transaction.set_rollback(True)
-        if 'UNIQUE constraint failed' in str(e) and 'invoice_number' in str(e):
+        error_msg = str(e).lower()
+        if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
             return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
-        return JsonResponse({"success": False, "message": "Error de integridad en la base de datos."}, status=500)
+        return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_sent:", traceback.format_exc())
@@ -1466,9 +1467,10 @@ def api_create_invoice_received(request):
 
     except IntegrityError as e:
         transaction.set_rollback(True)
-        if 'UNIQUE constraint failed' in str(e) and 'invoice_number' in str(e):
+        error_msg = str(e).lower()
+        if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
             return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
-        return JsonResponse({"success": False, "message": "Error de integridad en la base de datos."}, status=500)
+        return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
