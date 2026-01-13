@@ -1,7 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import user_passes_test, login_required
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Sum
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
@@ -1459,6 +1459,11 @@ def api_create_invoice_received(request):
             "lines": created_lines,
         })
 
+    except IntegrityError as e:
+        transaction.set_rollback(True)
+        if 'UNIQUE constraint failed' in str(e) and 'invoice_number' in str(e):
+            return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
+        return JsonResponse({"success": False, "message": "Error de integridad en la base de datos."}, status=500)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
