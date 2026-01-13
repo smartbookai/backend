@@ -1079,6 +1079,27 @@ def api_create_invoice_sent(request):
         discount_pct_value = invoice_data.get("discount_percentage")
         discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
 
+        # Extraer valores base
+        base_amount = safe_decimal(invoice_data.get("base_amount"))
+        tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
+        total_amount = safe_decimal(invoice_data.get("total_amount"))
+
+        # Validar y recalcular IVA si hay descuento
+        discount_for_calc = discount_amount or Decimal('0.00')
+        if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+            # Calcular base neta (después del descuento)
+            base_neta = base_amount - discount_for_calc
+            # Recalcular IVA esperado (21%)
+            tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
+            # Si el IVA extraído difiere significativamente, usar el calculado
+            if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
+                print(f" IVA corregido: {tax_amount_extracted} → {tax_amount_expected} (base neta: {base_neta})")
+                tax_amount = tax_amount_expected
+            else:
+                tax_amount = tax_amount_extracted
+        else:
+            tax_amount = tax_amount_extracted
+
         invoice = SalesInvoice.objects.create(
             company=company,
             client=client,
@@ -1087,11 +1108,11 @@ def api_create_invoice_sent(request):
             issue_date=invoice_data.get("issue_date") or timezone.now().date(),
             due_date=invoice_data.get("due_date") or None,
             payment_method=invoice_data.get("payment_method"),
-            base_amount=safe_decimal(invoice_data.get("base_amount")),
+            base_amount=base_amount,
             discount_amount=discount_amount,
             discount_percentage=discount_percentage,
-            tax_amount=safe_decimal(invoice_data.get("tax_amount")),
-            total_amount=safe_decimal(invoice_data.get("total_amount")),
+            tax_amount=tax_amount,
+            total_amount=total_amount,
             notes=invoice_data.get("notes") or "",
         )
 
@@ -1414,6 +1435,27 @@ def api_create_invoice_received(request):
         discount_pct_value = invoice_data.get("discount_percentage")
         discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
 
+        # Extraer valores base
+        base_amount = safe_decimal(invoice_data.get("base_amount"))
+        tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
+        total_amount = safe_decimal(invoice_data.get("total_amount"))
+
+        # Validar y recalcular IVA si hay descuento
+        discount_for_calc = discount_amount or Decimal('0.00')
+        if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+            # Calcular base neta (después del descuento)
+            base_neta = base_amount - discount_for_calc
+            # Recalcular IVA esperado (21%)
+            tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
+            # Si el IVA extraído difiere significativamente, usar el calculado
+            if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
+                print(f"⚠️ IVA corregido (compra): {tax_amount_extracted} → {tax_amount_expected} (base neta: {base_neta})")
+                tax_amount = tax_amount_expected
+            else:
+                tax_amount = tax_amount_extracted
+        else:
+            tax_amount = tax_amount_extracted
+
         invoice = PurchaseInvoice.objects.create(
             company=company,
             supplier=supplier,
@@ -1422,11 +1464,11 @@ def api_create_invoice_received(request):
             issue_date=invoice_data.get("issue_date") or timezone.now().date(),
             due_date=invoice_data.get("due_date") or None,
             payment_method=invoice_data.get("payment_method"),
-            base_amount=safe_decimal(invoice_data.get("base_amount")),
+            base_amount=base_amount,
             discount_amount=discount_amount,
             discount_percentage=discount_percentage,
-            tax_amount=safe_decimal(invoice_data.get("tax_amount")),
-            total_amount=safe_decimal(invoice_data.get("total_amount")),
+            tax_amount=tax_amount,
+            total_amount=total_amount,
             notes=invoice_data.get("notes") or "",
         )
 
