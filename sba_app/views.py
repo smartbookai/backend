@@ -1498,19 +1498,23 @@ def api_create_invoice_received(request):
     signal.alarm(300)  # 5 minutos
     
     try:
-    
-    company = get_current_company(request.user)
-    file = request.FILES.get("pdf_file")
+        company = get_current_company(request.user)
+        file = request.FILES.get("pdf_file")
 
-    if not file:
-        return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
+        if not file:
+            return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
 
-    if file.size > 10 * 1024 * 1024:
-        return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
+        if file.size > 10 * 1024 * 1024:
+            return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
-    try:
-        # Paso 1: Extraer datos con OpenAI
-        result = extract_purchase_invoice_data(file)
+        try:
+            # Paso 1: Extraer datos con OpenAI
+            result = extract_purchase_invoice_data(file)
+        except Exception as e:
+            return JsonResponse({
+                "success": False,
+                "message": "Error al extraer información de la factura: " + str(e)
+            }, status=400)
 
         if not result:
             return JsonResponse({
