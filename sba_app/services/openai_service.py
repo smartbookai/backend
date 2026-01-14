@@ -233,27 +233,41 @@ def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png"):
     Extrae datos de una sola página/imagen de factura de compra.
     Función auxiliar interna.
     """
+    import time
+    start_time = time.time()
+    print(f"🤖 Llamando a OpenAI para procesar imagen ({len(image_bytes)} bytes)...")
+    
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA y devolvé el resultado en formato JSON. El supplier es quien EMITE la factura."},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_image}"
-                        }
-                    },
-                ],
-            },
-        ],
-        response_format={"type": "json_object"},
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA y devolvé el resultado en formato JSON. El supplier es quien EMITE la factura."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            }
+                        },
+                    ],
+                },
+            ],
+            response_format={"type": "json_object"},
+            timeout=60,  # Timeout de 60 segundos para la llamada a OpenAI
+        )
+        
+        elapsed_time = time.time() - start_time
+        print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+        
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
+        raise
     
     usage = getattr(response, "usage", None)
     tokens = getattr(usage, "total_tokens", None) if usage else None
