@@ -122,7 +122,17 @@ elif DB_ENGINE == 'mysql':
             "init_command": 'SET sql_mode="STRICT_TRANS_TABLES"',
         }
     }
-
+elif DB_ENGINE == 'postgresql':
+    DATABASES = {
+        'default': {
+            'ENGINE': f'django.db.backends.{DB_ENGINE}',
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
+            'PASSWORD': env('DB_PASS'),
+            'HOST': env('DB_HOST'),
+            'PORT': env('DB_PORT'),
+        }
+    }
 # Password validation
 # https://docs.djangoproject.com/en/1.10/ref/settings/#auth-password-validators
 
