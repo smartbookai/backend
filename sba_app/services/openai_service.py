@@ -259,6 +259,11 @@ def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png"):
     tokens = getattr(usage, "total_tokens", None) if usage else None
     
     content = response.choices[0].message.content
+    
+    # Manejar caso donde OpenAI devuelve None (no puede procesar la imagen)
+    if content is None:
+        raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
+    
     result = json.loads(content)
     result["tokens"] = tokens
     

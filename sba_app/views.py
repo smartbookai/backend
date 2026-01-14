@@ -1487,6 +1487,18 @@ def api_delete_invoice_received(request, invoice_id):
 @require_POST
 @transaction.atomic
 def api_create_invoice_received(request):
+    # Aumentar timeout para procesamiento de PDFs multipágina
+    import signal
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Procesamiento timeout - PDF muy grande o lento")
+    
+    # Timeout de 5 minutos para PDFs multipágina
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(300)  # 5 minutos
+    
+    try:
+    
     company = get_current_company(request.user)
     file = request.FILES.get("pdf_file")
 
@@ -1678,12 +1690,17 @@ def api_create_invoice_received(request):
         if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
             return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
         return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
+    except TimeoutError as e:
+        signal.alarm(0)  # Cancelar el timeout
+        transaction.set_rollback(True)
+        return JsonResponse({"success": False, "message": "Timeout procesando PDF. Intenta con un archivo más pequeño."}, status=408)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
         transaction.set_rollback(True)
         return JsonResponse({"success": False, "message": str(e)}, status=500)
-
+    finally:
+        signal.alarm(0)  # Siempre cancelar el timeout
 
 @login_required
 def api_show_table_employees(request):
