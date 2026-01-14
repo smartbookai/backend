@@ -2004,21 +2004,36 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
         print(f"⚠️ Líquido no extraído, calculando: {calculated_net}")
         payroll_data['net_salary'] = str(calculated_net)
 
-    # 6. VALIDAR SS EMPRESA - MEJORADO
+    # 6. VALIDAR IRPF - Detectar si se confundió base con importe
+    irpf = safe_decimal(payroll_data.get('irpf', '0'))
+    total_accrued_check = safe_decimal(payroll_data.get('total_accrued', '0'))
+    
+    if irpf > 0 and total_accrued_check > 0:
+        # Si IRPF es igual o muy cercano al total devengado, es un error (se confundió con la base)
+        if abs(irpf - total_accrued_check) < Decimal('1.00'):
+            print(f"⚠️ IRPF ({irpf}) parece ser la base, no el importe retenido. Corrigiendo a 0.00")
+            payroll_data['irpf'] = '0.00'
+        # Si IRPF es mayor al 50% del total devengado, también es sospechoso
+        elif irpf > (total_accrued_check * Decimal('0.50')):
+            print(f"⚠️ IRPF ({irpf}) es mayor al 50% del devengado. Probablemente es la base. Corrigiendo a 0.00")
+            payroll_data['irpf'] = '0.00'
+        else:
+            print(f"✅ IRPF extraído: {irpf}")
+
+    # 7. VALIDAR SS EMPRESA - MEJORADO
+    # NOTA: Confiamos en el valor extraído por OpenAI si es > 0
+    # Solo estimamos si no se extrajo ningún valor
     ss_company = safe_decimal(payroll_data.get('social_security_company', '0'))
     total_accrued_final = safe_decimal(payroll_data.get('total_accrued', '0'))
 
-    if total_accrued_final > 0:
-        # Rango más amplio: 25-45%
-        expected_min = total_accrued_final * Decimal('0.20')
-        expected_max = total_accrued_final * Decimal('0.50')
-
-        if ss_company < expected_min or ss_company > expected_max:
-            estimated_ss = (total_accrued_final * Decimal('0.32')).quantize(Decimal('0.01'))
-            print(f"⚠️ SS empresa sospechosa ({ss_company}). Estimando: {estimated_ss}")
-            payroll_data['social_security_company'] = str(estimated_ss)
-        else:
-            print(f"✅ SS empresa en rango esperado: {ss_company}")
+    if ss_company > 0:
+        # Si OpenAI extrajo un valor, confiamos en él
+        print(f"✅ SS empresa extraída por IA: {ss_company}")
+    elif total_accrued_final > 0:
+        # Solo estimar si no se extrajo ningún valor
+        estimated_ss = (total_accrued_final * Decimal('0.32')).quantize(Decimal('0.01'))
+        print(f"⚠️ SS empresa no extraída. Estimando al 32%: {estimated_ss}")
+        payroll_data['social_security_company'] = str(estimated_ss)
 
     # 7. LIMPIAR DIRECCIÓN
     address = employee_data.get('address', '')
