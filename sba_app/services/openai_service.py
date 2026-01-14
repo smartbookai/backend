@@ -228,97 +228,111 @@ PURCHASE_INVOICE_PROMPT = (
 )
 
 
+def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png"):
+    """
+    Extrae datos de una sola página/imagen de factura de compra.
+    Función auxiliar interna.
+    """
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA y devolvé el resultado en formato JSON. El supplier es quien EMITE la factura."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_image}"
+                        }
+                    },
+                ],
+            },
+        ],
+        response_format={"type": "json_object"},
+    )
+    
+    usage = getattr(response, "usage", None)
+    tokens = getattr(usage, "total_tokens", None) if usage else None
+    
+    content = response.choices[0].message.content
+    result = json.loads(content)
+    result["tokens"] = tokens
+    
+    return result
+
+
 def extract_purchase_invoice_data(file):
+    """
+    Extrae datos de facturas de compra desde un archivo PDF o imagen.
+    Si el PDF tiene múltiples páginas, procesa cada página como una factura independiente.
+    
+    Retorna:
+    - Si es 1 página/imagen: dict con los datos (comportamiento original)
+    - Si son múltiples páginas: tupla (lista de dicts, pdf_bytes) para poder extraer páginas después
+    """
     content_type = file.content_type.lower()
-    result = {}
-    tokens = None
 
     try:
         # --- CASO 1: PDF ---
         if "pdf" in content_type:
             pdf_bytes = file.read()
-
-            # Siempre convertir PDF a imagen para mejor extracción
-            # Usamos PyMuPDF (fitz) que no requiere Poppler
-            print("📄 Convirtiendo PDF a imagen con PyMuPDF (Purchase)...")
+            
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                first_page = doc[0]
-                mat = fitz.Matrix(2, 2)
-                pix = first_page.get_pixmap(matrix=mat)
-                image_bytes = pix.tobytes("png")
-                print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
+                num_pages = len(doc)
+                print(f"📄 PDF con {num_pages} página(s) detectada(s)")
+                
+                # Si es una sola página, comportamiento original (retorna dict)
+                if num_pages == 1:
+                    print("📄 Procesando PDF de 1 página...")
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[0].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    print(f"📐 Tamaño: {pix.width}x{pix.height}")
+                    return _extract_single_page_purchase_invoice(image_bytes, "image/png")
+                
+                # Múltiples páginas: procesar cada una
+                # Retorna tupla (resultados, pdf_bytes) para que views.py use los mismos bytes
+                print(f"📄 Procesando {num_pages} páginas como facturas separadas...")
+                results = []
+                
+                for page_idx in range(num_pages):
+                    page_number = page_idx + 1  # 1-based para mostrar
+                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[page_idx].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    
+                    try:
+                        result = _extract_single_page_purchase_invoice(image_bytes, "image/png")
+                        result["page_number"] = page_number
+                        results.append(result)
+                    except Exception as e:
+                        print(f"⚠️ Error en página {page_number}: {e}")
+                        results.append({"error": str(e), "page_number": page_number, "tokens": None})
+                
+                print(f"\n✅ Procesadas {len(results)} páginas")
+                # Retornar tupla con resultados Y los bytes del PDF para usar después
+                return (results, pdf_bytes)
 
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA. El supplier es quien EMITE la factura."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}"
-                                }
-                            },
-                        ],
-                    },
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                tokens = getattr(usage, "total_tokens", None)
-
-        # --- CASO 2: Imagen (JPG / PNG) ---
+        # --- CASO 2: Imagen (JPG / PNG) - siempre una sola factura ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
             mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text",
-                             "text": "Extraé los datos de esta factura RECIBIDA. El supplier es quien EMITE la factura."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{base64_image}"
-                                }
-                            },
-                        ],
-                    },
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                tokens = getattr(usage, "total_tokens", None)
+            print("🖼️ Procesando imagen...")
+            return _extract_single_page_purchase_invoice(image_bytes, mime_type)
+        
         else:
             raise ValueError("Formato de archivo no soportado")
-
-        content = response.choices[0].message.content
-        print(f"🤖 Respuesta de OpenAI (Purchase): {content}")
-        result = json.loads(content)
-        result["tokens"] = tokens
 
     except Exception as e:
         print(f"⚠️ Error en extract_purchase_invoice_data: {e}")
         import traceback
         print(traceback.format_exc())
-        result = {"tokens": None}
-
-    return result
+        return {"tokens": None, "error": str(e)}
 
 
 #############################################Here stars the code for payroll extraction#####################################################

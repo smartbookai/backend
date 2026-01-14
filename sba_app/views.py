@@ -1362,6 +1362,110 @@ def api_update_invoice_received(request, invoice_id):
 
     return JsonResponse({'success': True})
 
+def _create_single_purchase_invoice(company, result, pdf_file=None):
+    """
+    Función auxiliar que crea una sola factura de compra.
+    Usada tanto para PDFs de una página como para cada página de PDFs multipágina.
+    """
+    tokens = result.get("tokens")
+    invoice_data = result.get("invoice", {}) or {}
+    supplier_data = result.get("supplier", {}) or {}
+    lines_data = result.get("lines", []) or []
+
+    # Buscar o crear proveedor
+    supplier = None
+    filters = {"company": company}
+    if supplier_data.get("document_number"):
+        filters["document_number"] = supplier_data["document_number"]
+        supplier = Supplier.objects.filter(**filters).first()
+    elif supplier_data.get("name"):
+        filters["name"] = supplier_data["name"]
+        supplier = Supplier.objects.filter(**filters).first()
+
+    if not supplier:
+        supplier = Supplier.objects.create(
+            company=company,
+            name=supplier_data.get("name") or "Proveedor desconocido",
+            contact_person=supplier_data.get("contact_person"),
+            phone=supplier_data.get("phone"),
+            email=supplier_data.get("email"),
+            address=supplier_data.get("address"),
+            document_type=supplier_data.get("document_type"),
+            document_number=supplier_data.get("document_number"),
+        )
+
+    # Procesar descuentos
+    discount_value = invoice_data.get("discount_amount")
+    discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+    discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
+    discount_pct_value = invoice_data.get("discount_percentage")
+    discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+
+    base_amount = safe_decimal(invoice_data.get("base_amount"))
+    tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
+    total_amount = safe_decimal(invoice_data.get("total_amount"))
+
+    # Validar IVA
+    discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
+    if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+        base_neta = base_amount - discount_for_calc
+        tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
+        if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
+            tax_amount = tax_amount_expected
+        else:
+            tax_amount = tax_amount_extracted
+    else:
+        tax_amount = tax_amount_extracted
+
+    # Crear factura
+    invoice = PurchaseInvoice.objects.create(
+        company=company,
+        supplier=supplier,
+        pdf_file=pdf_file,
+        invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
+        issue_date=invoice_data.get("issue_date") or timezone.now().date(),
+        due_date=invoice_data.get("due_date") or None,
+        payment_method=invoice_data.get("payment_method"),
+        base_amount=base_amount,
+        discount_amount=discount_amount,
+        discount_percentage=discount_percentage,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+        notes=invoice_data.get("notes") or "",
+    )
+
+    if tokens is not None:
+        invoice.tokens = tokens
+        invoice.save(update_fields=["tokens"])
+
+    # Crear líneas
+    created_lines = []
+    for line_data in lines_data:
+        line = InvoiceLine.objects.create(
+            purchase_invoice=invoice,
+            description=line_data.get("description") or "Sin descripción",
+            quantity=safe_decimal(line_data.get("quantity", "1")),
+            unit_price=safe_decimal(line_data.get("unit_price", "0")),
+            vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
+        )
+        created_lines.append({
+            "id": line.id,
+            "description": line.description,
+            "quantity": str(line.quantity),
+            "unit_price": str(line.unit_price),
+            "vat_rate": str(line.vat_rate),
+            "subtotal": str(line.subtotal()),
+        })
+
+    return {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "supplier_name": supplier.name,
+        "total_amount": str(invoice.total_amount) if invoice.total_amount else "0.00",
+        "lines": created_lines,
+    }
+
+
 @login_required
 @require_POST
 @transaction.atomic
@@ -1393,8 +1497,8 @@ def api_create_invoice_received(request):
         return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
     try:
-        # 🧠 Paso 1: Extraer datos con OpenAI - función específica para purchase
-        result = extract_purchase_invoice_data(file)  # ← Usá esta función
+        # Paso 1: Extraer datos con OpenAI
+        result = extract_purchase_invoice_data(file)
 
         if not result:
             return JsonResponse({
@@ -1402,13 +1506,70 @@ def api_create_invoice_received(request):
                 "message": "No se pudo extraer información de la factura."
             }, status=400)
 
+        # Detectar si es múltiples facturas (tupla con lista y bytes) o una sola (dict)
+        if isinstance(result, tuple) and len(result) == 2:
+            # MODO MÚLTIPLE: PDF con varias páginas
+            # La tupla contiene (lista_resultados, pdf_bytes)
+            results_list, pdf_bytes = result
+            print(f" Procesando {len(results_list)} facturas desde PDF multipágina...")
+            created_invoices = []
+            errors = []
+            
+            original_filename = file.name or "factura.pdf"
+            base_name = original_filename.rsplit('.', 1)[0]
+            
+            import fitz
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                for idx, single_result in enumerate(results_list):
+                    page_num = single_result.get("page_number", idx + 1)
+                    page_index = page_num - 1  # Índice 0-based para el PDF
+                    
+                    if single_result.get("error"):
+                        errors.append({"page": page_num, "error": single_result.get("error")})
+                        continue
+                    
+                    try:
+                        # Crear un PDF con solo esta página (usar page_index, no idx)
+                        single_page_doc = fitz.open()
+                        single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                        single_page_bytes = single_page_doc.tobytes()
+                        single_page_doc.close()
+                        
+                        # Crear un archivo Django para esta página con nombre único
+                        from django.core.files.base import ContentFile
+                        import uuid
+                        unique_id = uuid.uuid4().hex[:8]
+                        page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
+                        page_file = ContentFile(single_page_bytes, name=page_filename)
+                        
+                        inv_result = _create_single_purchase_invoice(company, single_result, page_file)
+                        inv_result["page_number"] = page_num
+                        created_invoices.append(inv_result)
+                        print(f" Factura {idx + 1} creada: {inv_result['invoice_number']} -> archivo: {page_filename}")
+                    except Exception as e:
+                        print(f" Error página {page_num}: {e}")
+                        errors.append({"page": page_num, "error": str(e)})
+            
+            if not created_invoices:
+                return JsonResponse({"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
+            
+            return JsonResponse({
+                "success": True,
+                "multiple": True,
+                "message": f"Se crearon {len(created_invoices)} factura(s) correctamente.",
+                "invoices_created": len(created_invoices),
+                "invoices": created_invoices,
+                "errors": errors if errors else None,
+            })
+
+        # MODO NORMAL: Una sola factura (comportamiento original)
         tokens = result.get("tokens")
 
         invoice_data = result.get("invoice", {}) or {}
-        supplier_data = result.get("supplier", {}) or {}  # ← Ahora viene como "supplier"
+        supplier_data = result.get("supplier", {}) or {}  # Ahora viene como "supplier"
         lines_data = result.get("lines", []) or []
 
-        # 🏢 Paso 2: Buscar o crear proveedor (Supplier)
+        # Paso 2: Buscar o crear proveedor (Supplier)
         supplier = None
         filters = {"company": company}
 
