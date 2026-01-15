@@ -72,107 +72,127 @@ BASE_PROMPT = (
 
 def extract_invoice_data(file):
     """
-    Extrae datos de una factura (PDF o imagen) usando OpenAI.
-    Devuelve dict con { 'invoice': {...}, 'client': {...}, 'lines': [...] }.
-    Además añade la clave opcional 'tokens' con los tokens totales consumidos.
+    Extrae datos de facturas de ventas desde un archivo PDF o imagen.
+    Si el PDF tiene múltiples páginas, procesa cada página como una factura independiente.
+    
+    Retorna:
+    - Si es 1 página/imagen: dict con los datos (comportamiento original)
+    - Si son múltiples páginas: tupla (lista de dicts, pdf_bytes) para poder extraer páginas después
     """
     content_type = file.content_type.lower()
-    result = {}
-    tokens = None
 
     try:
         # --- CASO 1: PDF ---
         if "pdf" in content_type:
             pdf_bytes = file.read()
-
-            # Siempre convertir PDF a imagen para mejor extracción
-            # Usamos PyMuPDF (fitz) que no requiere Poppler
-            print("📄 Convirtiendo PDF a imagen con PyMuPDF...")
+            
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                first_page = doc[0]
-                # Renderizar a mayor resolución (2x zoom = ~144 DPI)
-                mat = fitz.Matrix(2, 2)
-                pix = first_page.get_pixmap(matrix=mat)
-                image_bytes = pix.tobytes("png")
-                print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
-                print(f"📦 Tamaño de imagen en bytes: {len(image_bytes)}")
+                num_pages = len(doc)
+                print(f"📄 PDF con {num_pages} página(s) detectada(s)")
+                
+                # Si es una sola página, comportamiento original (retorna dict)
+                if num_pages == 1:
+                    print("📄 Procesando PDF de 1 página...")
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[0].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    print(f"📐 Tamaño: {pix.width}x{pix.height}")
+                    return _extract_single_page_sales_invoice(image_bytes, "image/png")
+                
+                # Múltiples páginas: procesar cada una
+                # Retorna tupla (resultados, pdf_bytes) para que views.py use los mismos bytes
+                print(f"📄 Procesando {num_pages} páginas como facturas separadas...")
+                results = []
+                
+                for page_idx in range(num_pages):
+                    page_number = page_idx + 1  # 1-based para mostrar
+                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[page_idx].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    
+                    try:
+                        result = _extract_single_page_sales_invoice(image_bytes, "image/png")
+                        result["page_number"] = page_number
+                        results.append(result)
+                    except Exception as e:
+                        print(f"⚠️ Error en página {page_number}: {e}")
+                        results.append({"error": str(e), "page_number": page_number, "tokens": None})
+                
+                print(f"\n✅ Procesadas {len(results)} páginas")
+                # Retornar tupla con resultados Y los bytes del PDF para usar después
+                return (results, pdf_bytes)
 
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
-            print(f"🔤 Tamaño de base64: {len(base64_image)} caracteres")
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": BASE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}"
-                                }
-                            },
-                        ],
-                    },
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                tokens = getattr(usage, "total_tokens", None)
-
-        # --- CASO 2: Imagen (JPG / PNG) ---
+        # --- CASO 2: Imagen (JPG / PNG) - siempre una sola factura ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
-
-            # CORREGIDO: Codificar imagen en base64
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-            # Detectar el mime type correcto
             mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": BASE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Extraé los datos de esta factura incluyendo todas las líneas de productos/servicios y devolvé solo el JSON."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{base64_image}"
-                                }
-                            },
-                        ],
-                    },
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                tokens = getattr(usage, "total_tokens", None)
-
+            print("🖼️ Procesando imagen...")
+            return _extract_single_page_sales_invoice(image_bytes, mime_type)
+        
         else:
             raise ValueError("Formato de archivo no soportado")
-
-        # --- Parsear JSON seguro ---
-        content = response.choices[0].message.content
-        print(f"🤖 Respuesta de OpenAI: {content}")
-        result = json.loads(content)
-        result["tokens"] = tokens
 
     except Exception as e:
         print(f"⚠️ Error en extract_invoice_data: {e}")
         import traceback
         print(traceback.format_exc())
-        result = {"tokens": None}
+        return {"tokens": None, "error": str(e)}
 
+
+def _extract_single_page_sales_invoice(image_bytes, mime_type="image/png"):
+    """
+    Extrae datos de una sola página/imagen de factura de ventas.
+    Función auxiliar interna.
+    """
+    import time
+    start_time = time.time()
+    print(f"🤖 Llamando a OpenAI para procesar imagen ({len(image_bytes)} bytes)...")
+    
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": BASE_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extraé los datos de esta factura EMITIDA y devolvé el resultado en formato JSON. El client es quien RECIBE la factura."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            }
+                        },
+                    ],
+                },
+            ],
+            response_format={"type": "json_object"},
+            timeout=60,  # Timeout de 60 segundos para la llamada a OpenAI
+        )
+        
+        elapsed_time = time.time() - start_time
+        print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+        
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
+        raise
+    
+    usage = getattr(response, "usage", None)
+    tokens = getattr(usage, "total_tokens", None) if usage else None
+    
+    content = response.choices[0].message.content
+    
+    # Manejar caso donde OpenAI devuelve None (no puede procesar la imagen)
+    if content is None:
+        raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
+    
+    result = json.loads(content)
+    result["tokens"] = tokens
+    
     return result
 
 

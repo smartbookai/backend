@@ -16,8 +16,6 @@ import os
 import csv
 from django.conf import settings
 from django.core.files.storage import default_storage
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry
@@ -1046,114 +1044,74 @@ def api_create_invoice_sent(request):
                 "message": "No se pudo extraer información de la factura."
             }, status=400)
 
-        tokens = result.get("tokens")
+        # Detectar si es múltiples facturas (tupla con lista y bytes) o una sola (dict)
+        if isinstance(result, tuple) and len(result) == 2:
+            # MODO MÚLTIPLE: PDF con varias páginas
+            # La tupla contiene (lista_resultados, pdf_bytes)
+            results_list, pdf_bytes = result
+            print(f" Procesando {len(results_list)} facturas desde PDF multipágina...")
+            created_invoices = []
+            errors = []
+            
+            original_filename = file.name or "factura.pdf"
+            base_name = original_filename.rsplit('.', 1)[0]
+            
+            import fitz
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                for idx, single_result in enumerate(results_list):
+                    page_num = single_result.get("page_number", idx + 1)
+                    page_index = page_num - 1  # Índice 0-based para el PDF
+                    
+                    if single_result.get("error"):
+                        errors.append({"page": page_num, "error": single_result.get("error")})
+                        continue
+                    
+                    try:
+                        # Crear un PDF con solo esta página (usar page_index, no idx)
+                        single_page_doc = fitz.open()
+                        single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                        single_page_bytes = single_page_doc.tobytes()
+                        single_page_doc.close()
+                        
+                        # Crear un archivo Django para esta página con nombre único
+                        from django.core.files.base import ContentFile
+                        import uuid
+                        unique_id = uuid.uuid4().hex[:8]
+                        page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
+                        page_file = ContentFile(single_page_bytes, name=page_filename)
+                        
+                        inv_result = _create_single_sales_invoice(company, single_result, page_file)
+                        inv_result["page_number"] = page_num
+                        created_invoices.append(inv_result)
+                        print(f" Factura {idx + 1} creada: {inv_result['invoice_number']} -> archivo: {page_filename}")
+                    except Exception as e:
+                        print(f" Error página {page_num}: {e}")
+                        errors.append({"page": page_num, "error": str(e)})
+            
+            if not created_invoices:
+                return JsonResponse({"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
+            
+            return JsonResponse({
+                "success": True,
+                "multiple": True,
+                "message": f"Se crearon {len(created_invoices)} factura(s) correctamente.",
+                "invoices_created": len(created_invoices),
+                "invoices": created_invoices,
+                "errors": errors if errors else None,
+            })
 
-        invoice_data = result.get("invoice", {}) or {}
-        client_data = result.get("client", {}) or {}
-        lines_data = result.get("lines", []) or []
-
-        client = None
-        filters = {"company": company}
-
-        if client_data.get("document_number"):
-            filters["document_number"] = client_data["document_number"]
-            client = Client.objects.filter(**filters).first()
-        elif client_data.get("name"):
-            filters["name"] = client_data["name"]
-            client = Client.objects.filter(**filters).first()
-
-        if not client:
-            client = Client.objects.create(
-                company=company,
-                name=client_data.get("name") or "Cliente desconocido",
-                contact_person=client_data.get("contact_person"),
-                phone=client_data.get("phone"),
-                email=client_data.get("email"),
-                address=client_data.get("address"),
-                document_type=client_data.get("document_type"),
-                document_number=client_data.get("document_number"),
-            )
-
-        discount_value = invoice_data.get("discount_amount")
-        discount_amount_raw = safe_decimal(discount_value) if discount_value else None
-        # Guardar siempre como valor positivo (OpenAI a veces extrae negativos)
-        discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
-        discount_pct_value = invoice_data.get("discount_percentage")
-        discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
-
-        # Extraer valores base
-        base_amount = safe_decimal(invoice_data.get("base_amount"))
-        tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
-        total_amount = safe_decimal(invoice_data.get("total_amount"))
-
-        # Validar y recalcular IVA si hay descuento
-        discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
-        if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
-            # Calcular base neta (después del descuento)
-            base_neta = base_amount - discount_for_calc
-            # Recalcular IVA esperado (21%)
-            tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
-            # Si el IVA extraído difiere significativamente, usar el calculado
-            if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
-                print(f" IVA corregido: {tax_amount_extracted} → {tax_amount_expected} (base neta: {base_neta})")
-                tax_amount = tax_amount_expected
-            else:
-                tax_amount = tax_amount_extracted
-        else:
-            tax_amount = tax_amount_extracted
-
-        invoice = SalesInvoice.objects.create(
-            company=company,
-            client=client,
-            pdf_file=file,
-            invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
-            issue_date=invoice_data.get("issue_date") or timezone.now().date(),
-            due_date=invoice_data.get("due_date") or None,
-            payment_method=invoice_data.get("payment_method"),
-            base_amount=base_amount,
-            discount_amount=discount_amount,
-            discount_percentage=discount_percentage,
-            tax_amount=tax_amount,
-            total_amount=total_amount,
-            notes=invoice_data.get("notes") or "",
-        )
-
-        if tokens is not None:
-            invoice.tokens = tokens
-            invoice.save(update_fields=["tokens"])
-
-        if tokens is not None:
-            invoice.tokens = tokens
-            invoice.save(update_fields=["tokens"])
-
-        created_lines = []
-        if lines_data:
-            for line_data in lines_data:
-                line = InvoiceLine.objects.create(
-                    sales_invoice=invoice,
-                    description=line_data.get("description") or "Sin descripción",
-                    quantity=safe_decimal(line_data.get("quantity", "1")),
-                    unit_price=safe_decimal(line_data.get("unit_price", "0")),
-                    vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
-                )
-                created_lines.append({
-                    "id": line.id,
-                    "description": line.description,
-                    "quantity": str(line.quantity),
-                    "unit_price": str(line.unit_price),
-                    "vat_rate": str(line.vat_rate),
-                    "subtotal": str(line.subtotal()),
-                })
-        else:
-            print("⚠️ No se encontraron líneas en la factura")
-
+        # MODO NORMAL: Una sola factura (comportamiento original)
+        # Usar la función auxiliar para mantener consistencia
+        inv_result = _create_single_sales_invoice(company, result, file)
+        
         return JsonResponse({
             "success": True,
             "message": "Factura procesada correctamente.",
-            "invoice_id": invoice.id,
-            "invoice_data": invoice_data,
-            "client_data": client_data,
-            "lines": created_lines,
+            "invoice_id": inv_result["invoice_id"],
+            "invoice_number": inv_result["invoice_number"],
+            "client_name": inv_result["client_name"],
+            "total_amount": inv_result["total_amount"],
+            "lines": inv_result["lines"],
         })
 
     except IntegrityError as e:
@@ -1361,6 +1319,110 @@ def api_update_invoice_received(request, invoice_id):
         InvoiceLine.objects.filter(id__in=[o.id for o in lines_to_delete]).delete()
 
     return JsonResponse({'success': True})
+
+def _create_single_sales_invoice(company, result, pdf_file=None):
+    """
+    Función auxiliar que crea una sola factura de ventas.
+    Usada tanto para PDFs de una página como para cada página de PDFs multipágina.
+    """
+    tokens = result.get("tokens")
+    invoice_data = result.get("invoice", {}) or {}
+    client_data = result.get("client", {}) or {}
+    lines_data = result.get("lines", []) or []
+
+    # Buscar o crear cliente
+    client = None
+    filters = {"company": company}
+    if client_data.get("document_number"):
+        filters["document_number"] = client_data["document_number"]
+        client = Client.objects.filter(**filters).first()
+    elif client_data.get("name"):
+        filters["name"] = client_data["name"]
+        client = Client.objects.filter(**filters).first()
+
+    if not client:
+        client = Client.objects.create(
+            company=company,
+            name=client_data.get("name") or "Cliente desconocido",
+            contact_person=client_data.get("contact_person"),
+            phone=client_data.get("phone"),
+            email=client_data.get("email"),
+            address=client_data.get("address"),
+            document_type=client_data.get("document_type"),
+            document_number=client_data.get("document_number"),
+        )
+
+    # Procesar descuentos
+    discount_value = invoice_data.get("discount_amount")
+    discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+    discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
+    discount_pct_value = invoice_data.get("discount_percentage")
+    discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+
+    base_amount = safe_decimal(invoice_data.get("base_amount"))
+    tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
+    total_amount = safe_decimal(invoice_data.get("total_amount"))
+
+    # Validar IVA
+    discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
+    if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+        base_neta = base_amount - discount_for_calc
+        tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
+        if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
+            tax_amount = tax_amount_expected
+        else:
+            tax_amount = tax_amount_extracted
+    else:
+        tax_amount = tax_amount_extracted
+
+    # Crear factura
+    invoice = SalesInvoice.objects.create(
+        company=company,
+        client=client,
+        pdf_file=pdf_file,
+        invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
+        issue_date=invoice_data.get("issue_date") or timezone.now().date(),
+        due_date=invoice_data.get("due_date") or None,
+        payment_method=invoice_data.get("payment_method"),
+        base_amount=base_amount,
+        discount_amount=discount_amount,
+        discount_percentage=discount_percentage,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+        notes=invoice_data.get("notes") or "",
+    )
+
+    if tokens is not None:
+        invoice.tokens = tokens
+        invoice.save(update_fields=["tokens"])
+
+    # Crear líneas
+    created_lines = []
+    for line_data in lines_data:
+        line = InvoiceLine.objects.create(
+            sales_invoice=invoice,
+            description=line_data.get("description") or "Sin descripción",
+            quantity=safe_decimal(line_data.get("quantity", "1")),
+            unit_price=safe_decimal(line_data.get("unit_price", "0")),
+            vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
+        )
+        created_lines.append({
+            "id": line.id,
+            "description": line.description,
+            "quantity": str(line.quantity),
+            "unit_price": str(line.unit_price),
+            "vat_rate": str(line.vat_rate),
+            "subtotal": str(line.subtotal()),
+        })
+
+    return {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "client_name": client.name,
+        "total_amount": str(invoice.total_amount) if invoice.total_amount else "0.00",
+        "lines": created_lines,
+    }
+
 
 def _create_single_purchase_invoice(company, result, pdf_file=None):
     """
