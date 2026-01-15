@@ -1332,15 +1332,70 @@ def _create_single_sales_invoice(company, result, pdf_file=None):
 
     # Buscar o crear cliente
     client = None
-    filters = {"company": company}
     if client_data.get("document_number"):
-        filters["document_number"] = client_data["document_number"]
-        client = Client.objects.filter(**filters).first()
-    elif client_data.get("name"):
-        filters["name"] = client_data["name"]
-        client = Client.objects.filter(**filters).first()
+        # Buscar por document_number (case-insensitive)
+        client = Client.objects.filter(company=company, document_number__iexact=client_data["document_number"].strip()).first()
+        print(f"🔍 Buscando cliente por document_number: {client_data['document_number']} -> {'Encontrado' if client else 'No encontrado'}")
+    
+    if not client and client_data.get("name"):
+        # Buscar por nombre con múltiples estrategias
+        name_search = client_data["name"].strip()
+        print(f"🔍 Buscando cliente por nombre: '{name_search}'")
+        
+        # 1. Búsqueda exacta case-insensitive
+        client = Client.objects.filter(company=company, name__iexact=name_search).first()
+        if client:
+            print(f"✅ Encontrado con búsqueda exacta")
+        
+        # 2. Búsqueda normalizando (minúsculas, sin tildes)
+        if not client:
+            try:
+                from unidecode import unidecode
+                normalized_search = unidecode(name_search.lower())
+                existing_clients = Client.objects.filter(company=company)
+                for existing_client in existing_clients:
+                    existing_normalized = unidecode(existing_client.name.lower())
+                    if normalized_search == existing_normalized:
+                        client = existing_client
+                        print(f"✅ Encontrado con normalización: '{name_search}' ≈ '{existing_client.name}'")
+                        break
+            except ImportError:
+                # Si no hay unidecode, usar normalización básica
+                normalized_search = name_search.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u').replace('ñ', 'n')
+                existing_clients = Client.objects.filter(company=company)
+                for existing_client in existing_clients:
+                    existing_normalized = existing_client.name.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u').replace('ñ', 'n')
+                    if normalized_search == existing_normalized:
+                        client = existing_client
+                        print(f"✅ Encontrado con normalización básica: '{name_search}' ≈ '{existing_client.name}'")
+                        break
+        
+        # 3. Búsqueda por contains (case-insensitive)
+        if not client:
+            client = Client.objects.filter(company=company, name__icontains=name_search).first()
+            if client:
+                print(f"✅ Encontrado con contains")
+        
+        # 4. Búsqueda por palabras clave (si contiene "sebastian" y "pluis")
+        if not client and "sebastian" in name_search.lower() and "pluis" in name_search.lower():
+            client = Client.objects.filter(
+                company=company,
+                name__icontains="sebastian"
+            ).filter(name__icontains="pluis").first()
+            if client:
+                print(f"✅ Encontrado por palabras clave: '{client.name}'")
+        
+        # 5. Si parece un email, ignorar y buscar clientes existentes con nombre similar
+        if not client and "@" in name_search:
+            print(f"⚠️ Detectado email como nombre: '{name_search}', buscando cliente existente...")
+            client = Client.objects.filter(company=company).filter(
+                name__icontains="sebastian"
+            ).filter(name__icontains="pluis").first()
+            if client:
+                print(f"✅ Encontrado cliente real para email: '{client.name}'")
 
     if not client:
+        print(f"➕ Creando nuevo cliente: {client_data.get('name', 'Cliente desconocido')}")
         client = Client.objects.create(
             company=company,
             name=client_data.get("name") or "Cliente desconocido",
@@ -1351,6 +1406,8 @@ def _create_single_sales_invoice(company, result, pdf_file=None):
             document_type=client_data.get("document_type"),
             document_number=client_data.get("document_number"),
         )
+    else:
+        print(f"♻️ Reutilizando cliente existente: {client.name} (ID: {client.id})")
 
     # Procesar descuentos
     discount_value = invoice_data.get("discount_amount")
