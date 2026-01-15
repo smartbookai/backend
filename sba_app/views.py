@@ -2345,6 +2345,123 @@ def validate_and_fix_payroll_data(payroll_data, employee_data):
     return payroll_data, employee_data
 
 
+def _create_single_payroll(company, result, pdf_file=None):
+    """
+    Función auxiliar que crea una sola nómina.
+    Usada tanto para PDFs de una página como para cada página de PDFs multipágina.
+    """
+    tokens = result.get("tokens")
+    payroll_data = result.get("payroll", {}) or {}
+    employee_data = result.get("employee", {}) or {}
+
+    payroll_data, employee_data = validate_and_fix_payroll_data(payroll_data, employee_data)
+
+    period_start = payroll_data.get("period_start")
+    period_end = payroll_data.get("period_end")
+    payment_date = payroll_data.get("payment_date")
+
+    # Si payment_date es anterior a period_start, corregir
+    if period_start and payment_date:
+        from datetime import datetime
+        try:
+            ps = datetime.strptime(period_start, "%Y-%m-%d").date()
+            pd = datetime.strptime(payment_date, "%Y-%m-%d").date()
+
+            if pd < ps:
+                print(
+                    f"⚠️ payment_date ({payment_date}) es anterior a period_start ({period_start}). Corrigiendo...")
+                # Usar period_end como payment_date
+                payroll_data["payment_date"] = period_end or period_start
+        except:
+            pass
+
+    # Buscar o crear empleado (Employee)
+    employee = None
+    filters = {"company": company}
+
+    if employee_data.get("document_number"):
+        filters["document_number"] = employee_data["document_number"]
+        employee = Employee.objects.filter(**filters).first()
+    elif employee_data.get("first_name") and employee_data.get("last_name"):
+        filters["first_name__iexact"] = employee_data["first_name"]
+        filters["last_name__iexact"] = employee_data["last_name"]
+        employee = Employee.objects.filter(**filters).first()
+
+    if not employee:
+        print(f"➕ Creando nuevo empleado: {employee_data.get('first_name', 'Nombre')} {employee_data.get('last_name', 'Desconocido')}")
+        employee = Employee.objects.create(
+            company=company,
+            first_name=employee_data.get("first_name") or "Nombre",
+            last_name=employee_data.get("last_name") or "Desconocido",
+            document_type=employee_data.get("document_type") or "DNI",
+            document_number=employee_data.get("document_number") or "SIN-DOCUMENTO",
+            email=employee_data.get("email"),
+            phone=employee_data.get("phone"),
+            date_of_birth=employee_data.get("date_of_birth"),
+            address=employee_data.get("address"),
+            job_position=employee_data.get("job_position") or "Sin especificar",
+            department=employee_data.get("department"),
+            contract_type=employee_data.get("contract_type") or "indefinido",
+            hire_date=employee_data.get("hire_date") or timezone.now().date(),
+            social_security_number=employee_data.get("social_security_number"),
+            bank_account=employee_data.get("bank_account"),
+            collective_agreement=employee_data.get("collective_agreement"),
+            is_active=True,
+        )
+    else:
+        print(f"♻️ Reutilizando empleado existente: {employee.first_name} {employee.last_name} (ID: {employee.id})")
+
+    # Crear nómina (Payroll)
+    payroll = Payroll.objects.create(
+        company=company,
+        employee=employee,
+        pdf_file=pdf_file,
+        period_start=payroll_data.get("period_start") or timezone.now().date(),
+        period_end=payroll_data.get("period_end") or timezone.now().date(),
+        payment_date=payroll_data.get("payment_date") or timezone.now().date(),
+        issue_date=payroll_data.get("issue_date") or timezone.now().date(),
+
+        # Devengos
+        base_salary=safe_decimal(payroll_data.get("base_salary", "0")),
+        salary_supplements=safe_decimal(payroll_data.get("salary_supplements", "0")),
+        overtime=safe_decimal(payroll_data.get("overtime", "0")),
+        bonuses=safe_decimal(payroll_data.get("bonuses", "0")),
+        total_accrued=safe_decimal(payroll_data.get("total_accrued", "0")),
+
+        # Deducciones
+        social_security_employee=safe_decimal(payroll_data.get("social_security_employee", "0")),
+        irpf=safe_decimal(payroll_data.get("irpf", "0")),
+        other_deductions=safe_decimal(payroll_data.get("other_deductions", "0")),
+        total_deductions=safe_decimal(payroll_data.get("total_deductions", "0")),
+
+        # Resultado
+        net_salary=safe_decimal(payroll_data.get("net_salary", "0")),
+        social_security_company=safe_decimal(payroll_data.get("social_security_company", "0")),
+
+        # Cuentas contables
+        account_salary_expense=payroll_data.get("account_salary_expense") or "640",
+        account_social_security_expense=payroll_data.get("account_social_security_expense") or "642",
+        account_social_security_payable=payroll_data.get("account_social_security_payable") or "476",
+        account_irpf_payable=payroll_data.get("account_irpf_payable") or "4751",
+        account_bank=payroll_data.get("account_bank") or "572",
+
+        notes=payroll_data.get("notes") or "",
+    )
+
+    if tokens is not None:
+        payroll.tokens = tokens
+        payroll.save(update_fields=["tokens"])
+
+    return {
+        "payroll_id": payroll.id,
+        "employee_id": employee.id,
+        "employee_name": f"{employee.first_name} {employee.last_name}",
+        "period_start": payroll.period_start.strftime('%Y-%m-%d') if hasattr(payroll.period_start, 'strftime') else str(payroll.period_start),
+        "period_end": payroll.period_end.strftime('%Y-%m-%d') if hasattr(payroll.period_end, 'strftime') else str(payroll.period_end),
+        "net_salary": str(payroll.net_salary) if payroll.net_salary else "0.00",
+    }
+
+
 @login_required
 @require_POST
 @transaction.atomic
@@ -2359,7 +2476,6 @@ def api_create_payroll(request):
         return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
     try:
-        # Paso 1: Extraer datos con OpenAI
         result = extract_payroll_data(file)
 
         if not result:
@@ -2368,113 +2484,73 @@ def api_create_payroll(request):
                 "message": "No se pudo extraer información de la nómina."
             }, status=400)
 
-        tokens = result.get("tokens")
+        # Detectar si es múltiples nóminas (tupla con lista y bytes) o una sola (dict)
+        if isinstance(result, tuple) and len(result) == 2:
+            # MODO MÚLTIPLE: PDF con varias páginas
+            results_list, pdf_bytes = result
+            print(f"📄 Procesando {len(results_list)} nóminas desde PDF multipágina...")
+            created_payrolls = []
+            errors = []
+            
+            original_filename = file.name or "nomina.pdf"
+            base_name = original_filename.rsplit('.', 1)[0]
+            
+            import fitz
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                for idx, single_result in enumerate(results_list):
+                    page_num = single_result.get("page_number", idx + 1)
+                    page_index = page_num - 1  # Índice 0-based para el PDF
+                    
+                    if single_result.get("error"):
+                        errors.append({"page": page_num, "error": single_result.get("error")})
+                        continue
+                    
+                    try:
+                        # Crear un PDF con solo esta página
+                        single_page_doc = fitz.open()
+                        single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                        single_page_bytes = single_page_doc.tobytes()
+                        single_page_doc.close()
+                        
+                        # Crear un archivo Django para esta página
+                        from django.core.files.base import ContentFile
+                        import uuid
+                        unique_id = uuid.uuid4().hex[:8]
+                        page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
+                        page_file = ContentFile(single_page_bytes, name=page_filename)
+                        
+                        payroll_result = _create_single_payroll(company, single_result, page_file)
+                        payroll_result["page_number"] = page_num
+                        created_payrolls.append(payroll_result)
+                        print(f"✅ Nómina {idx + 1} creada: empleado {payroll_result['employee_name']} -> archivo: {page_filename}")
+                    except Exception as e:
+                        print(f"❌ Error página {page_num}: {e}")
+                        errors.append({"page": page_num, "error": str(e)})
+            
+            if not created_payrolls:
+                return JsonResponse({"success": False, "message": "No se pudo crear ninguna nómina.", "errors": errors}, status=400)
+            
+            return JsonResponse({
+                "success": True,
+                "multiple": True,
+                "message": f"Se crearon {len(created_payrolls)} nómina(s) correctamente.",
+                "payrolls_created": len(created_payrolls),
+                "payrolls": created_payrolls,
+                "errors": errors if errors else None,
+            })
 
-        payroll_data = result.get("payroll", {}) or {}
-        employee_data = result.get("employee", {}) or {}
-
-        payroll_data, employee_data = validate_and_fix_payroll_data(payroll_data, employee_data)
-
-        period_start = payroll_data.get("period_start")
-        period_end = payroll_data.get("period_end")
-        payment_date = payroll_data.get("payment_date")
-
-        # Si payment_date es anterior a period_start, corregir
-        if period_start and payment_date:
-            from datetime import datetime
-            try:
-                ps = datetime.strptime(period_start, "%Y-%m-%d").date()
-                pd = datetime.strptime(payment_date, "%Y-%m-%d").date()
-
-                if pd < ps:
-                    print(
-                        f"⚠️ payment_date ({payment_date}) es anterior a period_start ({period_start}). Corrigiendo...")
-                    # Usar period_end como payment_date
-                    payroll_data["payment_date"] = period_end or period_start
-            except:
-                pass
-
-        # Paso 2: Buscar o crear empleado (Employee)
-        employee = None
-        filters = {"company": company}
-
-        if employee_data.get("document_number"):
-            filters["document_number"] = employee_data["document_number"]
-            employee = Employee.objects.filter(**filters).first()
-        elif employee_data.get("first_name") and employee_data.get("last_name"):
-            filters["first_name__iexact"] = employee_data["first_name"]
-            filters["last_name__iexact"] = employee_data["last_name"]
-            employee = Employee.objects.filter(**filters).first()
-
-        if not employee:
-            employee = Employee.objects.create(
-                company=company,
-                first_name=employee_data.get("first_name") or "Nombre",
-                last_name=employee_data.get("last_name") or "Desconocido",
-                document_type=employee_data.get("document_type") or "DNI",
-                document_number=employee_data.get("document_number") or "SIN-DOCUMENTO",
-                email=employee_data.get("email"),
-                phone=employee_data.get("phone"),
-                date_of_birth=employee_data.get("date_of_birth"),
-                address=employee_data.get("address"),
-                job_position=employee_data.get("job_position") or "Sin especificar",
-                department=employee_data.get("department"),
-                contract_type=employee_data.get("contract_type") or "indefinido",
-                hire_date=employee_data.get("hire_date") or timezone.now().date(),
-                social_security_number=employee_data.get("social_security_number"),
-                bank_account=employee_data.get("bank_account"),
-                collective_agreement=employee_data.get("collective_agreement"),
-                is_active=True,
-            )
-
-        #  Paso 3: Crear nómina (Payroll)
-        payroll = Payroll.objects.create(
-            company=company,
-            employee=employee,
-            pdf_file=file,
-            period_start=payroll_data.get("period_start") or timezone.now().date(),
-            period_end=payroll_data.get("period_end") or timezone.now().date(),
-            payment_date=payroll_data.get("payment_date") or timezone.now().date(),
-            issue_date=payroll_data.get("issue_date") or timezone.now().date(),
-
-            # Devengos
-            base_salary=safe_decimal(payroll_data.get("base_salary", "0")),
-            salary_supplements=safe_decimal(payroll_data.get("salary_supplements", "0")),
-            overtime=safe_decimal(payroll_data.get("overtime", "0")),
-            bonuses=safe_decimal(payroll_data.get("bonuses", "0")),
-            total_accrued=safe_decimal(payroll_data.get("total_accrued", "0")),
-
-            # Deducciones
-            social_security_employee=safe_decimal(payroll_data.get("social_security_employee", "0")),
-            irpf=safe_decimal(payroll_data.get("irpf", "0")),
-            other_deductions=safe_decimal(payroll_data.get("other_deductions", "0")),
-            total_deductions=safe_decimal(payroll_data.get("total_deductions", "0")),
-
-            # Resultado
-            net_salary=safe_decimal(payroll_data.get("net_salary", "0")),
-            social_security_company=safe_decimal(payroll_data.get("social_security_company", "0")),
-
-            # Cuentas contables
-            account_salary_expense=payroll_data.get("account_salary_expense") or "640",
-            account_social_security_expense=payroll_data.get("account_social_security_expense") or "642",
-            account_social_security_payable=payroll_data.get("account_social_security_payable") or "476",
-            account_irpf_payable=payroll_data.get("account_irpf_payable") or "4751",
-            account_bank=payroll_data.get("account_bank") or "572",
-
-            notes=payroll_data.get("notes") or "",
-        )
-
-        if tokens is not None:
-            payroll.tokens = tokens
-            payroll.save(update_fields=["tokens"])
-
+        # MODO NORMAL: Una sola nómina (comportamiento original)
+        payroll_result = _create_single_payroll(company, result, file)
+        
         return JsonResponse({
             "success": True,
             "message": "Nómina procesada correctamente.",
-            "payroll_id": payroll.id,
-            "payroll_data": payroll_data,
-            "employee_data": employee_data,
-            "employee_id": employee.id,
+            "payroll_id": payroll_result["payroll_id"],
+            "employee_id": payroll_result["employee_id"],
+            "employee_name": payroll_result["employee_name"],
+            "period_start": payroll_result["period_start"],
+            "period_end": payroll_result["period_end"],
+            "net_salary": payroll_result["net_salary"],
         })
 
     except Exception as e:

@@ -468,10 +468,65 @@ BASE_PROMPT_PAYROLL = (
     "- NUNCA inventes información\n"
 )
 
+def _extract_single_page_payroll(image_bytes, mime_type="image/png"):
+    """
+    Función auxiliar que extrae datos de una sola página de nómina usando OpenAI.
+    """
+    import time
+    start_time = time.time()
+    print(f"🤖 Llamando a OpenAI para procesar nómina ({len(image_bytes)} bytes)...")
+    
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": BASE_PROMPT_PAYROLL},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extraé los datos de esta nómina y devolvé solo el JSON."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            }
+                        },
+                    ],
+                },
+            ],
+            response_format={"type": "json_object"},
+            timeout=60,
+        )
+        
+        elapsed_time = time.time() - start_time
+        print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+        
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
+        raise
+    
+    usage = getattr(response, "usage", None)
+    tokens = getattr(usage, "total_tokens", None) if usage else None
+    
+    content = response.choices[0].message.content
+    
+    if content is None:
+        raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
+    
+    result = json.loads(content)
+    result["tokens"] = tokens
+    
+    return result
+
+
 def extract_payroll_data(file):
     """
     Extrae datos de una nómina (PDF o imagen) usando OpenAI.
-    Devuelve dict con { 'payroll': {...}, 'employee': {...} }.
+    Devuelve dict con { 'payroll': {...}, 'employee': {...} } para una sola nómina,
+    o una tupla (lista_resultados, pdf_bytes) para PDFs múltiples.
     """
     content_type = file.content_type.lower()
     result = {}
@@ -481,113 +536,93 @@ def extract_payroll_data(file):
         # --- CASO 1: PDF ---
         if "pdf" in content_type:
             pdf_bytes = file.read()
-
-            # Intentar extraer texto directamente
-            text = ""
+            
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                for page in doc:
-                    text += page.get_text("text")
+                num_pages = len(doc)
+                
+                if num_pages == 1:
+                    # PDF de una sola página - comportamiento original
+                    # Intentar extraer texto directamente
+                    text = ""
+                    for page in doc:
+                        text += page.get_text("text")
 
-            # Si el texto es corto o sin montos → pasar a imagen
-            if len(text.strip()) < 50 or ("€" not in text and "$" not in text):
-                print("⚠️ PDF parece escaneado → usando OCR visual.")
-                with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                    first_page = doc[0]
-                    mat = fitz.Matrix(2, 2)
-                    pix = first_page.get_pixmap(matrix=mat)
-                    image_bytes = pix.tobytes("png")
-                    print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
-
-                base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": BASE_PROMPT_PAYROLL},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Extraé los datos de esta nómina y devolvé solo el JSON."},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{base64_image}"
-                                    }
-                                },
+                    # Si el texto es corto o sin montos → pasar a imagen
+                    if len(text.strip()) < 50 or ("€" not in text and "$" not in text):
+                        print("⚠️ PDF parece escaneado → usando OCR visual.")
+                        first_page = doc[0]
+                        mat = fitz.Matrix(2, 2)
+                        pix = first_page.get_pixmap(matrix=mat)
+                        image_bytes = pix.tobytes("png")
+                        print(f"📐 Tamaño de imagen: {pix.width}x{pix.height}")
+                        return _extract_single_page_payroll(image_bytes, "image/png")
+                    else:
+                        # Si hay texto legible, usarlo directamente
+                        print(f"✅ Texto extraído del PDF de nómina ({len(text)} caracteres)")
+                        response = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {"role": "system", "content": BASE_PROMPT_PAYROLL},
+                                {"role": "user", "content": f"Extraé los datos de esta nómina:\n\n{text}"},
                             ],
-                        },
-                    ],
-                    response_format={"type": "json_object"},
-                )
+                            response_format={"type": "json_object"},
+                        )
 
-                usage = getattr(response, "usage", None)
-                if usage is not None:
-                    tokens = getattr(usage, "total_tokens", None)
-            else:
-                # Si hay texto legible, usarlo directamente
-                print(f"✅ Texto extraído del PDF de nómina ({len(text)} caracteres)")
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": BASE_PROMPT_PAYROLL},
-                        {"role": "user", "content": f"Extraé los datos de esta nómina:\n\n{text}"},
-                    ],
-                    response_format={"type": "json_object"},
-                )
+                        usage = getattr(response, "usage", None)
+                        if usage is not None:
+                            tokens = getattr(usage, "total_tokens", None)
 
-                usage = getattr(response, "usage", None)
-                if usage is not None:
-                    tokens = getattr(usage, "total_tokens", None)
+                        content = response.choices[0].message.content
+                        print(f"🤖 Respuesta de OpenAI (Nómina): {content}")
+                        result = json.loads(content)
+                        result["tokens"] = tokens
+                        return result
+                else:
+                    # PDF con múltiples páginas - procesar cada una
+                    print(f"📄 PDF con {num_pages} páginas detectado, procesando cada página...")
+                    results = []
+                    
+                    for page_idx in range(num_pages):
+                        print(f"🔄 Procesando página {page_idx + 1} de {num_pages}...")
+                        
+                        try:
+                            # Extraer página como imagen
+                            page = doc[page_idx]
+                            mat = fitz.Matrix(2, 2)
+                            pix = page.get_pixmap(matrix=mat)
+                            image_bytes = pix.tobytes("png")
+                            
+                            # Extraer datos de esta página
+                            page_result = _extract_single_page_payroll(image_bytes, "image/png")
+                            page_result["page_number"] = page_idx + 1
+                            results.append(page_result)
+                            
+                            print(f"✅ Página {page_idx + 1} procesada")
+                            
+                        except Exception as e:
+                            print(f"❌ Error procesando página {page_idx + 1}: {e}")
+                            results.append({
+                                "page_number": page_idx + 1,
+                                "error": str(e),
+                                "tokens": None
+                            })
+                    
+                    return (results, pdf_bytes)
 
         # --- CASO 2: Imagen (JPG / PNG) ---
         elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
             image_bytes = file.read()
-
-            # Codificar imagen en base64
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-            # Detectar el mime type correcto
             mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": BASE_PROMPT_PAYROLL},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Extraé los datos de esta nómina y devolvé solo el JSON."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{base64_image}"
-                                }
-                            },
-                        ],
-                    },
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                tokens = getattr(usage, "total_tokens", None)
+            return _extract_single_page_payroll(image_bytes, mime_type)
         else:
             raise ValueError("Formato de archivo no soportado")
-
-        # --- Parsear JSON seguro ---
-        content = response.choices[0].message.content
-        print(f"🤖 Respuesta de OpenAI (Nómina): {content}")
-        result = json.loads(content)
-        result["tokens"] = tokens
 
     except Exception as e:
         print(f"⚠️ Error en extract_payroll_data: {e}")
         import traceback
         print(traceback.format_exc())
         result = {"tokens": None}
-
-    return result
+        return result
 
 ############################################################################generate accounting entry for purchase#####################################################
 def generate_accounting_entry_for_purchase(invoice_data, lines_data, supplier_name):
