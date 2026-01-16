@@ -243,6 +243,49 @@
     </div>
     
     <div class="modal-body">
+      <!-- Documentos disponibles -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-bottom:2rem;">
+        <!-- Términos y Condiciones -->
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1rem;text-align:center;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;">
+            <i class="bi bi-file-text" style="font-size:20px;color:#6b7280;"></i>
+          </div>
+          <h4 style="font-size:14px;margin:0 0 0.5rem 0;color:#374151;">Términos y Condiciones</h4>
+          <div style="display:flex;gap:0.5rem;justify-content:center;">
+            <a href="#" onclick="window.open('/static/documents/terminos-y-condiciones.pdf', '_blank'); return false;" 
+               style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.5rem 0.75rem;background:#3b82f6;color:white;border:none;border-radius:4px;text-decoration:none;font-size:12px;cursor:pointer;">
+              <i class="bi bi-eye"></i>
+              Ver
+            </a>
+            <a href="/static/documents/terminos-y-condiciones.pdf" download="terminos-y-condiciones.pdf"
+               style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.5rem 0.75rem;background:#f9fafb;color:#374151;border:1px solid #d1d5db;border-radius:4px;text-decoration:none;font-size:12px;cursor:pointer;">
+              <i class="bi bi-download"></i>
+              Descargar
+            </a>
+          </div>
+        </div>
+
+        <!-- Renuncia al derecho de desistimiento -->
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1rem;text-align:center;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;">
+            <i class="bi bi-shield-exclamation" style="font-size:20px;color:#6b7280;"></i>
+          </div>
+          <h4 style="font-size:14px;margin:0 0 0.5rem 0;color:#374151;">Renuncia Desistimiento</h4>
+          <div style="display:flex;gap:0.5rem;justify-content:center;">
+            <a href="#" onclick="window.open('/static/documents/renuncia-desistimiento.pdf', '_blank'); return false;" 
+               style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.5rem 0.75rem;background:#3b82f6;color:white;border:none;border-radius:4px;text-decoration:none;font-size:12px;cursor:pointer;">
+              <i class="bi bi-eye"></i>
+              Ver
+            </a>
+            <a href="/static/documents/renuncia-desistimiento.pdf" download="renuncia-desistimiento.pdf"
+               style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.5rem 0.75rem;background:#f9fafb;color:#374151;border:1px solid #d1d5db;border-radius:4px;text-decoration:none;font-size:12px;cursor:pointer;">
+              <i class="bi bi-download"></i>
+              Descargar
+            </a>
+          </div>
+        </div>
+      </div>
+
       <form id="precontractualForm">
         <!-- Checkbox 1: Términos y condiciones y protección de datos -->
         <div class="checkbox-group">
@@ -424,85 +467,87 @@
   });
 
   // Lógica del formulario precontractual
-  const precontractualForm = document.getElementById('precontractualForm');
-  const acceptBtn = document.getElementById('acceptBtn');
-  const checkboxes = precontractualForm.querySelectorAll('input[type="checkbox"]');
-  
-  // Verificar checkboxes obligatorios
-  function checkRequiredCheckboxes() {
-    const termsConditions = document.querySelector('input[name="terms_conditions"]');
-    const waiverWithdrawal = document.querySelector('input[name="waiver_withdrawal"]');
+  document.addEventListener('DOMContentLoaded', function() {
+    const precontractualForm = document.getElementById('precontractualForm');
+    const acceptBtn = document.getElementById('acceptBtn');
+    const checkboxes = precontractualForm.querySelectorAll('input[type="checkbox"]');
     
-    // Los dos primeros son obligatorios
-    const requiredChecked = termsConditions.checked && waiverWithdrawal.checked;
+    // Verificar checkboxes obligatorios
+    function checkRequiredCheckboxes() {
+      const termsConditions = document.querySelector('input[name="terms_conditions"]');
+      const waiverWithdrawal = document.querySelector('input[name="waiver_withdrawal"]');
+      
+      // Los dos primeros son obligatorios
+      const requiredChecked = termsConditions.checked && waiverWithdrawal.checked;
+      
+      // Habilitar/deshabilitar botón
+      acceptBtn.disabled = !requiredChecked;
+    }
     
-    // Habilitar/deshabilitar botón
-    acceptBtn.disabled = !requiredChecked;
-  }
-  
-  // Escuchar cambios en checkboxes
-  checkboxes.forEach(checkbox => {
-    checkbox.addEventListener('change', checkRequiredCheckboxes);
-  });
-  
-  // Manejar envío del formulario
-  precontractualForm.addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Recopilar datos
-    const formData = {
-      terms_conditions: document.querySelector('input[name="terms_conditions"]').checked,
-      waiver_withdrawal: document.querySelector('input[name="waiver_withdrawal"]').checked,
-      marketing_consent: document.querySelector('input[name="marketing_consent"]').checked,
-      user_ip: '{{ request.META.REMOTE_ADDR }}', // IP del usuario
-      timestamp: new Date().toISOString()
-    };
-    
-    // Enviar al backend (AJAX)
-    fetch('/api/precontractual-acceptance/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
-      },
-      body: JSON.stringify(formData)
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        // Cerrar modal
-        const modal = document.getElementById('precontractualModal');
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        // Mostrar mensaje de éxito
-        showNotification('Aceptaciones guardadas correctamente', 'success');
-      } else {
-        showNotification('Error al guardar las aceptaciones', 'error');
-      }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      showNotification('Error de conexión', 'error');
+    // Escuchar cambios en checkboxes
+    checkboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', checkRequiredCheckboxes);
     });
-  });
-  
-  // Función para obtener CSRF token
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
+    
+    // Manejar envío del formulario
+    precontractualForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      // Recopilar datos del formulario
+      const formData = new FormData(precontractualForm);
+      const data = {
+        terms_conditions: formData.get('terms_conditions') === 'on',
+        waiver_withdrawal: formData.get('waiver_withdrawal') === 'on',
+        marketing_consent: formData.get('marketing_consent') === 'on',
+        ip_address: '', // Se obtendrá en el backend
+      };
+      
+      // Enviar datos al backend
+      fetch('/api/precontractual-acceptance/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify(data),
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Cerrar modal
+          const modal = document.getElementById('precontractualModal');
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+          
+          // Recargar página para mostrar el dashboard
+          window.location.reload();
+        } else {
+          alert('Error al procesar la aceptación: ' + (data.error || 'Error desconocido'));
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Error al procesar la aceptación. Por favor, inténtalo de nuevo.');
+      });
+    });
+    
+    // Función para obtener CSRF token
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
         }
       }
+      return cookieValue;
     }
-    return cookieValue;
-  }
-  
+  });
+
   // Función para mostrar notificaciones
   function showNotification(message, type) {
     // Crear elemento de notificación
