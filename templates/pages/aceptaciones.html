@@ -1,0 +1,73 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Condiciones de uso | SBA{% endblock %}
+{% block content %}
+<section>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+      <div>
+        <h1 style="font-size:24px;margin:0 0 0.5rem 0;">Condiciones de uso</h1>
+        <p style="color:#6B7280;margin:0;">Documentos legales y consentimientos</p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:2rem;">
+      <!-- Términos y Condiciones -->
+      <div class="card" style="border:1px solid #e5e7eb;padding:2rem;text-align:center;">
+        <div style="width:64px;height:64px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+          <i class="bi bi-file-text" style="font-size:28px;color:#6b7280;"></i>
+        </div>
+        <h3 style="font-size:20px;margin:0 0 0.5rem 0;">Términos y Condiciones</h3>
+        <p style="color:#6b7280;margin:0 0 1.5rem 0;line-height:1.6;">
+          Lee y acepta nuestros términos y condiciones de uso, así como nuestra política de protección de datos personales.
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;">
+          <a href="#" onclick="window.open('/static/documents/terminos-y-condiciones.pdf', '_blank'); return false;" 
+             class="btn btn-primary" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.75rem 1.5rem;background:#3b82f6;color:white;border:none;border-radius:6px;text-decoration:none;cursor:pointer;">
+            <i class="bi bi-eye"></i>
+            Ver documento
+          </a>
+          <a href="/static/documents/terminos-y-condiciones.pdf" download="terminos-y-condiciones.pdf"
+             class="btn btn-light" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.75rem 1.5rem;background:#f9fafb;color:#374151;border:1px solid #d1d5db;border-radius:6px;text-decoration:none;cursor:pointer;">
+            <i class="bi bi-download"></i>
+            Descargar
+          </a>
+        </div>
+      </div>
+
+      <!-- Renuncia al derecho de desistimiento -->
+      <div class="card" style="border:1px solid #e5e7eb;padding:2rem;text-align:center;">
+        <div style="width:64px;height:64px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+          <i class="bi bi-shield-exclamation" style="font-size:28px;color:#6b7280;"></i>
+        </div>
+        <h3 style="font-size:20px;margin:0 0 0.5rem 0;">Renuncia al derecho de desistimiento</h3>
+        <p style="color:#6b7280;margin:0 0 1.5rem 0;line-height:1.6;">
+          Documento de renuncia voluntaria al derecho de desistimiento conforme a la normativa vigente.
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;">
+          <a href="#" onclick="window.open('/static/documents/renuncia-desistimiento.pdf', '_blank'); return false;" 
+             class="btn btn-primary" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.75rem 1.5rem;background:#3b82f6;color:white;border:none;border-radius:6px;text-decoration:none;cursor:pointer;">
+            <i class="bi bi-eye"></i>
+            Ver documento
+          </a>
+          <a href="/static/documents/renuncia-desistimiento.pdf" download="renuncia-desistimiento.pdf"
+             class="btn btn-light" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.75rem 1.5rem;background:#f9fafb;color:#374151;border:1px solid #d1d5db;border-radius:6px;text-decoration:none;cursor:pointer;">
+            <i class="bi bi-download"></i>
+            Descargar
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Información adicional -->
+    <div style="margin-top:3rem;padding:2rem;background:#f9fafb;border-radius:8px;">
+      <h4 style="margin:0 0 1rem 0;color:#374151;">Información importante</h4>
+      <ul style="margin:0;padding-left:1.5rem;color:#6b7280;line-height:1.8;">
+        <li style="margin-bottom:0.5rem;">Los documentos están en formato PDF y requieren un visor compatible.</li>
+        <li style="margin-bottom:0.5rem;">Al hacer clic en "Ver documento" se abrirá en una nueva pestaña del navegador.</li>
+        <li style="margin-bottom:0.5rem;">Puedes descargar los documentos para guardarlos localmente.</li>
+        <li>Para cualquier duda sobre los términos legales, contacta con nuestro equipo de soporte.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+{% endblock %}

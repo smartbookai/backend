@@ -279,6 +279,39 @@ def reportes(request):
 
 
 @login_required
+def aceptaciones(request):
+    """Vista para gestionar las aceptaciones precontractuales."""
+    try:
+        company = get_current_company(request.user)
+    except CompanyUser.DoesNotExist:
+        # Si el usuario no tiene empresa, mostrar error
+        return render(request, 'pages/aceptaciones.html', {
+            'acceptances': [],
+            'error': 'No tienes una empresa asignada. Contacta al administrador.'
+        })
+    except Exception as e:
+        logger.exception('Error obteniendo empresa del usuario')
+        return render(request, 'pages/aceptaciones.html', {
+            'acceptances': [],
+            'error': f'Error: {str(e)}'
+        })
+    
+    # Obtener todas las aceptaciones de los usuarios de esta empresa
+    acceptances = (
+        PrecontractualAcceptance.objects
+        .select_related('user')
+        .filter(user__company_user__company=company)
+        .order_by('-completed_at')
+    )
+    
+    context = {
+        'acceptances': acceptances,
+    }
+    
+    return render(request, 'pages/aceptaciones.html', context)
+
+
+@login_required
 def clientes(request):
     return render(request, 'pages/clientes.html')
 
