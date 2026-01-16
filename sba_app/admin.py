@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .models import UserProfile, Company, CompanyUser, Supplier, SalesInvoice, PurchaseInvoice, InvoiceLine, Client, \
-    AccountingEntry, Payroll, Employee
+    AccountingEntry, Payroll, Employee, PrecontractualAcceptance
 
 
 class UserProfileAdmin(admin.ModelAdmin):
@@ -139,6 +139,42 @@ class PayrollAdmin(admin.ModelAdmin):
         return f"{obj.period_start.strftime('%m/%Y')}"
 
     period_display.short_description = 'Período'
+
+
+@admin.register(PrecontractualAcceptance)
+class PrecontractualAcceptanceAdmin(admin.ModelAdmin):
+    list_display = ('user', 'terms_conditions_accepted', 'waiver_right_withdrawal_accepted', 
+                   'marketing_consent_accepted', 'ip_address', 'completed_at')
+    list_filter = ('terms_conditions_accepted', 'waiver_right_withdrawal_accepted', 
+                   'marketing_consent_accepted', 'completed_at')
+    search_fields = ('user__email', 'user__username', 'ip_address')
+    readonly_fields = ('completed_at', 'terms_conditions_accepted_at', 
+                       'waiver_right_withdrawal_accepted_at', 'marketing_consent_accepted_at')
+    
+    fieldsets = (
+        ('Información de Usuario', {
+            'fields': ('user', 'ip_address')
+        }),
+        ('Aceptaciones Obligatorias', {
+            'fields': ('terms_conditions_accepted', 'terms_conditions_accepted_at',
+                      'waiver_right_withdrawal_accepted', 'waiver_right_withdrawal_accepted_at')
+        }),
+        ('Aceptaciones Opcionales', {
+            'fields': ('marketing_consent_accepted', 'marketing_consent_accepted_at')
+        }),
+        ('Metadata', {
+            'fields': ('completed_at',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # No permitir agregar manualmente desde el admin
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # No permitir eliminar para mantener registro legal
+        return False
 
 # Registrar todo al final
 admin.site.register(UserProfile, UserProfileAdmin)

@@ -18,7 +18,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
-    Employee, Payroll, AccountingEntryLine, AccountingEntry
+    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll
 
@@ -57,6 +57,13 @@ def login(request):
 
 @login_required
 def index(request):
+    # Verificar si el usuario ha aceptado los términos precontractuales
+    if not check_precontractual_acceptance(request.user):
+        # Mostrar el dashboard pero con el modal activo
+        show_modal = True
+    else:
+        show_modal = False
+    
     # Dashboard con KPIs sencillos por empresa actual
     company = get_current_company(request.user)
 
@@ -179,6 +186,7 @@ def index(request):
         'purchases_amount_prev_month': purchases_amount_prev_month,
         'sales_amount_month': sales_amount_month,
         'sales_amount_prev_month': sales_amount_prev_month,
+        'show_precontractual_modal': show_modal,  # Variable para controlar el modal
     }
 
     return render(request, 'pages/dashboard.html', context)
@@ -3743,3 +3751,86 @@ def api_accept_terms(request):
     profile.terms_accepted_at = timezone.now()
     profile.save()
     return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def api_precontractual_acceptance(request):
+    """Endpoint para procesar las aceptaciones precontractuales."""
+    try:
+        data = json.loads(request.body)
+        
+        # Validar que los campos obligatorios estén presentes
+        terms_conditions = data.get('terms_conditions', False)
+        waiver_withdrawal = data.get('waiver_withdrawal', False)
+        marketing_consent = data.get('marketing_consent', False)
+        
+        # Los dos primeros son obligatorios
+        if not terms_conditions or not waiver_withdrawal:
+            return JsonResponse({
+                'success': False,
+                'error': 'Los términos y condiciones y la renuncia al derecho de desistimiento son obligatorios'
+            }, status=400)
+        
+        # Crear o actualizar el registro de aceptaciones
+        acceptance, created = PrecontractualAcceptance.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'terms_conditions_accepted': terms_conditions,
+                'waiver_right_withdrawal_accepted': waiver_withdrawal,
+                'marketing_consent_accepted': marketing_consent,
+                'ip_address': get_client_ip(request),
+            }
+        )
+        
+        if not created:
+            # Si ya existe, actualizar los campos
+            acceptance.terms_conditions_accepted = terms_conditions
+            acceptance.waiver_right_withdrawal_accepted = waiver_withdrawal
+            acceptance.marketing_consent_accepted = marketing_consent
+            acceptance.ip_address = get_client_ip(request)
+            acceptance.save()
+        
+        # Actualizar timestamps de cada aceptación
+        if terms_conditions:
+            acceptance.terms_conditions_accepted_at = timezone.now()
+        if waiver_withdrawal:
+            acceptance.waiver_right_withdrawal_accepted_at = timezone.now()
+        if marketing_consent:
+            acceptance.marketing_consent_accepted_at = timezone.now()
+        
+        acceptance.save()
+        
+        # También actualizar el perfil básico por compatibilidad
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.terms_accepted = True
+        profile.terms_accepted_at = timezone.now()
+        profile.save()
+        
+        return JsonResponse({'success': True})
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Datos inválidos'}, status=400)
+    except Exception as e:
+        logger.exception('Error en api_precontractual_acceptance')
+        return JsonResponse({'success': False, 'error': 'Error del servidor'}, status=500)
+
+
+def get_client_ip(request):
+    """Obtener la IP real del cliente."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+
+def check_precontractual_acceptance(user):
+    """Verificar si el usuario ha aceptado los términos precontractuales."""
+    try:
+        acceptance = PrecontractualAcceptance.objects.get(user=user)
+        # Los dos primeros checkboxes son obligatorios
+        return acceptance.terms_conditions_accepted and acceptance.waiver_right_withdrawal_accepted
+    except PrecontractualAcceptance.DoesNotExist:
+        return False
