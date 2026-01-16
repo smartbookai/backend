@@ -89,9 +89,6 @@ urlpatterns = [
 
     #terms and conditions API endpoint
     path('api/accept-terms/', views.api_accept_terms, name='api_accept_terms'),
-    
-    #precontractual acceptance API endpoint
-    path('api/precontractual-acceptance/', views.api_precontractual_acceptance, name='api_precontractual_acceptance'),
 ]
 
 if settings.DEBUG:

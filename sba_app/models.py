@@ -26,33 +26,6 @@ class UserProfile(models.Model):
         verbose_name_plural = "Perfiles de Usuarios"
 
 
-class PrecontractualAcceptance(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='precontractual_acceptance')
-    
-    # Checkbox 1: Términos y condiciones y protección de datos
-    terms_conditions_accepted = models.BooleanField(default=False, verbose_name="Aceptación de Términos y Condiciones")
-    terms_conditions_accepted_at = models.DateTimeField(null=True, blank=True)
-    
-    # Checkbox 2: Renuncia a derecho de desistimiento
-    waiver_right_withdrawal_accepted = models.BooleanField(default=False, verbose_name="Renuncia a derecho de desistimiento")
-    waiver_right_withdrawal_accepted_at = models.DateTimeField(null=True, blank=True)
-    
-    # Checkbox 3: Consentimiento comunicaciones marketing
-    marketing_consent_accepted = models.BooleanField(default=False, verbose_name="Consentimiento comunicaciones marketing")
-    marketing_consent_accepted_at = models.DateTimeField(null=True, blank=True)
-    
-    # IP y fecha de la aceptación completa
-    ip_address = models.GenericIPAddressField(null=True, blank=True)
-    completed_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"Aceptaciones precontractuales - {self.user.email}"
-    
-    class Meta:
-        verbose_name = "Aceptación Precontractual"
-        verbose_name_plural = "Aceptaciones Precontractuales"
-
-
 class Company(models.Model):
     name = models.CharField(max_length=255)
     address = models.CharField(max_length=255, null=True, blank=True)
