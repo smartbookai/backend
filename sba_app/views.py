@@ -16,6 +16,8 @@ import os
 import csv
 from django.conf import settings
 from django.core.files.storage import default_storage
+import re
+from difflib import SequenceMatcher
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
@@ -23,6 +25,155 @@ from sba_app.services.openai_service import extract_invoice_data, extract_purcha
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_document_number(doc_number):
+    """
+    Normaliza y limpia un número de documento (NIF/DNI).
+    Elimina espacios, guiones y formatea para comparación.
+    """
+    if not doc_number:
+        return None
+    
+    # Eliminar espacios, guiones, puntos y otros caracteres no alfanuméricos
+    normalized = re.sub(r'[^\w]', '', str(doc_number).upper().strip())
+    
+    # Si está vacío después de limpiar, retornar None
+    if not normalized:
+        return None
+    
+    return normalized
+
+
+def normalize_name(name):
+    """
+    Normaliza un nombre para comparación.
+    Elimina espacios extra y convierte a mayúsculas.
+    """
+    if not name:
+        return None
+    
+    # Eliminar espacios múltiples y convertir a mayúsculas
+    normalized = ' '.join(str(name).strip().split()).upper()
+    
+    if not normalized:
+        return None
+    
+    return normalized
+
+
+def calculate_name_similarity(name1, name2):
+    """
+    Calcula la similitud entre dos nombres usando SequenceMatcher.
+    Retorna un valor entre 0 y 1.
+    """
+    if not name1 or not name2:
+        return 0
+    
+    norm1 = normalize_name(name1)
+    norm2 = normalize_name(name2)
+    
+    if not norm1 or not norm2:
+        return 0
+    
+    return SequenceMatcher(None, norm1, norm2).ratio()
+
+
+def are_similar_documents(doc1, doc2):
+    """
+    Determina si dos documentos son similares o potencialmente el mismo.
+    Maneja casos comunes de errores en OCR/extracción.
+    """
+    norm1 = normalize_document_number(doc1)
+    norm2 = normalize_document_number(doc2)
+    
+    if not norm1 or not norm2:
+        return False
+    
+    # Si son idénticos después de normalizar
+    if norm1 == norm2:
+        return True
+    
+    # Si tienen la misma longitud y difieren en pocos caracteres (errores de OCR)
+    if len(norm1) == len(norm2) and len(norm1) >= 8:
+        differences = sum(1 for a, b in zip(norm1, norm2) if a != b)
+        if differences <= 2:  # Permitir hasta 2 diferencias
+            return True
+    
+    return False
+
+
+def find_similar_employee(company, employee_data):
+    """
+    Busca un empleado existente que sea similar al proporcionado.
+    Usa múltiples criterios: documento, nombre, email, teléfono.
+    """
+    candidates = []
+    
+    # 1. Búsqueda exacta por documento normalizado
+    doc_normalized = normalize_document_number(employee_data.get('document_number'))
+    if doc_normalized:
+        exact_matches = Employee.objects.filter(company=company)
+        for emp in exact_matches:
+            if normalize_document_number(emp.document_number) == doc_normalized:
+                candidates.append({'employee': emp, 'reason': 'documento_exacto', 'score': 1.0})
+    
+    # 2. Búsqueda por documento similar
+    if doc_normalized:
+        all_employees = Employee.objects.filter(company=company)
+        for emp in all_employees:
+            if are_similar_documents(emp.document_number, employee_data.get('document_number')):
+                # Evitar duplicados con la búsqueda exacta
+                if not any(c['employee'].id == emp.id for c in candidates):
+                    candidates.append({'employee': emp, 'reason': 'documento_similar', 'score': 0.9})
+    
+    # 3. Búsqueda por nombre y apellido
+    first_name = employee_data.get('first_name')
+    last_name = employee_data.get('last_name')
+    if first_name and last_name:
+        full_name = f"{first_name} {last_name}"
+        all_employees = Employee.objects.filter(company=company)
+        
+        for emp in all_employees:
+            emp_full_name = f"{emp.first_name} {emp.last_name}"
+            similarity = calculate_name_similarity(full_name, emp_full_name)
+            
+            # Si la similitud es alta (más de 85%)
+            if similarity > 0.85:
+                # Evitar duplicados
+                if not any(c['employee'].id == emp.id for c in candidates):
+                    candidates.append({'employee': emp, 'reason': 'nombre_similar', 'score': similarity})
+    
+    # 4. Búsqueda por email
+    email = employee_data.get('email')
+    if email:
+        email_matches = Employee.objects.filter(company=company, email__iexact=email.strip())
+        for emp in email_matches:
+            if not any(c['employee'].id == emp.id for c in candidates):
+                candidates.append({'employee': emp, 'reason': 'email_exacto', 'score': 0.95})
+    
+    # 5. Búsqueda por teléfono
+    phone = employee_data.get('phone')
+    if phone:
+        # Normalizar teléfono (eliminar espacios, guiones, etc.)
+        phone_normalized = re.sub(r'[^\d]', '', str(phone))
+        all_employees = Employee.objects.filter(company=company)
+        
+        for emp in all_employees:
+            if emp.phone:
+                emp_phone_normalized = re.sub(r'[^\d]', '', str(emp.phone))
+                if phone_normalized == emp_phone_normalized and len(phone_normalized) >= 9:
+                    if not any(c['employee'].id == emp.id for c in candidates):
+                        candidates.append({'employee': emp, 'reason': 'telefono_exacto', 'score': 0.9})
+    
+    # Seleccionar el mejor candidato (mayor score)
+    if candidates:
+        best_candidate = max(candidates, key=lambda x: x['score'])
+        print(f"🔍 Encontrado empleado similar: {best_candidate['employee'].first_name} {best_candidate['employee'].last_name} "
+              f"(razón: {best_candidate['reason']}, score: {best_candidate['score']:.2f})")
+        return best_candidate['employee']
+    
+    return None
 
 def anonymous_required(function=None):
     """Checks if the user is NOT logged in."""
@@ -2416,17 +2567,8 @@ def _create_single_payroll(company, result, pdf_file=None):
         except:
             pass
 
-    # Buscar o crear empleado (Employee)
-    employee = None
-    filters = {"company": company}
-
-    if employee_data.get("document_number"):
-        filters["document_number"] = employee_data["document_number"]
-        employee = Employee.objects.filter(**filters).first()
-    elif employee_data.get("first_name") and employee_data.get("last_name"):
-        filters["first_name__iexact"] = employee_data["first_name"]
-        filters["last_name__iexact"] = employee_data["last_name"]
-        employee = Employee.objects.filter(**filters).first()
+    # Buscar empleado existente usando la nueva lógica inteligente de deduplicación
+    employee = find_similar_employee(company, employee_data)
 
     if not employee:
         print(f"➕ Creando nuevo empleado: {employee_data.get('first_name', 'Nombre')} {employee_data.get('last_name', 'Desconocido')}")
@@ -2450,7 +2592,46 @@ def _create_single_payroll(company, result, pdf_file=None):
             is_active=True,
         )
     else:
-        print(f"♻️ Reutilizando empleado existente: {employee.first_name} {employee.last_name} (ID: {employee.id})")
+        print(f"✅ Empleado encontrado y reutilizado: {employee.first_name} {employee.last_name} (ID: {employee.id})")
+        
+        # Opcional: Actualizar datos del empleado si la nueva información es más completa
+        # Esto ayuda a mantener los datos actualizados sin crear duplicados
+        needs_update = False
+        
+        # Actualizar documento si el existente es genérico y el nuevo es específico
+        if (employee.document_number == "SIN-DOCUMENTO" and 
+            employee_data.get("document_number") and 
+            employee_data.get("document_number") != "SIN-DOCUMENTO"):
+            employee.document_number = employee_data.get("document_number")
+            employee.document_type = employee_data.get("document_type", "DNI")
+            needs_update = True
+            
+        # Actualizar email si el existente está vacío y el nuevo no
+        if not employee.email and employee_data.get("email"):
+            employee.email = employee_data.get("email")
+            needs_update = True
+            
+        # Actualizar teléfono si el existente está vacío y el nuevo no
+        if not employee.phone and employee_data.get("phone"):
+            employee.phone = employee_data.get("phone")
+            needs_update = True
+            
+        # Actualizar otros campos si están vacíos
+        if not employee.address and employee_data.get("address"):
+            employee.address = employee_data.get("address")
+            needs_update = True
+            
+        if not employee.social_security_number and employee_data.get("social_security_number"):
+            employee.social_security_number = employee_data.get("social_security_number")
+            needs_update = True
+            
+        if not employee.bank_account and employee_data.get("bank_account"):
+            employee.bank_account = employee_data.get("bank_account")
+            needs_update = True
+        
+        if needs_update:
+            employee.save()
+            print(f"🔄 Datos del empleado actualizados (ID: {employee.id})")
 
     # Crear nómina (Payroll)
     payroll = Payroll.objects.create(
