@@ -195,8 +195,8 @@
     toggleBtn?.addEventListener('click', () => toggleSidebar());
     overlay?.addEventListener('click', () => toggleSidebar(false));
 
-    // Cierra el sidebar al navegar entre links (mobile)
-    document.querySelectorAll('.sidebar a.sidebar-link')?.forEach(a => {
+    // Cierra el sidebar al navegar entre links (mobile) - PERO NO para dropdown toggles
+    document.querySelectorAll('.sidebar a.sidebar-link:not(.dropdown-toggle)')?.forEach(a => {
       a.addEventListener('click', () => toggleSidebar(false));
     });
 
