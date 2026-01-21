@@ -9,18 +9,44 @@
       <i class="bi bi-graph-up"></i>
       <span>Dashboard</span>
     </a>
-    <a href="{% url 'facturas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'facturas' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-receipt-cutoff"></i>
-      <span>Facturas recibidas</span>
-    </a>
-    <a href="{% url 'invoices_sent' %}" class="sidebar-link {% if request.resolver_match.url_name == 'invoices_sent' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-receipt"></i>
-      <span>Facturas enviadas</span>
-    </a>
-    <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'nominas' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-cash-stack"></i>
-      <span>Nominas</span>
-    </a>
+    <div class="sidebar-dropdown">
+      <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
+        <i class="bi bi-receipt-cutoff"></i>
+        <span>Facturas</span>
+        <i class="bi bi-chevron-down dropdown-arrow"></i>
+      </a>
+      <div class="dropdown-menu">
+        <a href="{% url 'facturas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'facturas' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-inbox"></i>
+          <span>Facturas recibidas</span>
+        </a>
+        <a href="{% url 'invoices_sent' %}" class="sidebar-link {% if request.resolver_match.url_name == 'invoices_sent' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-send"></i>
+          <span>Facturas enviadas</span>
+        </a>
+        <a href="#" class="sidebar-link" onclick="alert('Función de generar factura coming soon'); return false;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar factura</span>
+        </a>
+      </div>
+    </div>
+    <div class="sidebar-dropdown">
+      <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
+        <i class="bi bi-cash-stack"></i>
+        <span>Nominas</span>
+        <i class="bi bi-chevron-down dropdown-arrow"></i>
+      </a>
+      <div class="dropdown-menu">
+        <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'nominas' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-list-ul"></i>
+          <span>Nominas</span>
+        </a>
+        <a href="#" class="sidebar-link" onclick="alert('Función de generar nomina coming soon'); return false;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar nomina</span>
+        </a>
+      </div>
+    </div>
     <a href="{% url 'proveedores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'proveedores' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-building"></i>
       <span>Proveedores</span>

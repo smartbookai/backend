@@ -159,6 +159,16 @@ body {
   background: #62328A;
   color: #ffffff;
   border-left: 3px solid #62328A;
+  position: relative;
+}
+.sidebar-link.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: rgba(255, 255, 255, 0.2);
 }
 .sidebar-link.active svg path {
   stroke: #ffffff;

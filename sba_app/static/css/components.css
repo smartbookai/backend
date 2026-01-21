@@ -1,5 +1,5 @@
 /* assets/css/components.css */
-/* Custom styles for ROI Gauge component */
+/* Custom styles for ROI Gauge component and sidebar dropdowns */
 
 .gauge-wrapper {
     position: relative;
@@ -30,4 +30,72 @@
   
   .gauge-value.high {
     stroke: #2f855a; /* Dark Green */
+  }
+
+  /* Sidebar dropdown styles */
+  .sidebar-dropdown {
+    position: relative;
+  }
+
+  .sidebar-dropdown .dropdown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .sidebar-dropdown .dropdown-arrow {
+    margin-left: auto;
+    transition: transform 0.2s ease;
+    font-size: 0.8rem;
+  }
+
+  .sidebar-dropdown.expanded .dropdown-arrow {
+    transform: rotate(180deg);
+  }
+
+  .sidebar-dropdown .dropdown-menu {
+    display: none;
+    flex-direction: column;
+    background-color: #F3F4F6;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    margin-top: 0.5rem;
+    overflow: hidden;
+  }
+
+  .sidebar-dropdown.expanded .dropdown-menu {
+    display: flex;
+  }
+
+  .sidebar-dropdown .dropdown-menu .sidebar-link {
+    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    border-left: 3px solid transparent;
+    font-size: 0.9rem;
+  }
+
+  .sidebar-dropdown .dropdown-menu .sidebar-link:hover {
+    background-color: #F9FAFB;
+  }
+
+  .sidebar-dropdown .dropdown-menu .sidebar-link.active {
+    background: #62328A;
+    color: #ffffff;
+    border-left: 3px solid #62328A;
+    position: relative;
+  }
+
+  .sidebar-dropdown .dropdown-menu .sidebar-link.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .sidebar-dropdown .dropdown-menu .sidebar-link.active svg path {
+    stroke: #ffffff;
   }
