@@ -13,6 +13,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('facturas/', views.facturas, name='facturas'),
     path('invoices-sent/', views.invoices_sent, name='invoices_sent'),
+    path('generar-factura/', views.generar_factura, name='generar_factura'),
     path('proveedores/', views.proveedores, name='proveedores'),
     path('trabajadores/', views.trabajadores, name='trabajadores'),
     path('clientes/', views.clientes, name='clientes'),
@@ -47,6 +48,7 @@ urlpatterns = [
     #sales invoices API endpoints
     path('api/show-table-invoices-sent/', views.api_show_table_invoices_sent, name='api_show_table_invoices_sent'),
     path('api/invoices-sent/create/', views.api_create_invoice_sent, name='api_create_invoice_sent'),
+    path('api/invoices-sent/manual-create/', views.api_create_manual_invoice, name='api_create_manual_invoice'),
     path('api/invoices-sent/<int:invoice_id>/delete/', views.api_delete_invoice_sent, name='api_delete_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/', views.api_get_invoice_sent, name='api_get_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/update/', views.api_update_invoice_sent, name='api_update_invoice_sent'),

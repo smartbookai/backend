@@ -415,6 +415,147 @@ def invoices_sent(request):
 
 
 @login_required
+def generar_factura(request):
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener clientes disponibles
+        clients = Client.objects.filter(company=company).order_by('name')
+        
+        context = {
+            'clients': clients,
+            'company': company,
+        }
+        return render(request, 'pages/generar_factura.html', context)
+        
+    except CompanyUser.DoesNotExist:
+        messages.error(request, 'No tienes una empresa asociada.')
+        return redirect('index')
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_create_manual_invoice(request):
+    """
+    Crea una factura manualmente desde el formulario de generar_factura.html
+    """
+    try:
+        company = get_current_company(request.user)
+        
+        # Obtener datos del formulario
+        client_id = request.POST.get('client')
+        invoice_number = request.POST.get('invoice_number')
+        issue_date_str = request.POST.get('issue_date')
+        due_date_str = request.POST.get('due_date')
+        payment_method = request.POST.get('payment_method')
+        base_amount = request.POST.get('base_amount')
+        discount_amount = request.POST.get('discount_amount')
+        discount_percentage = request.POST.get('discount_percentage')
+        tax_amount = request.POST.get('tax_amount')
+        total_amount = request.POST.get('total_amount')
+        notes = request.POST.get('notes')
+        
+        # Convertir fechas
+        from datetime import datetime
+        issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date() if issue_date_str else None
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
+        
+        # Cuentas contables
+        account_income = request.POST.get('account_income')
+        account_customer = request.POST.get('account_customer')
+        account_vat_output = request.POST.get('account_vat_output')
+        
+        # Líneas de factura
+        descriptions = request.POST.getlist('line_description[]')
+        quantities = request.POST.getlist('line_quantity[]')
+        unit_prices = request.POST.getlist('line_unit_price[]')
+        vat_rates = request.POST.getlist('line_vat_rate[]')
+        
+        # Validaciones básicas
+        if not client_id or not invoice_number or not issue_date:
+            return JsonResponse({
+                "success": False, 
+                "message": "Faltan campos obligatorios: cliente, número de factura o fecha de emisión"
+            }, status=400)
+        
+        # Verificar que no exista una factura con el mismo número
+        if SalesInvoice.objects.filter(company=company, invoice_number=invoice_number).exists():
+            return JsonResponse({
+                "success": False, 
+                "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."
+            }, status=400)
+        
+        # Obtener cliente
+        try:
+            client = Client.objects.get(id=client_id, company=company)
+        except Client.DoesNotExist:
+            return JsonResponse({
+                "success": False, 
+                "message": "El cliente seleccionado no es válido"
+            }, status=400)
+        
+        # Crear factura
+        invoice = SalesInvoice.objects.create(
+            company=company,
+            client=client,
+            invoice_number=invoice_number,
+            issue_date=issue_date,
+            due_date=due_date if due_date else None,
+            payment_method=payment_method if payment_method else None,
+            base_amount=Decimal(base_amount) if base_amount else Decimal('0.00'),
+            discount_amount=Decimal(discount_amount) if discount_amount else None,
+            discount_percentage=Decimal(discount_percentage) if discount_percentage else None,
+            tax_amount=Decimal(tax_amount) if tax_amount else Decimal('0.00'),
+            total_amount=Decimal(total_amount) if total_amount else Decimal('0.00'),
+            notes=notes if notes else None,
+            account_income=account_income if account_income else None,
+            account_customer=account_customer if account_customer else None,
+            account_vat_output=account_vat_output if account_vat_output else None,
+        )
+        
+        # Crear líneas de factura
+        for i, description in enumerate(descriptions):
+            if description.strip():  # Solo crear líneas con descripción
+                InvoiceLine.objects.create(
+                    sales_invoice=invoice,
+                    description=description.strip(),
+                    quantity=Decimal(quantities[i]) if quantities[i] else Decimal('1.00'),
+                    unit_price=Decimal(unit_prices[i]) if unit_prices[i] else Decimal('0.00'),
+                    vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else Decimal('21.00'),
+                )
+        
+        # Generar PDF
+        try:
+            from sba_app.utils.pdf_generator import generate_invoice_pdf
+            from django.core.files.base import ContentFile
+            
+            pdf_content = generate_invoice_pdf(invoice)
+            pdf_filename = f"FACTURA_{invoice.invoice_number.replace('/', '_').replace(' ', '_')}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            invoice.pdf_file.save(pdf_filename, ContentFile(pdf_content))
+        except Exception as pdf_error:
+            print(f"⚠️ Error generando PDF: {pdf_error}")
+            # La factura se crea igual, pero sin PDF
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Factura creada correctamente",
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number
+        })
+        
+    except Exception as e:
+        import traceback
+        print("🔥 ERROR en api_create_manual_invoice:", traceback.format_exc())
+        return JsonResponse({
+            "success": False, 
+            "message": f"Error al crear la factura: {str(e)}"
+        }, status=500)
+
+
+@login_required
 def proveedores(request):
     return render(request, 'pages/proveedores.html')
 

@@ -24,7 +24,7 @@
           <i class="bi bi-send"></i>
           <span>Facturas enviadas</span>
         </a>
-        <a href="#" class="sidebar-link" onclick="alert('Función de generar factura coming soon'); return false;">
+        <a href="{% url 'generar_factura' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_factura' %}active{% endif %}" style="text-decoration:none;">
           <i class="bi bi-plus-circle"></i>
           <span>Generar factura</span>
         </a>
