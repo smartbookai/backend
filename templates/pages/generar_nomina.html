@@ -133,8 +133,8 @@
               <div style="font-size:13px;font-weight:600;margin-bottom:8px;">1. Percepciones salariales</div>
               <div style="display:grid;gap:8px;font-size:13px;">
                 <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;">
-                  <label>Salario base</label>
-                  <input type="number" id="base_salary" name="base_salary" step="0.01" min="0" value="0.00"
+                  <label>Salario base *</label>
+                  <input type="number" id="base_salary" name="base_salary" step="0.01" min="0" value="0.00" required
                          style="width:100px;text-align:right;" onchange="calculateTotals()">
                 </div>
                 <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;">
@@ -157,22 +157,17 @@
                   <input type="number" id="salary_supplements" name="salary_supplements" step="0.01" min="0" value="0.00"
                          style="width:100px;text-align:right;" onchange="calculateTotals()">
                 </div>
-                <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:8px;">
-                  <label style="font-weight:600;">Antigüedad</label>
-                  <input type="number" id="seniority" name="seniority" step="0.01" min="0" value="0.00"
-                         style="width:100px;text-align:right;font-weight:600;" onchange="calculateTotals()">
-                </div>
-                <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;">
-                  <label style="font-weight:600;">Gr. Extr.</label>
-                  <input type="number" id="gr_extr" name="gr_extr" step="0.01" min="0" value="0.00"
-                         style="width:100px;text-align:right;font-weight:600;" onchange="calculateTotals()">
-                </div>
-                <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:8px;">
-                  <label style="font-weight:600;">Plus extrasalarial</label>
-                  <input type="number" id="non_salary_benefits" name="non_salary_benefits" step="0.01" min="0" value="0.00"
-                         style="width:100px;text-align:right;font-weight:600;" onchange="calculateTotals()">
-                </div>
               </div>
+
+              <!-- CONCEPTOS ADICIONALES DINÁMICOS -->
+              <div id="additionalConcepts" style="margin-top:16px;padding-top:16px;border-top:1px solid #E5E7EB;">
+                <!-- Los conceptos adicionales se añadirán aquí dinámicamente -->
+              </div>
+
+              <button type="button" onclick="addAdditionalConcept()"
+                      style="margin-top:12px;padding:6px 12px;font-size:12px;background:#6366F1;color:white;border:none;border-radius:4px;cursor:pointer;">
+                + Agregar concepto
+              </button>
             </div>
           </div>
 
@@ -544,6 +539,9 @@
 </section>
 
 <script>
+// Contador para IDs únicos de conceptos adicionales
+let additionalConceptCounter = 0;
+
 // Establecer fechas y valores por defecto
 document.addEventListener('DOMContentLoaded', function() {
   const today = new Date();
@@ -571,6 +569,35 @@ document.addEventListener('DOMContentLoaded', function() {
   calculateTotals();
 });
 
+// Agregar concepto adicional dinámicamente
+function addAdditionalConcept() {
+  additionalConceptCounter++;
+  const conceptId = `additional_concept_${additionalConceptCounter}`;
+
+  const conceptHtml = `
+    <div id="${conceptId}" style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-bottom:8px;">
+      <input type="text" name="additional_concept_name[]" placeholder="Nombre del concepto (ej: Antigüedad)"
+             style="font-size:13px;padding:6px;">
+      <input type="number" name="additional_concept_value[]" step="0.01" min="0" value="0.00"
+             style="width:100px;text-align:right;font-size:13px;"
+             onchange="calculateTotals()"
+             class="additional-concept-input">
+      <button type="button" onclick="removeAdditionalConcept('${conceptId}')"
+              style="padding:4px 8px;background:#EF4444;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+        ✕
+      </button>
+    </div>
+  `;
+
+  document.getElementById('additionalConcepts').insertAdjacentHTML('beforeend', conceptHtml);
+}
+
+// Eliminar concepto adicional
+function removeAdditionalConcept(conceptId) {
+  document.getElementById(conceptId).remove();
+  calculateTotals();
+}
+
 // Cargar datos del empleado seleccionado
 function loadEmployeeData() {
   const select = document.getElementById('employee');
@@ -590,12 +617,17 @@ function autoCalculateSocialSecurity() {
   const baseSalary = parseFloat(document.getElementById('base_salary').value) || 0;
   const salarySupplements = parseFloat(document.getElementById('salary_supplements').value) || 0;
   const overtime = parseFloat(document.getElementById('overtime').value) || 0;
-  const seniority = parseFloat(document.getElementById('seniority').value) || 0;
-  const grExtr = parseFloat(document.getElementById('gr_extr').value) || 0;
   const extraordinaryPayments = parseFloat(document.getElementById('extraordinary_payments').value) || 0;
 
+  // Sumar conceptos adicionales
+  const additionalInputs = document.querySelectorAll('.additional-concept-input');
+  let additionalTotal = 0;
+  additionalInputs.forEach(input => {
+    additionalTotal += parseFloat(input.value) || 0;
+  });
+
   // Base de cotización (todos los conceptos salariales)
-  const cotizationBase = baseSalary + salarySupplements + overtime + seniority + grExtr + extraordinaryPayments;
+  const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal;
 
   if (cotizationBase === 0) {
     alert('⚠️ Primero ingresa el salario base y otros devengos');
@@ -667,12 +699,16 @@ function calculateTotals() {
   const overtime = parseFloat(document.getElementById('overtime').value) || 0;
   const extraordinaryPayments = parseFloat(document.getElementById('extraordinary_payments').value) || 0;
   const salaryInKind = parseFloat(document.getElementById('salary_in_kind').value) || 0;
-  const seniority = parseFloat(document.getElementById('seniority').value) || 0;
-  const grExtr = parseFloat(document.getElementById('gr_extr').value) || 0;
-  const nonSalaryBenefits = parseFloat(document.getElementById('non_salary_benefits').value) || 0;
+
+  // Sumar conceptos adicionales dinámicos
+  const additionalInputs = document.querySelectorAll('.additional-concept-input');
+  let additionalTotal = 0;
+  additionalInputs.forEach(input => {
+    additionalTotal += parseFloat(input.value) || 0;
+  });
 
   const totalAccrued = baseSalary + salarySupplements + overtime + extraordinaryPayments +
-                       salaryInKind + seniority + grExtr + nonSalaryBenefits;
+                       salaryInKind + additionalTotal;
   document.getElementById('total_accrued').value = totalAccrued.toFixed(2);
 
   // Base IRPF
