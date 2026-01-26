@@ -619,6 +619,27 @@ def nominas(request):
 
 
 @login_required
+def generar_nomina(request):
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener empleados disponibles (solo activos)
+        employees = Employee.objects.filter(company=company, is_active=True).order_by('first_name', 'last_name')
+        
+        context = {
+            'employees': employees,
+            'company': company,
+        }
+        return render(request, 'pages/generar_nomina.html', context)
+        
+    except CompanyUser.DoesNotExist:
+        messages.error(request, 'No tienes una empresa asociada.')
+        return redirect('index')
+
+
+@login_required
 def accounting_entries(request):
     company = get_current_company(request.user)
     entries = (
