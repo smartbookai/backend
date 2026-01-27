@@ -1867,86 +1867,268 @@ def _create_single_sales_invoice(company, result, pdf_file=None):
     }
 
 
+# def _create_single_purchase_invoice(company, result, pdf_file=None):
+#     """
+#     Función auxiliar que crea una sola factura de compra.
+#     Usada tanto para PDFs de una página como para cada página de PDFs multipágina.
+#     """
+#     tokens = result.get("tokens")
+#     invoice_data = result.get("invoice", {}) or {}
+#     supplier_data = result.get("supplier", {}) or {}
+#     lines_data = result.get("lines", []) or []
+#
+#     # Buscar o crear proveedor con lógica mejorada para evitar duplicados
+#     supplier = None
+#
+#     # 1. Buscar por document_number si existe (más preciso)
+#     if supplier_data.get("document_number"):
+#         supplier = Supplier.objects.filter(
+#             company=company,
+#             document_number=supplier_data["document_number"]
+#         ).first()
+#
+#     # 2. Si no encuentra por document_number, buscar por nombre normalizado
+#     if not supplier and supplier_data.get("name"):
+#         supplier_name = supplier_data["name"].strip().upper()
+#         # Buscar proveedores con nombres similares (ignorando mayúsculas, espacios y caracteres especiales)
+#         existing_suppliers = Supplier.objects.filter(company=company).all()
+#
+#         for existing in existing_suppliers:
+#             existing_name = existing.name.strip().upper()
+#             # Normalizar nombres: remover espacios extras, puntos, comas, S.A./SA/etc
+#             normalized_supplier = normalize_company_name(supplier_name)
+#             normalized_existing = normalize_company_name(existing_name)
+#
+#             if normalized_supplier == normalized_existing:
+#                 supplier = existing
+#                 break
+#
+#     # 3. Si aún no encuentra, crear nuevo proveedor
+#     if not supplier:
+#         supplier = Supplier.objects.create(
+#             company=company,
+#             name=supplier_data.get("name") or "Proveedor desconocido",
+#             contact_person=supplier_data.get("contact_person"),
+#             phone=supplier_data.get("phone"),
+#             email=supplier_data.get("email"),
+#             address=supplier_data.get("address"),
+#             document_type=supplier_data.get("document_type"),
+#             document_number=supplier_data.get("document_number"),
+#         )
+#
+#     # Procesar descuentos
+#     discount_value = invoice_data.get("discount_amount")
+#     discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+#     discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
+#     discount_pct_value = invoice_data.get("discount_percentage")
+#     discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+#
+#     base_amount = safe_decimal(invoice_data.get("base_amount"))
+#     tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
+#     total_amount = safe_decimal(invoice_data.get("total_amount"))
+#
+#     # Validar IVA
+#     discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
+#     if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+#         base_neta = base_amount - discount_for_calc
+#         tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
+#         if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
+#             tax_amount = tax_amount_expected
+#         else:
+#             tax_amount = tax_amount_extracted
+#     else:
+#         tax_amount = tax_amount_extracted
+#
+#     # Crear factura
+#     invoice = PurchaseInvoice.objects.create(
+#         company=company,
+#         supplier=supplier,
+#         pdf_file=pdf_file,
+#         invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
+#         issue_date=invoice_data.get("issue_date") or timezone.now().date(),
+#         due_date=invoice_data.get("due_date") or None,
+#         payment_method=invoice_data.get("payment_method"),
+#         base_amount=base_amount,
+#         discount_amount=discount_amount,
+#         discount_percentage=discount_percentage,
+#         tax_amount=tax_amount,
+#         total_amount=total_amount,
+#         notes=invoice_data.get("notes") or "",
+#     )
+#
+#     if tokens is not None:
+#         invoice.tokens = tokens
+#         invoice.save(update_fields=["tokens"])
+#
+#     # Crear líneas
+#     created_lines = []
+#     for line_data in lines_data:
+#         line = InvoiceLine.objects.create(
+#             purchase_invoice=invoice,
+#             description=line_data.get("description") or "Sin descripción",
+#             quantity=safe_decimal(line_data.get("quantity", "1")),
+#             unit_price=safe_decimal(line_data.get("unit_price", "0")),
+#             vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
+#         )
+#         created_lines.append({
+#             "id": line.id,
+#             "description": line.description,
+#             "quantity": str(line.quantity),
+#             "unit_price": str(line.unit_price),
+#             "vat_rate": str(line.vat_rate),
+#             "subtotal": str(line.subtotal()),
+#         })
+#
+#     return {
+#         "invoice_id": invoice.id,
+#         "invoice_number": invoice.invoice_number,
+#         "supplier_name": supplier.name,
+#         "total_amount": str(invoice.total_amount) if invoice.total_amount else "0.00",
+#         "lines": created_lines,
+#     }
+
+
 def _create_single_purchase_invoice(company, result, pdf_file=None):
     """
-    Función auxiliar que crea una sola factura de compra.
-    Usada tanto para PDFs de una página como para cada página de PDFs multipágina.
+    Crea una factura de compra con validación robusta de proveedor.
+    Nunca asigna un proveedor existente que no aparezca en el documento.
     """
+
     tokens = result.get("tokens")
     invoice_data = result.get("invoice", {}) or {}
     supplier_data = result.get("supplier", {}) or {}
     lines_data = result.get("lines", []) or []
 
-    # Buscar o crear proveedor con lógica mejorada para evitar duplicados
     supplier = None
-    
-    # 1. Buscar por document_number si existe (más preciso)
-    if supplier_data.get("document_number"):
-        supplier = Supplier.objects.filter(
-            company=company,
-            document_number=supplier_data["document_number"]
-        ).first()
-    
-    # 2. Si no encuentra por document_number, buscar por nombre normalizado
-    if not supplier and supplier_data.get("name"):
-        supplier_name = supplier_data["name"].strip().upper()
-        # Buscar proveedores con nombres similares (ignorando mayúsculas, espacios y caracteres especiales)
-        existing_suppliers = Supplier.objects.filter(company=company).all()
-        
-        for existing in existing_suppliers:
-            existing_name = existing.name.strip().upper()
-            # Normalizar nombres: remover espacios extras, puntos, comas, S.A./SA/etc
-            normalized_supplier = normalize_company_name(supplier_name)
-            normalized_existing = normalize_company_name(existing_name)
-            
-            if normalized_supplier == normalized_existing:
-                supplier = existing
-                break
-    
-    # 3. Si aún no encuentra, crear nuevo proveedor
-    if not supplier:
-        supplier = Supplier.objects.create(
-            company=company,
-            name=supplier_data.get("name") or "Proveedor desconocido",
-            contact_person=supplier_data.get("contact_person"),
-            phone=supplier_data.get("phone"),
-            email=supplier_data.get("email"),
-            address=supplier_data.get("address"),
-            document_type=supplier_data.get("document_type"),
-            document_number=supplier_data.get("document_number"),
-        )
+    supplier_name_extracted = (supplier_data.get("name") or "").strip()
 
-    # Procesar descuentos
-    discount_value = invoice_data.get("discount_amount")
-    discount_amount_raw = safe_decimal(discount_value) if discount_value else None
+    # ------------------------------------------------------------------
+    # 🔍 VALIDACIÓN POST-EXTRACCIÓN: proveedor = cliente / mi empresa
+    # ------------------------------------------------------------------
+    if supplier_name_extracted:
+        print(f"🔍 Proveedor extraído por OpenAI: '{supplier_name_extracted}'")
+
+        potential_client = None
+
+        # 1. Match exacto
+        potential_client = Client.objects.filter(
+            company=company,
+            name__iexact=supplier_name_extracted
+        ).first()
+
+        # 2. Match por normalización
+        if not potential_client:
+            normalized_extracted = normalize_company_name(supplier_name_extracted)
+            for client in Client.objects.filter(company=company):
+                if normalize_company_name(client.name) == normalized_extracted:
+                    potential_client = client
+                    print(f"⚠️ Coincide con cliente por normalización: '{client.name}'")
+                    break
+
+        # ------------------------------------------------------------------
+        # ❌ ERROR: OpenAI extrajo un CLIENTE como proveedor
+        # ------------------------------------------------------------------
+        if potential_client:
+            print(f"❌ ERROR: '{supplier_name_extracted}' es un CLIENTE conocido")
+            print("🔁 Intentando re-extraer proveedor desde encabezado...")
+
+            supplier_data_retry = None
+            if pdf_file:
+                supplier_data_retry = reextract_supplier_from_header(pdf_file)
+
+            if supplier_data_retry and supplier_data_retry.get("name"):
+                supplier_data = supplier_data_retry
+                supplier_name_extracted = supplier_data.get("name")
+                print(f"✅ Proveedor recuperado desde encabezado: '{supplier_name_extracted}'")
+
+                invoice_data["notes"] = (invoice_data.get("notes") or "") + (
+                    "\nProveedor reextraído automáticamente desde encabezado "
+                    "tras detectar cliente como proveedor."
+                )
+            else:
+                print("🚨 No se pudo recuperar proveedor real → requiere revisión manual")
+
+                supplier = Supplier.objects.create(
+                    company=company,
+                    name=f"REVISAR PROVEEDOR - Factura {invoice_data.get('invoice_number', 'SIN-NUM')}",
+                    contact_person=None,
+                    phone=None,
+                    email=None,
+                    address=None,
+                    document_type=None,
+                    document_number=None,
+                )
+
+                invoice_data["notes"] = (invoice_data.get("notes") or "") + (
+                    "\nERROR DE EXTRACCIÓN: OpenAI identificó un CLIENTE como proveedor "
+                    "y no fue posible recuperar el proveedor real automáticamente."
+                )
+
+        else:
+            print(f"ℹ️ '{supplier_name_extracted}' no es cliente conocido")
+
+    # ------------------------------------------------------------------
+    # 🏗️ CREAR / BUSCAR PROVEEDOR SOLO SI VIENE DEL DOCUMENTO
+    # ------------------------------------------------------------------
+    if not supplier:
+        # 1. Buscar por CIF/NIF
+        if supplier_data.get("document_number"):
+            supplier = Supplier.objects.filter(
+                company=company,
+                document_number=supplier_data["document_number"]
+            ).first()
+
+        # 2. Buscar por nombre normalizado
+        if not supplier and supplier_data.get("name"):
+            normalized_new = normalize_company_name(supplier_data["name"])
+            for existing in Supplier.objects.filter(company=company):
+                if normalize_company_name(existing.name) == normalized_new:
+                    supplier = existing
+                    break
+
+        # 3. Crear proveedor nuevo
+        if not supplier:
+            supplier = Supplier.objects.create(
+                company=company,
+                name=supplier_data.get("name") or "Proveedor desconocido",
+                contact_person=supplier_data.get("contact_person"),
+                phone=supplier_data.get("phone"),
+                email=supplier_data.get("email"),
+                address=supplier_data.get("address"),
+                document_type=supplier_data.get("document_type"),
+                document_number=supplier_data.get("document_number"),
+            )
+
+    # ------------------------------------------------------------------
+    # 💰 IMPORTES Y VALIDACIONES
+    # ------------------------------------------------------------------
+    discount_amount_raw = safe_decimal(invoice_data.get("discount_amount")) if invoice_data.get("discount_amount") else None
     discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
-    discount_pct_value = invoice_data.get("discount_percentage")
-    discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
+    discount_percentage = safe_decimal(invoice_data.get("discount_percentage")) if invoice_data.get("discount_percentage") else None
 
     base_amount = safe_decimal(invoice_data.get("base_amount"))
     tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
     total_amount = safe_decimal(invoice_data.get("total_amount"))
 
-    # Validar IVA
-    discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
-    if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
+    discount_for_calc = discount_amount or Decimal("0.00")
+
+    if discount_for_calc > Decimal("0.00") and base_amount > Decimal("0.00"):
         base_neta = base_amount - discount_for_calc
-        tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
-        if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
-            tax_amount = tax_amount_expected
-        else:
-            tax_amount = tax_amount_extracted
+        tax_amount_expected = (base_neta * Decimal("0.21")).quantize(Decimal("0.01"))
+        tax_amount = tax_amount_expected if abs(tax_amount_extracted - tax_amount_expected) > Decimal("0.10") else tax_amount_extracted
     else:
         tax_amount = tax_amount_extracted
 
-    # Crear factura
+    # ------------------------------------------------------------------
+    # 🧾 CREAR FACTURA
+    # ------------------------------------------------------------------
     invoice = PurchaseInvoice.objects.create(
         company=company,
         supplier=supplier,
         pdf_file=pdf_file,
         invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
         issue_date=invoice_data.get("issue_date") or timezone.now().date(),
-        due_date=invoice_data.get("due_date") or None,
+        due_date=invoice_data.get("due_date"),
         payment_method=invoice_data.get("payment_method"),
         base_amount=base_amount,
         discount_amount=discount_amount,
@@ -1960,7 +2142,9 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
         invoice.tokens = tokens
         invoice.save(update_fields=["tokens"])
 
-    # Crear líneas
+    # ------------------------------------------------------------------
+    # 📦 LÍNEAS
+    # ------------------------------------------------------------------
     created_lines = []
     for line_data in lines_data:
         line = InvoiceLine.objects.create(
@@ -1986,6 +2170,47 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
         "total_amount": str(invoice.total_amount) if invoice.total_amount else "0.00",
         "lines": created_lines,
     }
+
+
+def reextract_supplier_from_header(pdf_file):
+    """
+    Re-extrae exclusivamente el PROVEEDOR (emisor) desde el encabezado del PDF.
+    Devuelve dict con datos del proveedor o None si no es fiable.
+    """
+
+    try:
+        from sba_app.services.openai_service import process_invoice_header_only
+
+        # Esta función debe enviar SOLO encabezado a OpenAI
+        result = process_invoice_header_only(pdf_file)
+
+        if not result:
+            return None
+
+        supplier = result.get("supplier")
+        if not supplier:
+            return None
+
+        supplier_name = (supplier.get("name") or "").strip()
+
+        # 🔒 Validaciones duras: si no hay nombre, no sirve
+        if not supplier_name or len(supplier_name) < 3:
+            return None
+
+        return {
+            "name": supplier_name,
+            "contact_person": supplier.get("contact_person"),
+            "phone": supplier.get("phone"),
+            "email": supplier.get("email"),
+            "address": supplier.get("address"),
+            "document_type": supplier.get("document_type"),
+            "document_number": supplier.get("document_number"),
+        }
+
+    except Exception as e:
+        print(f"❌ Error reextract_supplier_from_header: {e}")
+        return None
+
 
 
 @login_required

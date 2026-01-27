@@ -407,6 +407,89 @@ def extract_purchase_invoice_data(file):
         return {"tokens": None, "error": str(e)}
 
 
+def process_invoice_header_only(pdf_file):
+    """
+    Extrae SOLO el proveedor (emisor) desde el encabezado del PDF.
+    Usa el mismo cliente OpenAI que el resto del sistema.
+    """
+
+    import fitz
+    import base64
+    import json
+
+    # 1️⃣ Abrir PDF y renderizar SOLO la parte superior
+    pdf_bytes = pdf_file.read()
+
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        page = doc[0]
+
+        # Recortar solo el 30% superior de la página
+        rect = page.rect
+        header_rect = fitz.Rect(
+            rect.x0,
+            rect.y0,
+            rect.x1,
+            rect.y0 + rect.height * 0.30
+        )
+
+        mat = fitz.Matrix(2, 2)
+        pix = page.get_pixmap(matrix=mat, clip=header_rect)
+        image_bytes = pix.tobytes("png")
+
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    prompt = """
+Extrae EXCLUSIVAMENTE los datos del PROVEEDOR (EMISOR) de esta factura.
+
+REGLAS ESTRICTAS:
+- El proveedor es quien EMITE y COBRA la factura
+- NO es el cliente
+- NO es el receptor
+- NO es la empresa que paga
+- Normalmente aparece en la parte SUPERIOR del documento
+- Si hay duda, devuelve null
+
+Devuelve SOLO este JSON:
+
+{
+  "supplier": {
+    "name": null,
+    "contact_person": null,
+    "phone": null,
+    "email": null,
+    "address": null,
+    "document_type": null,
+    "document_number": null
+  }
+}
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Identificá únicamente el proveedor (emisor) de esta factura."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{base64_image}"
+                        },
+                    },
+                ],
+            },
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+        max_tokens=300,
+    )
+
+    content = response.choices[0].message.content
+    return json.loads(content)
+
+
 #############################################Here stars the code for payroll extraction#####################################################
 # Prompt para extracción de nóminas
 BASE_PROMPT_PAYROLL = (
