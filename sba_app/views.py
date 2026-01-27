@@ -62,6 +62,38 @@ def normalize_name(name):
     return normalized
 
 
+def normalize_company_name(name):
+    """
+    Normaliza un nombre de empresa para comparación.
+    Elimina espacios extras, puntos, comas, y normalizaciones comunes como S.A./SA/etc.
+    """
+    if not name:
+        return ""
+    
+    # Convertir a mayúsculas y eliminar espacios extras
+    normalized = name.strip().upper()
+    
+    # Eliminar caracteres especiales comunes
+    normalized = re.sub(r'[.,;:\-_]', '', normalized)
+    
+    # Normalizar formas societarias comunes
+    normalized = re.sub(r'\bS\.A\.\b', 'SA', normalized)
+    normalized = re.sub(r'\bS\.A\b', 'SA', normalized)
+    normalized = re.sub(r'\bSA\b', 'SA', normalized)
+    normalized = re.sub(r'\bS\.L\.\b', 'SL', normalized)
+    normalized = re.sub(r'\bS\.L\b', 'SL', normalized)
+    normalized = re.sub(r'\bSL\b', 'SL', normalized)
+    normalized = re.sub(r'\bLTD\.?\b', 'LTD', normalized)
+    normalized = re.sub(r'\bLLC\.?\b', 'LLC', normalized)
+    normalized = re.sub(r'\bINC\.?\b', 'INC', normalized)
+    normalized = re.sub(r'\bCORP\.?\b', 'CORP', normalized)
+    
+    # Eliminar espacios múltiples
+    normalized = re.sub(r'\s+', '', normalized)
+    
+    return normalized.strip()
+
+
 def calculate_name_similarity(name1, name2):
     """
     Calcula la similitud entre dos nombres usando SequenceMatcher.
@@ -1845,16 +1877,33 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
     supplier_data = result.get("supplier", {}) or {}
     lines_data = result.get("lines", []) or []
 
-    # Buscar o crear proveedor
+    # Buscar o crear proveedor con lógica mejorada para evitar duplicados
     supplier = None
-    filters = {"company": company}
+    
+    # 1. Buscar por document_number si existe (más preciso)
     if supplier_data.get("document_number"):
-        filters["document_number"] = supplier_data["document_number"]
-        supplier = Supplier.objects.filter(**filters).first()
-    elif supplier_data.get("name"):
-        filters["name"] = supplier_data["name"]
-        supplier = Supplier.objects.filter(**filters).first()
-
+        supplier = Supplier.objects.filter(
+            company=company,
+            document_number=supplier_data["document_number"]
+        ).first()
+    
+    # 2. Si no encuentra por document_number, buscar por nombre normalizado
+    if not supplier and supplier_data.get("name"):
+        supplier_name = supplier_data["name"].strip().upper()
+        # Buscar proveedores con nombres similares (ignorando mayúsculas, espacios y caracteres especiales)
+        existing_suppliers = Supplier.objects.filter(company=company).all()
+        
+        for existing in existing_suppliers:
+            existing_name = existing.name.strip().upper()
+            # Normalizar nombres: remover espacios extras, puntos, comas, S.A./SA/etc
+            normalized_supplier = normalize_company_name(supplier_name)
+            normalized_existing = normalize_company_name(existing_name)
+            
+            if normalized_supplier == normalized_existing:
+                supplier = existing
+                break
+    
+    # 3. Si aún no encuentra, crear nuevo proveedor
     if not supplier:
         supplier = Supplier.objects.create(
             company=company,
@@ -1960,16 +2009,6 @@ def api_delete_invoice_received(request, invoice_id):
 @require_POST
 @transaction.atomic
 def api_create_invoice_received(request):
-    # Aumentar timeout para procesamiento de PDFs multipágina
-    import signal
-    
-    def timeout_handler(signum, frame):
-        raise TimeoutError("Procesamiento timeout - PDF muy grande o lento")
-    
-    # Timeout de 5 minutos para PDFs multipágina
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(300)  # 5 minutos
-    
     try:
         company = get_current_company(request.user)
         file = request.FILES.get("pdf_file")
@@ -2058,17 +2097,33 @@ def api_create_invoice_received(request):
         supplier_data = result.get("supplier", {}) or {}  # Ahora viene como "supplier"
         lines_data = result.get("lines", []) or []
 
-        # Paso 2: Buscar o crear proveedor (Supplier)
+        # Paso 2: Buscar o crear proveedor (Supplier) con lógica mejorada para evitar duplicados
         supplier = None
-        filters = {"company": company}
-
+        
+        # 1. Buscar por document_number si existe (más preciso)
         if supplier_data.get("document_number"):
-            filters["document_number"] = supplier_data["document_number"]
-            supplier = Supplier.objects.filter(**filters).first()
-        elif supplier_data.get("name"):
-            filters["name"] = supplier_data["name"]
-            supplier = Supplier.objects.filter(**filters).first()
-
+            supplier = Supplier.objects.filter(
+                company=company,
+                document_number=supplier_data["document_number"]
+            ).first()
+        
+        # 2. Si no encuentra por document_number, buscar por nombre normalizado
+        if not supplier and supplier_data.get("name"):
+            supplier_name = supplier_data["name"].strip().upper()
+            # Buscar proveedores con nombres similares (ignorando mayúsculas, espacios y caracteres especiales)
+            existing_suppliers = Supplier.objects.filter(company=company).all()
+            
+            for existing in existing_suppliers:
+                existing_name = existing.name.strip().upper()
+                # Normalizar nombres: remover espacios extras, puntos, comas, S.A./SA/etc
+                normalized_supplier = normalize_company_name(supplier_name)
+                normalized_existing = normalize_company_name(existing_name)
+                
+                if normalized_supplier == normalized_existing:
+                    supplier = existing
+                    break
+        
+        # 3. Si aún no encuentra, crear nuevo proveedor
         if not supplier:
             supplier = Supplier.objects.create(
                 company=company,
@@ -2167,17 +2222,11 @@ def api_create_invoice_received(request):
         if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
             return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
         return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
-    except TimeoutError as e:
-        signal.alarm(0)  # Cancelar el timeout
-        transaction.set_rollback(True)
-        return JsonResponse({"success": False, "message": "Timeout procesando PDF. Intenta con un archivo más pequeño."}, status=408)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
         transaction.set_rollback(True)
         return JsonResponse({"success": False, "message": str(e)}, status=500)
-    finally:
-        signal.alarm(0)  # Siempre cancelar el timeout
 
 @login_required
 def api_show_table_employees(request):
