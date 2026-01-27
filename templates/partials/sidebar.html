@@ -41,7 +41,11 @@
           <i class="bi bi-list-ul"></i>
           <span>Nominas</span>
         </a>
-        <a href="{% url 'generar_nomina' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
+        <!--<a href="{% url 'generar_nomina' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar nomina</span>
+        </a>-->
+        <a href="#" onclick="alert('Coming soon'); return false;" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
           <i class="bi bi-plus-circle"></i>
           <span>Generar nomina</span>
         </a>
