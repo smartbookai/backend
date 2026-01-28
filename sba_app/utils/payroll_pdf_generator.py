@@ -178,7 +178,7 @@ def generate_payroll_pdf(data):
     # Columna izquierda: Aportación trabajador
     y_ded = y - 20
     p.setFont("Helvetica-Bold", 6)
-    p.drawString(margin + 2, y_ded, "1. Aportación del trabajador a las cotizaciones a la SS")
+    p.drawString(margin + 2, y_ded, "1. Aportación trabajador cotizaciones SS")
     y_ded -= 7
 
     p.setFont("Helvetica", 6)
@@ -263,8 +263,8 @@ def generate_payroll_pdf(data):
     p.drawString(col_split + 2, y_total_ded - 8, "B. TOTAL A DEDUCIR" + "." * 25)
     p.drawRightString(margin + page_width - 3, y_total_ded - 8, f"{payroll.total_deductions:.2f}")
 
-    y_total_ded -= 10
-    p.drawString(col_split + 2, y_total_ded, "LIQUIDO TOTAL A PERCIBIR (A-B)" + "." * 10 + "Euros")
+    y_total_ded -= 17
+    p.drawString(col_split + 2, y_total_ded, "LIQUIDO TOTAL A PERCIBIR (A-B)    Euros")
     p.setFont("Helvetica-Bold", 9)
     p.drawRightString(margin + page_width - 3, y_total_ded, f"{payroll.net_salary:.2f}")
 
@@ -360,11 +360,11 @@ def generate_payroll_pdf(data):
     p.drawRightString(margin + page_width - 3, y, f"{ss_fogasa:.2f}")
 
     # Fila 3
-    y -= 8
+    y -= 6
     p.drawString(margin + 2, y, "3. Base de cotización adicional por horas extraordinarias")
 
     # Fila 4
-    y -= 8
+    y -= 6
     base_irpf_final = bases_cotizacion.get('irpf', Decimal('0'))
     p.drawString(margin + 2, y, "4. Base sujeta a retención del I.R.P.F.")
     p.drawRightString(margin + 230, y, f"{base_irpf_final:.2f}")
