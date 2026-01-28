@@ -28,25 +28,25 @@
             <div style="display:grid;gap:12px;">
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">Razón Social</label>
-                <input type="text" id="company_name" name="company_name" value="{{ company.name }}" readonly style="background:#F3F4F6;">
+                <input type="text" id="company_name" name="company_name" value="{{ company.name }}" style="background:#F3F4F6;">
               </div>
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">Domicilio</label>
-                <input type="text" id="company_address" name="company_address" placeholder="Dirección completa">
+                <input type="text" id="company_address" name="company_address" value="{{ company.address|default:'' }}" style="background:#F3F4F6;">
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div class="form-field">
                   <label style="font-size:12px;font-weight:600;">C.I.F.</label>
-                  <input type="text" id="company_cif" name="company_cif" placeholder="B12345678">
+                  <input type="text" id="company_cif" name="company_cif" value="{{ company.document_number|default:'' }}" style="background:#F3F4F6;">
                 </div>
                 <div class="form-field">
                   <label style="font-size:12px;font-weight:600;">Código Cuenta Cotización</label>
-                  <input type="text" id="company_ccc" name="company_ccc" placeholder="23/1234567">
+                  <input type="text" id="company_ccc" name="company_ccc" value="{{ company.ccc|default:'' }}" style="background:#F3F4F6;">
                 </div>
               </div>
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">Código de la Seguridad Social</label>
-                <input type="text" id="company_ss_code" name="company_ss_code" placeholder="23/10202702-67">
+                <input type="text" id="company_ss_code" name="company_ss_code">
               </div>
             </div>
           </div>
@@ -62,16 +62,24 @@
                   {% for employee in employees %}
                     <option value="{{ employee.id }}"
                             data-name="{{ employee.first_name }} {{ employee.last_name }}"
-                            data-nif="{{ employee.dni }}"
-                            data-ss="{{ employee.social_security_number }}">
-                      {{ employee.first_name }} {{ employee.last_name }} - {{ employee.job_position }}
+                            data-nif="{{ employee.document_number }}"
+                            data-ss="{{ employee.social_security_number }}"
+                            data-category="{{ employee.job_position }}"
+                            data-contract="{{ employee.contract_type }}"
+                            data-hire-date="{{ employee.hire_date|date:'Y-m-d' }}"
+                            data-department="{{ employee.department|default:'' }}"
+                            data-phone="{{ employee.phone|default:'' }}"
+                            data-email="{{ employee.email|default:'' }}"
+                            data-address="{{ employee.address|default:'' }}"
+                            data-iban="{{ employee.bank_account|default:'' }}">
+                      {{ employee.first_name }} {{ employee.last_name }}
                     </option>
                   {% endfor %}
                 </select>
               </div>
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">N.I.F.</label>
-                <input type="text" id="employee_nif" name="employee_nif" readonly style="background:#F3F4F6;">
+                <input type="text" id="employee_nif" name="employee_nif" style="background:#F3F4F6;">
               </div>
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">Número libro de Matrícula</label>
@@ -79,16 +87,16 @@
               </div>
               <div class="form-field">
                 <label style="font-size:12px;font-weight:600;">Núm. afiliación a la Seguridad Social</label>
-                <input type="text" id="employee_ss_number" name="employee_ss_number" readonly style="background:#F3F4F6;">
+                <input type="text" id="employee_ss_number" name="employee_ss_number" style="background:#F3F4F6;">
               </div>
               <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
                 <div class="form-field">
                   <label style="font-size:12px;font-weight:600;">Categoría o grupo profesional</label>
-                  <input type="text" id="employee_category" name="employee_category" placeholder="Ej: PEON/LIMPI">
+                  <input type="text" id="employee_category" name="employee_category">
                 </div>
                 <div class="form-field">
                   <label style="font-size:12px;font-weight:600;">Cod.CT</label>
-                  <input type="text" id="employee_contract_code" name="employee_contract_code" placeholder="300G. Cotiz">
+                  <input type="text" id="employee_contract_code" name="employee_contract_code">
                 </div>
               </div>
               <div class="form-field">
@@ -182,19 +190,25 @@
               <div style="display:grid;gap:8px;font-size:13px;">
                 <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;">
                   <label>Prestaciones e indemnizaciones de la Seguridad Social:</label>
-                  <span style="font-size:11px;">del</span>
-                  <span style="font-size:11px;">al</span>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;">
-                  <label></label>
-                  <span style="font-size:11px;">del</span>
-                  <span style="font-size:11px;">al</span>
+                  <input type="number" id="ss_benefits" name="ss_benefits" step="0.01" value="0.00"
+                         style="width:100px;text-align:right;" onchange="calculateTotals()">
+                  <span>€</span>
                 </div>
                 <div style="margin-top:8px;">
                   <label style="font-size:12px;">Indemnizaciones por traslados, suspensiones o despidos:</label>
+                  <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-top:4px;">
+                    <input type="number" id="transfer_compensation" name="transfer_compensation" step="0.01" value="0.00"
+                           style="width:100px;text-align:right;" onchange="calculateTotals()">
+                    <span>€</span>
+                  </div>
                 </div>
                 <div style="margin-top:8px;">
                   <label style="font-size:12px;">Otras percepciones no salariales:</label>
+                  <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-top:4px;">
+                    <input type="number" id="other_non_salary" name="other_non_salary" step="0.01" value="0.00"
+                           style="width:100px;text-align:right;" onchange="calculateTotals()">
+                    <span>€</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -261,13 +275,15 @@
                 </div>
                 <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
                   <label>Fuerza mayor</label>
-                  <span>%</span>
-                  <span></span>
+                  <input type="number" id="overtime_force_major" name="overtime_force_major" step="0.01" value="0.00"
+                         style="width:80px;text-align:right;" onchange="calculateTotals()">
+                  <span>€</span>
                 </div>
                 <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
                   <label>Resto horas extraordinarias</label>
-                  <span>%</span>
-                  <span></span>
+                  <input type="number" id="overtime_regular" name="overtime_regular" step="0.01" value="0.00"
+                         style="width:80px;text-align:right;" onchange="calculateTotals()">
+                  <span>€</span>
                 </div>
 
                 <div style="margin-top:12px;padding-top:12px;border-top:2px solid #000;">
@@ -351,9 +367,9 @@
         <div style="margin-top:24px;padding:16px;background:#F9FAFB;border-radius:8px;">
           <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:12px;align-items:center;font-size:12px;">
             <label style="font-weight:600;">IBAN:</label>
-            <input type="text" id="employee_iban" name="employee_iban" placeholder="ES26 3067 0048 4322 4008 8713" style="font-family:monospace;">
+            <input type="text" id="employee_iban" name="employee_iban" style="font-family:monospace;">
             <label style="font-weight:600;">SWIFT/BIC:</label>
-            <input type="text" id="employee_swift" name="employee_swift" placeholder="BCOEESMM067">
+            <input type="text" id="employee_swift" name="employee_swift">
           </div>
         </div>
 
@@ -604,11 +620,29 @@ function loadEmployeeData() {
   const option = select.options[select.selectedIndex];
 
   if (option.value) {
+    // Datos básicos
     document.getElementById('employee_nif').value = option.dataset.nif || '';
     document.getElementById('employee_ss_number').value = option.dataset.ss || '';
+    
+    // Datos profesionales
+    document.getElementById('employee_category').value = option.dataset.category || '';
+    document.getElementById('employee_seniority_date').value = option.dataset.hireDate || '';
+    
+    // Datos bancarios
+    document.getElementById('employee_iban').value = option.dataset.iban || '';
+    
+    // Datos adicionales (si tienes campos para ellos)
+    // document.getElementById('employee_phone').value = option.dataset.phone || '';
+    // document.getElementById('employee_email').value = option.dataset.email || '';
+    // document.getElementById('employee_address').value = option.dataset.address || '';
+    
   } else {
+    // Limpiar todos los campos si no hay selección
     document.getElementById('employee_nif').value = '';
     document.getElementById('employee_ss_number').value = '';
+    document.getElementById('employee_category').value = '';
+    document.getElementById('employee_seniority_date').value = '';
+    document.getElementById('employee_iban').value = '';
   }
 }
 
@@ -707,8 +741,18 @@ function calculateTotals() {
     additionalTotal += parseFloat(input.value) || 0;
   });
 
+  // Nuevas percepciones no salariales
+  const ssBenefits = parseFloat(document.getElementById('ss_benefits').value) || 0;
+  const transferCompensation = parseFloat(document.getElementById('transfer_compensation').value) || 0;
+  const otherNonSalary = parseFloat(document.getElementById('other_non_salary').value) || 0;
+
+  // Nuevas horas extraordinarias
+  const overtimeForceMajor = parseFloat(document.getElementById('overtime_force_major').value) || 0;
+  const overtimeRegular = parseFloat(document.getElementById('overtime_regular').value) || 0;
+
   const totalAccrued = baseSalary + salarySupplements + overtime + extraordinaryPayments +
-                       salaryInKind + additionalTotal;
+                       salaryInKind + additionalTotal + ssBenefits + transferCompensation + 
+                       otherNonSalary + overtimeForceMajor + overtimeRegular;
   document.getElementById('total_accrued').value = totalAccrued.toFixed(2);
 
   // Base IRPF
