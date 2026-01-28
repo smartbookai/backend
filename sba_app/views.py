@@ -2230,6 +2230,155 @@ def api_delete_invoice_received(request, invoice_id):
     return JsonResponse({'success': True})
 
 
+def _are_consecutive_numbers(num1, num2):
+    """
+    Detecta si dos números de factura son correlativos.
+    Ejemplo: "001", "002" o "A-001", "A-002"
+    """
+    if not num1 or not num2:
+        return False
+
+    # Extraer parte numérica
+    import re
+    nums1 = re.findall(r'\d+', str(num1))
+    nums2 = re.findall(r'\d+', str(num2))
+
+    if len(nums1) == 1 and len(nums2) == 1:
+        try:
+            n1 = int(nums1[0])
+            n2 = int(nums2[0])
+            return abs(n1 - n2) == 1
+        except ValueError:
+            return False
+
+    return False
+
+
+def _are_same_invoice(inv1, sup1, inv2, sup2):
+    """
+    Determina si dos páginas pertenecen a la misma factura
+    usando múltiples criterios.
+    """
+    # Criterio 1: Mismo número de factura (el más fuerte)
+    num1 = normalize_document_number(inv1.get("invoice_number"))
+    num2 = normalize_document_number(inv2.get("invoice_number"))
+    if num1 and num2 and num1 == num2:
+        return True
+
+    # Criterio 2: Mismo proveedor + misma fecha
+    sup1_name = normalize_company_name(sup1.get("name"))
+    sup2_name = normalize_company_name(sup2.get("name"))
+    date1 = inv1.get("issue_date")
+    date2 = inv2.get("issue_date")
+
+    if sup1_name and sup2_name and sup1_name == sup2_name:
+        if date1 and date2 and date1 == date2:
+            return True
+
+    # Criterio 3: Mismo proveedor + números de factura correlativos
+    if sup1_name and sup2_name and sup1_name == sup2_name:
+        if _are_consecutive_numbers(inv1.get("invoice_number"), inv2.get("invoice_number")):
+            return True
+
+    return False
+
+
+def should_group_invoices(page_results):
+    """
+    Analiza si las páginas del PDF deben agruparse en una sola factura
+    o crearse facturas separadas.
+
+    Retorna: lista de grupos, cada grupo contiene índices de páginas que van juntas
+    """
+    if len(page_results) <= 1:
+        return [[0]]  # Una sola página = un grupo
+
+    groups = []
+    used_indices = set()
+
+    for i, current_page in enumerate(page_results):
+        if i in used_indices:
+            continue
+
+        current_group = [i]
+        current_data = current_page.get("invoice", {})
+        current_supplier = current_page.get("supplier", {})
+
+        # Comparar con las páginas restantes
+        for j in range(i + 1, len(page_results)):
+            if j in used_indices:
+                continue
+
+            other_page = page_results[j]
+            other_data = other_page.get("invoice", {})
+            other_supplier = other_page.get("supplier", {})
+
+            # Criterios de coincidencia
+            if _are_same_invoice(current_data, current_supplier, other_data, other_supplier):
+                current_group.append(j)
+                used_indices.add(j)
+
+        groups.append(current_group)
+        used_indices.add(i)
+
+    return groups
+
+
+def consolidate_invoice_group(page_results, group_indices):
+    """
+    Consolida los datos de múltiples páginas que pertenecen a la misma factura.
+    """
+    if len(group_indices) == 1:
+        return page_results[group_indices[0]]
+
+    # Usar la primera página como base
+    base_result = page_results[group_indices[0]].copy()
+    consolidated_invoice = base_result.get("invoice", {}).copy()
+    consolidated_supplier = base_result.get("supplier", {}).copy()
+    consolidated_lines = []
+
+    # Acumular líneas de todas las páginas
+    for idx in group_indices:
+        page_result = page_results[idx]
+        page_lines = page_result.get("lines", [])
+        consolidated_lines.extend(page_lines)
+
+    # Sumar totales de todas las páginas
+    total_base = 0
+    total_tax = 0
+    total_amount = 0
+    total_discount = 0
+
+    for idx in group_indices:
+        page_invoice = page_results[idx].get("invoice", {})
+        try:
+            total_base += float(page_invoice.get("base_amount", 0) or 0)
+            total_tax += float(page_invoice.get("tax_amount", 0) or 0)
+            total_amount += float(page_invoice.get("total_amount", 0) or 0)
+            total_discount += float(page_invoice.get("discount_amount", 0) or 0)
+        except (ValueError, TypeError):
+            pass
+
+    # Actualizar datos consolidados
+    consolidated_invoice["base_amount"] = f"{total_base:.2f}"
+    consolidated_invoice["tax_amount"] = f"{total_tax:.2f}"
+    consolidated_invoice["total_amount"] = f"{total_amount:.2f}"
+    if total_discount > 0:
+        consolidated_invoice["discount_amount"] = f"{total_discount:.2f}"
+
+    # Construir resultado consolidado
+    consolidated_result = {
+        "invoice": consolidated_invoice,
+        "supplier": consolidated_supplier,
+        "lines": consolidated_lines,
+        "tokens": sum(page_results[idx].get("tokens", 0) for idx in group_indices),
+        "page_group": group_indices,  # Para referencia
+        "consolidated": True
+    }
+
+    return consolidated_result
+
+
 @login_required
 @require_POST
 @transaction.atomic
@@ -2265,51 +2414,109 @@ def api_create_invoice_received(request):
             # La tupla contiene (lista_resultados, pdf_bytes)
             results_list, pdf_bytes = result
             print(f" Procesando {len(results_list)} facturas desde PDF multipágina...")
+            
+            # 🔍 Analizar si las páginas deben agruparse o crearse por separado
+            print("🔍 Analizando coincidencias entre páginas...")
+            groups = should_group_invoices(results_list)
+            print(f"📊 Se detectaron {len(groups)} grupo(s) de facturas")
+            
             created_invoices = []
             errors = []
-            
             original_filename = file.name or "factura.pdf"
             base_name = original_filename.rsplit('.', 1)[0]
             
             import fitz
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                for idx, single_result in enumerate(results_list):
-                    page_num = single_result.get("page_number", idx + 1)
-                    page_index = page_num - 1  # Índice 0-based para el PDF
-                    
-                    if single_result.get("error"):
-                        errors.append({"page": page_num, "error": single_result.get("error")})
-                        continue
-                    
-                    try:
-                        # Crear un PDF con solo esta página (usar page_index, no idx)
-                        single_page_doc = fitz.open()
-                        single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-                        single_page_bytes = single_page_doc.tobytes()
-                        single_page_doc.close()
+                # 🔄 Procesar cada grupo
+                for group_idx, group_indices in enumerate(groups):
+                    if len(group_indices) == 1:
+                        # Una sola página = procesar individualmente
+                        idx = group_indices[0]
+                        single_result = results_list[idx]
+                        page_num = single_result.get("page_number", idx + 1)
+                        page_index = page_num - 1
                         
-                        # Crear un archivo Django para esta página con nombre único
+                        if single_result.get("error"):
+                            errors.append({"page": page_num, "error": single_result.get("error")})
+                            continue
+                        
+                        try:
+                            # Crear un PDF con solo esta página
+                            single_page_doc = fitz.open()
+                            single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                            single_page_bytes = single_page_doc.tobytes()
+                            single_page_doc.close()
+                            
+                            # Crear un archivo Django para esta página
+                            from django.core.files.base import ContentFile
+                            import uuid
+                            unique_id = uuid.uuid4().hex[:8]
+                            page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
+                            page_file = ContentFile(single_page_bytes, name=page_filename)
+                            
+                            inv_result = _create_single_purchase_invoice(company, single_result, page_file)
+                            inv_result["page_number"] = page_num
+                            created_invoices.append(inv_result)
+                            print(f"📄 Grupo {group_idx + 1}: 1 página -> Factura {inv_result['invoice_number']}")
+                        except Exception as e:
+                            print(f"❌ Error página {page_num}: {e}")
+                            errors.append({"page": page_num, "error": str(e)})
+                    
+                    else:
+                        # Múltiples páginas = consolidar y crear una sola factura
+                        print(f"📄 Grupo {group_idx + 1}: {len(group_indices)} páginas consolidadas")
+                        
+                        # Consolidar datos
+                        consolidated_result = consolidate_invoice_group(results_list, group_indices)
+                        
+                        # Crear PDF con todas las páginas del grupo
+                        group_doc = fitz.open()
+                        for idx in group_indices:
+                            page_result = results_list[idx]
+                            page_num = page_result.get("page_number", idx + 1)
+                            page_index = page_num - 1
+                            group_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                        
+                        group_bytes = group_doc.tobytes()
+                        group_doc.close()
+                        
+                        # Crear archivo Django para el grupo
                         from django.core.files.base import ContentFile
                         import uuid
                         unique_id = uuid.uuid4().hex[:8]
-                        page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
-                        page_file = ContentFile(single_page_bytes, name=page_filename)
+                        group_filename = f"{base_name}_grupo{group_idx + 1}_{len(group_indices)}pag_{unique_id}.pdf"
+                        group_file = ContentFile(group_bytes, name=group_filename)
                         
-                        inv_result = _create_single_purchase_invoice(company, single_result, page_file)
-                        inv_result["page_number"] = page_num
-                        created_invoices.append(inv_result)
-                        print(f" Factura {idx + 1} creada: {inv_result['invoice_number']} -> archivo: {page_filename}")
-                    except Exception as e:
-                        print(f" Error página {page_num}: {e}")
-                        errors.append({"page": page_num, "error": str(e)})
+                        try:
+                            inv_result = _create_single_purchase_invoice(company, consolidated_result, group_file)
+                            inv_result["page_group"] = group_indices
+                            inv_result["consolidated"] = True
+                            created_invoices.append(inv_result)
+                            print(f"✅ Factura consolidada creada: {inv_result['invoice_number']} -> archivo: {group_filename}")
+                        except Exception as e:
+                            print(f"❌ Error grupo {group_idx + 1}: {e}")
+                            errors.append({"group": group_idx + 1, "error": str(e)})
             
             if not created_invoices:
                 return JsonResponse({"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
             
+            # Determinar mensaje apropiado
+            if len(created_invoices) == 1:
+                message = "Se creó 1 factura correctamente."
+            else:
+                consolidated_count = sum(1 for inv in created_invoices if inv.get("consolidated"))
+                individual_count = len(created_invoices) - consolidated_count
+                if consolidated_count > 0 and individual_count > 0:
+                    message = f"Se crearon {consolidated_count} factura(s) consolidada(s) y {individual_count} factura(s) individual(es)."
+                elif consolidated_count > 0:
+                    message = f"Se crearon {consolidated_count} factura(s) consolidada(s) correctamente."
+                else:
+                    message = f"Se crearon {individual_count} factura(s) correctamente."
+            
             return JsonResponse({
                 "success": True,
                 "multiple": True,
-                "message": f"Se crearon {len(created_invoices)} factura(s) correctamente.",
+                "message": message,
                 "invoices_created": len(created_invoices),
                 "invoices": created_invoices,
                 "errors": errors if errors else None,
@@ -2452,6 +2659,7 @@ def api_create_invoice_received(request):
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
         transaction.set_rollback(True)
         return JsonResponse({"success": False, "message": str(e)}, status=500)
+
 
 @login_required
 def api_show_table_employees(request):

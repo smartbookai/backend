@@ -332,9 +332,157 @@ def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png"):
         raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
     
     result = json.loads(content)
-    result["tokens"] = tokens
     
     return result
+
+
+def _are_consecutive_numbers(num1, num2):
+    """
+    Detecta si dos números de factura son correlativos.
+    Ejemplo: "001", "002" o "A-001", "A-002"
+    """
+    if not num1 or not num2:
+        return False
+    
+    # Extraer parte numérica
+    import re
+    nums1 = re.findall(r'\d+', str(num1))
+    nums2 = re.findall(r'\d+', str(num2))
+    
+    if len(nums1) == 1 and len(nums2) == 1:
+        try:
+            n1 = int(nums1[0])
+            n2 = int(nums2[0])
+            return abs(n1 - n2) == 1
+        except ValueError:
+            return False
+    
+    return False
+
+
+def _are_same_invoice(inv1, sup1, inv2, sup2):
+    """
+    Determina si dos páginas pertenecen a la misma factura
+    usando múltiples criterios.
+    """
+    # Criterio 1: Mismo número de factura (el más fuerte)
+    num1 = normalize_document_number(inv1.get("invoice_number"))
+    num2 = normalize_document_number(inv2.get("invoice_number"))
+    if num1 and num2 and num1 == num2:
+        return True
+    
+    # Criterio 2: Mismo proveedor + misma fecha
+    sup1_name = normalize_company_name(sup1.get("name"))
+    sup2_name = normalize_company_name(sup2.get("name"))
+    date1 = inv1.get("issue_date")
+    date2 = inv2.get("issue_date")
+    
+    if sup1_name and sup2_name and sup1_name == sup2_name:
+        if date1 and date2 and date1 == date2:
+            return True
+    
+    # Criterio 3: Mismo proveedor + números de factura correlativos
+    if sup1_name and sup2_name and sup1_name == sup2_name:
+        if _are_consecutive_numbers(inv1.get("invoice_number"), inv2.get("invoice_number")):
+            return True
+    
+    return False
+
+
+def should_group_invoices(page_results):
+    """
+    Analiza si las páginas del PDF deben agruparse en una sola factura
+    o crearse facturas separadas.
+    
+    Retorna: lista de grupos, cada grupo contiene índices de páginas que van juntas
+    """
+    if len(page_results) <= 1:
+        return [[0]]  # Una sola página = un grupo
+    
+    groups = []
+    used_indices = set()
+    
+    for i, current_page in enumerate(page_results):
+        if i in used_indices:
+            continue
+            
+        current_group = [i]
+        current_data = current_page.get("invoice", {})
+        current_supplier = current_page.get("supplier", {})
+        
+        # Comparar con las páginas restantes
+        for j in range(i + 1, len(page_results)):
+            if j in used_indices:
+                continue
+                
+            other_page = page_results[j]
+            other_data = other_page.get("invoice", {})
+            other_supplier = other_page.get("supplier", {})
+            
+            # Criterios de coincidencia
+            if _are_same_invoice(current_data, current_supplier, other_data, other_supplier):
+                current_group.append(j)
+                used_indices.add(j)
+        
+        groups.append(current_group)
+        used_indices.add(i)
+    
+    return groups
+
+
+def consolidate_invoice_group(page_results, group_indices):
+    """
+    Consolida los datos de múltiples páginas que pertenecen a la misma factura.
+    """
+    if len(group_indices) == 1:
+        return page_results[group_indices[0]]
+    
+    # Usar la primera página como base
+    base_result = page_results[group_indices[0]].copy()
+    consolidated_invoice = base_result.get("invoice", {}).copy()
+    consolidated_supplier = base_result.get("supplier", {}).copy()
+    consolidated_lines = []
+    
+    # Acumular líneas de todas las páginas
+    for idx in group_indices:
+        page_result = page_results[idx]
+        page_lines = page_result.get("lines", [])
+        consolidated_lines.extend(page_lines)
+    
+    # Sumar totales de todas las páginas
+    total_base = 0
+    total_tax = 0
+    total_amount = 0
+    total_discount = 0
+    
+    for idx in group_indices:
+        page_invoice = page_results[idx].get("invoice", {})
+        try:
+            total_base += float(page_invoice.get("base_amount", 0) or 0)
+            total_tax += float(page_invoice.get("tax_amount", 0) or 0)
+            total_amount += float(page_invoice.get("total_amount", 0) or 0)
+            total_discount += float(page_invoice.get("discount_amount", 0) or 0)
+        except (ValueError, TypeError):
+            pass
+    
+    # Actualizar datos consolidados
+    consolidated_invoice["base_amount"] = f"{total_base:.2f}"
+    consolidated_invoice["tax_amount"] = f"{total_tax:.2f}"
+    consolidated_invoice["total_amount"] = f"{total_amount:.2f}"
+    if total_discount > 0:
+        consolidated_invoice["discount_amount"] = f"{total_discount:.2f}"
+    
+    # Construir resultado consolidado
+    consolidated_result = {
+        "invoice": consolidated_invoice,
+        "supplier": consolidated_supplier,
+        "lines": consolidated_lines,
+        "tokens": sum(page_results[idx].get("tokens", 0) for idx in group_indices),
+        "page_group": group_indices,  # Para referencia
+        "consolidated": True
+    }
+    
+    return consolidated_result
 
 
 def extract_purchase_invoice_data(file):
