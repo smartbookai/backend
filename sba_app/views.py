@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import user_passes_test, login_required
+from django.core.files.base import ContentFile
 from django.db import transaction, IntegrityError
 from django.db.models import Sum
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
@@ -23,6 +24,7 @@ from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoic
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll
+from sba_app.utils.payroll_pdf_generator import generate_payroll_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -4899,3 +4901,202 @@ def check_precontractual_acceptance(user):
         return acceptance.terms_conditions_accepted and acceptance.waiver_right_withdrawal_accepted
     except PrecontractualAcceptance.DoesNotExist:
         return False
+
+
+@require_http_methods(["POST"])
+def api_create_manual_payroll(request):
+    """
+    Vista para crear una nómina manualmente con su PDF
+    """
+    try:
+        # Obtener datos del formulario
+        employee_id = request.POST.get('employee')
+
+        if not employee_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'Debe seleccionar un empleado'
+            }, status=400)
+
+        # Obtener objetos relacionados
+        employee = Employee.objects.get(id=employee_id)
+        company = employee.company
+
+        # Preparar fechas
+        period_start = datetime.strptime(request.POST.get('period_start'), '%Y-%m-%d').date()
+        period_end = datetime.strptime(request.POST.get('period_end'), '%Y-%m-%d').date()
+
+        # Fecha de pago (último día del período por defecto)
+        payment_date = period_end
+
+        # Devengos
+        base_salary = Decimal(request.POST.get('base_salary', '0'))
+        salary_supplements = Decimal(request.POST.get('salary_supplements', '0'))
+        overtime = Decimal(request.POST.get('overtime', '0'))
+
+        # Conceptos adicionales (estos no se guardan en el modelo, solo para el PDF)
+        conceptos_adicionales = []
+        additional_names = request.POST.getlist('additional_concept_name[]')
+        additional_values = request.POST.getlist('additional_concept_value[]')
+
+        bonuses_total = Decimal('0')
+        for name, value in zip(additional_names, additional_values):
+            if name and value:
+                value_decimal = Decimal(value)
+                bonuses_total += value_decimal
+                conceptos_adicionales.append({
+                    'name': name,
+                    'value': value_decimal
+                })
+
+        # Percepciones no salariales (para el PDF, se suman al total devengado)
+        ss_benefits = Decimal(request.POST.get('ss_benefits', '0'))
+        transfer_compensation = Decimal(request.POST.get('transfer_compensation', '0'))
+        other_non_salary = Decimal(request.POST.get('other_non_salary', '0'))
+
+        # Horas extraordinarias adicionales
+        overtime_force_major = Decimal(request.POST.get('overtime_force_major', '0'))
+        overtime_regular = Decimal(request.POST.get('overtime_regular', '0'))
+
+        # Total devengado
+        total_accrued = Decimal(request.POST.get('total_accrued', '0'))
+
+        # Deducciones
+        social_security_employee = Decimal(request.POST.get('social_security_employee', '0'))
+        irpf = Decimal(request.POST.get('irpf', '0'))
+        advances = Decimal(request.POST.get('advances', '0'))
+        products_value = Decimal(request.POST.get('products_value', '0'))
+        other_deductions_base = Decimal(request.POST.get('other_deductions', '0'))
+
+        # Sumar todas las deducciones
+        other_deductions = advances + products_value + other_deductions_base
+        total_deductions = Decimal(request.POST.get('total_deductions', '0'))
+
+        # Líquido
+        net_salary = Decimal(request.POST.get('net_salary', '0'))
+
+        # Seguridad Social empresa
+        social_security_company = Decimal(request.POST.get('social_security_company', '0'))
+
+        # Cuentas contables
+        account_salary_expense = request.POST.get('account_salary_expense', '640')
+        account_social_security_expense = request.POST.get('account_social_security_expense', '642')
+        account_social_security_payable = request.POST.get('account_social_security_payable', '476')
+        account_irpf_payable = request.POST.get('account_irpf_payable', '4751')
+        account_bank = request.POST.get('account_bank', '572')
+
+        # Notas
+        notes = request.POST.get('notes', '')
+
+        # Crear la nómina con transacción atómica
+        with transaction.atomic():
+            payroll = Payroll.objects.create(
+                company=company,
+                employee=employee,
+                period_start=period_start,
+                period_end=period_end,
+                payment_date=payment_date,
+                base_salary=base_salary,
+                salary_supplements=salary_supplements,
+                overtime=overtime,
+                bonuses=bonuses_total,
+                total_accrued=total_accrued,
+                social_security_employee=social_security_employee,
+                irpf=irpf,
+                other_deductions=other_deductions,
+                total_deductions=total_deductions,
+                net_salary=net_salary,
+                social_security_company=social_security_company,
+                account_salary_expense=account_salary_expense,
+                account_social_security_expense=account_social_security_expense,
+                account_social_security_payable=account_social_security_payable,
+                account_irpf_payable=account_irpf_payable,
+                account_bank=account_bank,
+                notes=notes
+            )
+
+            # Preparar datos para el PDF
+            desglose_ss_empleado = {
+                'common': Decimal(request.POST.get('ss_employee_common', '0')),
+                'unemployment': Decimal(request.POST.get('ss_employee_unemployment', '0')),
+                'training': Decimal(request.POST.get('ss_employee_training', '0'))
+            }
+
+            desglose_ss_empresa = {
+                'common': Decimal(request.POST.get('ss_company_common', '0')),
+                'mei': Decimal(request.POST.get('ss_company_mei', '0')),
+                'unemployment': Decimal(request.POST.get('ss_company_unemployment', '0')),
+                'training': Decimal(request.POST.get('ss_company_training', '0')),
+                'fogasa': Decimal(request.POST.get('ss_company_fogasa', '0'))
+            }
+
+            bases_cotizacion = {
+                'common': Decimal(request.POST.get('cotization_base_common', '0')),
+                'professional': Decimal(request.POST.get('cotization_base_professional', '0')),
+                'irpf': Decimal(request.POST.get('irpf_base_calc', '0'))
+            }
+
+            # Datos adicionales para el PDF
+            datos_emision = {
+                'city': request.POST.get('city', ''),
+                'day': request.POST.get('issue_day', ''),
+                'month': request.POST.get('issue_month', ''),
+                'year': request.POST.get('issue_year', '')
+            }
+
+            datos_bancarios = {
+                'iban': request.POST.get('employee_iban', ''),
+                'swift': request.POST.get('employee_swift', '')
+            }
+
+            pdf_data = {
+                'payroll': payroll,
+                'employee': employee,
+                'company': company,
+                'conceptos_adicionales': conceptos_adicionales,
+                'desglose_ss_empleado': desglose_ss_empleado,
+                'desglose_ss_empresa': desglose_ss_empresa,
+                'bases_cotizacion': bases_cotizacion,
+                'datos_emision': datos_emision,
+                'datos_bancarios': datos_bancarios,
+                'percepciones_no_salariales': {
+                    'ss_benefits': ss_benefits,
+                    'transfer_compensation': transfer_compensation,
+                    'other_non_salary': other_non_salary
+                },
+                'horas_extraordinarias': {
+                    'force_major': overtime_force_major,
+                    'regular': overtime_regular
+                },
+                'otras_deducciones': {
+                    'advances': advances,
+                    'products_value': products_value,
+                    'other': other_deductions_base
+                }
+            }
+
+            # Generar PDF
+            pdf_content = generate_payroll_pdf(pdf_data)
+
+            # Guardar PDF en el modelo
+            filename = f"nomina_{employee.document_number}_{period_start.strftime('%Y%m')}.pdf"
+            payroll.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Nómina generada correctamente',
+            'payroll_id': payroll.id,
+            'pdf_url': payroll.pdf_file.url if payroll.pdf_file else None
+        })
+
+    except Employee.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Empleado no encontrado'
+        }, status=404)
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al generar la nómina: {str(e)}'
+        }, status=500)

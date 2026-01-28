@@ -841,7 +841,7 @@ document.getElementById('payrollForm').addEventListener('submit', function(e) {
   .then(data => {
     if (data.success) {
       alert('✅ Nómina generada correctamente');
-      window.location.href = '/payrolls/';
+      window.location.href = '/nominas/';
     } else {
       alert('❌ Error: ' + data.message);
       submitBtn.disabled = false;
