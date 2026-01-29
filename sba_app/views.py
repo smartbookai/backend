@@ -1335,11 +1335,36 @@ def api_update_invoice_sent(request, invoice_id):
     if 'notes' in payload:
         invoice.notes = payload.get('notes') or ''
 
-    # Update client name if provided
+    # Actualizar cliente si viene un nombre diferente
     client_name = (payload.get('client_name') or '').strip()
     if client_name and invoice.client:
-        invoice.client.name = client_name
-        invoice.client.save()
+        # Si el nombre es diferente, buscar cliente existente o crear uno nuevo
+        if client_name != invoice.client.name:
+            # Buscar cliente existente por nombre (case-insensitive)
+            existing_client = Client.objects.filter(
+                company=company,
+                name__iexact=client_name
+            ).first()
+            
+            if existing_client:
+                # Usar cliente existente
+                invoice.client = existing_client
+                print(f" Asignado cliente existente '{client_name}' (ID: {existing_client.id}) a factura {invoice.invoice_number}")
+            else:
+                # Crear nuevo cliente
+                new_client = Client.objects.create(
+                    company=company,
+                    name=client_name,
+                    contact_person=invoice.client.contact_person,
+                    phone=invoice.client.phone,
+                    email=invoice.client.email,
+                    address=invoice.client.address,
+                    document_type=invoice.client.document_type,
+                    document_number=invoice.client.document_number,
+                )
+                invoice.client = new_client
+                print(f" Creado nuevo cliente '{client_name}' (ID: {new_client.id}) para factura {invoice.invoice_number}")
+        # Si el nombre es el mismo, no hacer nada
 
     invoice.save()
 
@@ -1870,11 +1895,36 @@ def api_update_invoice_received(request, invoice_id):
     if 'notes' in request_payload:
         purchase_invoice.notes = request_payload.get('notes') or ''
 
-    # Actualizar nombre del proveedor si viene
+    # Actualizar proveedor si viene un nombre diferente
     supplier_name = (request_payload.get('supplier_name') or '').strip()
     if supplier_name and purchase_invoice.supplier:
-        purchase_invoice.supplier.name = supplier_name
-        purchase_invoice.supplier.save()
+        # Si el nombre es diferente, buscar proveedor existente o crear uno nuevo
+        if supplier_name != purchase_invoice.supplier.name:
+            # Buscar proveedor existente por nombre (case-insensitive)
+            existing_supplier = Supplier.objects.filter(
+                company=company,
+                name__iexact=supplier_name
+            ).first()
+            
+            if existing_supplier:
+                # Usar proveedor existente
+                purchase_invoice.supplier = existing_supplier
+                print(f"🔄 Asignado proveedor existente '{supplier_name}' (ID: {existing_supplier.id}) a factura {purchase_invoice.invoice_number}")
+            else:
+                # Crear nuevo proveedor
+                new_supplier = Supplier.objects.create(
+                    company=company,
+                    name=supplier_name,
+                    contact_person=purchase_invoice.supplier.contact_person,
+                    phone=purchase_invoice.supplier.phone,
+                    email=purchase_invoice.supplier.email,
+                    address=purchase_invoice.supplier.address,
+                    document_type=purchase_invoice.supplier.document_type,
+                    document_number=purchase_invoice.supplier.document_number,
+                )
+                purchase_invoice.supplier = new_supplier
+                print(f"➕ Creado nuevo proveedor '{supplier_name}' (ID: {new_supplier.id}) para factura {purchase_invoice.invoice_number}")
+        # Si el nombre es el mismo, no hacer nada
 
     purchase_invoice.save()
 
