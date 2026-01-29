@@ -7,6 +7,7 @@ from pdf2image import convert_from_bytes  # pip install pdf2image
 from django.conf import settings
 from openai import OpenAI
 
+
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 # Prompt base que instruye al modelo
@@ -565,6 +566,10 @@ def process_invoice_header_only(pdf_file):
     import base64
     import json
 
+    # 🔄 IMPORTANTE: Resetear el puntero del archivo al inicio
+    # Esto es necesario porque el archivo ya fue leído anteriormente
+    pdf_file.seek(0)
+
     # 1️⃣ Abrir PDF y renderizar SOLO la parte superior
     pdf_bytes = pdf_file.read()
 
@@ -636,7 +641,6 @@ Devuelve SOLO este JSON:
 
     content = response.choices[0].message.content
     return json.loads(content)
-
 
 #############################################Here stars the code for payroll extraction#####################################################
 # Prompt para extracción de nóminas

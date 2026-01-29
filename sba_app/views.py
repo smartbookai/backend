@@ -23,7 +23,8 @@ from difflib import SequenceMatcher
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
-    generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll
+    generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
+    process_invoice_header_only
 from sba_app.utils.payroll_pdf_generator import generate_payroll_pdf
 
 logger = logging.getLogger(__name__)
@@ -2260,53 +2261,141 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
 
     supplier = None
     supplier_name_extracted = (supplier_data.get("name") or "").strip()
+    print("=" * 80)
+    print(f"🚨 FUNCIÓN _create_single_purchase_invoice EJECUTÁNDOSE")
+    print(f"🚨 Proveedor extraído: '{supplier_name_extracted}'")
+    print("=" * 80)
 
     # ------------------------------------------------------------------
-    # 🔍 VALIDACIÓN POST-EXTRACCIÓN: proveedor = cliente / mi empresa
+    # 🔍 VALIDACIÓN MULTI-CRITERIO DEL PROVEEDOR EXTRAÍDO
     # ------------------------------------------------------------------
+    error_signals = []
+
     if supplier_name_extracted:
-        print(f"🔍 Proveedor extraído por OpenAI: '{supplier_name_extracted}'")
+        print(f"🔍 Analizando proveedor extraído: '{supplier_name_extracted}'")
 
-        potential_client = None
-
-        # 1. Match exacto
+        # SEÑAL 1: ¿Coincide con un CLIENTE conocido?
         potential_client = Client.objects.filter(
             company=company,
             name__iexact=supplier_name_extracted
         ).first()
 
-        # 2. Match por normalización
         if not potential_client:
+            # Buscar por normalización
             normalized_extracted = normalize_company_name(supplier_name_extracted)
             for client in Client.objects.filter(company=company):
                 if normalize_company_name(client.name) == normalized_extracted:
                     potential_client = client
-                    print(f"⚠️ Coincide con cliente por normalización: '{client.name}'")
                     break
 
-        # ------------------------------------------------------------------
-        # ❌ ERROR: OpenAI extrajo un CLIENTE como proveedor
-        # ------------------------------------------------------------------
         if potential_client:
-            print(f"❌ ERROR: '{supplier_name_extracted}' es un CLIENTE conocido")
-            print("🔁 Intentando re-extraer proveedor desde encabezado...")
+            error_signals.append(f"Coincide con cliente conocido: '{potential_client.name}'")
 
-            supplier_data_retry = None
-            if pdf_file:
-                supplier_data_retry = reextract_supplier_from_header(pdf_file)
+        # SEÑAL 2: ¿Tiene formato corporativo sospechoso con todas mayúsculas?
+        # Los proveedores autónomos suelen ser "Nombre Apellido"
+        # Los clientes corporativos son "EMPRESA S.L."
+        corporate_patterns = [
+            r'\bS\.?L\.?\b',
+            r'\bS\.?A\.?\b',
+            r'\bS\.?L\.?U\.?\b',
+            r'\bLTD\.?\b',
+            r'\bLLC\.?\b',
+            r'\bCORP\.?\b',
+            r'\bINC\.?\b'
+        ]
 
-            if supplier_data_retry and supplier_data_retry.get("name"):
-                supplier_data = supplier_data_retry
-                supplier_name_extracted = supplier_data.get("name")
-                print(f"✅ Proveedor recuperado desde encabezado: '{supplier_name_extracted}'")
+        is_corporate = any(
+            re.search(pattern, supplier_name_extracted.upper())
+            for pattern in corporate_patterns
+        )
 
-                invoice_data["notes"] = (invoice_data.get("notes") or "") + (
-                    "\nProveedor reextraído automáticamente desde encabezado "
-                    "tras detectar cliente como proveedor."
-                )
-            else:
-                print("🚨 No se pudo recuperar proveedor real → requiere revisión manual")
+        # Solo es sospechoso si es corporativo Y todas mayúsculas
+        if is_corporate and supplier_name_extracted.isupper():
+            error_signals.append(f"Formato corporativo en mayúsculas: '{supplier_name_extracted}'")
 
+        # SEÑAL 3: ¿Tiene palabras clave de cliente/destinatario?
+        suspicious_keywords = [
+            "DESTINATARIO", "CLIENTE", "FISCAL", "ENVIO", "ENVÍO",
+            "DELIVERY", "SHIP TO", "BILL TO", "DATOS DE ENVIO"
+        ]
+
+        has_suspicious_keyword = any(
+            keyword in supplier_name_extracted.upper()
+            for keyword in suspicious_keywords
+        )
+
+        if has_suspicious_keyword:
+            error_signals.append(f"Contiene palabra clave sospechosa")
+
+    # ------------------------------------------------------------------
+    # 🚨 SI HAY SEÑALES DE ERROR → REEXTRAER
+    # ------------------------------------------------------------------
+    if len(error_signals) >= 1:  # Activar con al menos 1 señal
+        print(f"\n⚠️ SEÑALES DE ERROR DETECTADAS ({len(error_signals)}):")
+        for signal in error_signals:
+            print(f"   - {signal}")
+
+        print(f"🔁 Intentando reextracción desde encabezado...")
+
+        if pdf_file:
+            try:
+
+
+                supplier_header_result = process_invoice_header_only(pdf_file)
+
+                if supplier_header_result and supplier_header_result.get("supplier"):
+                    supplier_from_header = supplier_header_result.get("supplier", {})
+                    new_supplier_name = supplier_from_header.get("name", "")
+
+                    if new_supplier_name and new_supplier_name.strip():
+                        print(f"✅ Proveedor corregido: '{supplier_name_extracted}' → '{new_supplier_name}'")
+                        supplier_data = supplier_from_header
+                        supplier_name_extracted = new_supplier_name
+
+                        # Agregar nota en la factura
+                        original_notes = invoice_data.get("notes") or ""
+                        invoice_data["notes"] = original_notes + (
+                            f"\n[CORRECCIÓN AUTOMÁTICA] Proveedor reextraído desde encabezado. "
+                            f"Original detectado erróneamente: '{supplier_name_extracted}'"
+                        )
+                    else:
+                        print(f"⚠️ Encabezado no proporcionó nombre válido")
+                        # Crear proveedor de revisión manual
+                        supplier = Supplier.objects.create(
+                            company=company,
+                            name=f"REVISAR PROVEEDOR - Factura {invoice_data.get('invoice_number', 'SIN-NUM')}",
+                            contact_person=None,
+                            phone=None,
+                            email=None,
+                            address=None,
+                            document_type=None,
+                            document_number=None,
+                        )
+                        invoice_data["notes"] = (invoice_data.get("notes") or "") + (
+                            "\n[ERROR] No se pudo identificar el proveedor correctamente. Requiere revisión manual."
+                        )
+                else:
+                    print(f"⚠️ No se pudo reextraer proveedor desde encabezado")
+                    # Crear proveedor de revisión manual
+                    supplier = Supplier.objects.create(
+                        company=company,
+                        name=f"REVISAR PROVEEDOR - Factura {invoice_data.get('invoice_number', 'SIN-NUM')}",
+                        contact_person=None,
+                        phone=None,
+                        email=None,
+                        address=None,
+                        document_type=None,
+                        document_number=None,
+                    )
+                    invoice_data["notes"] = (invoice_data.get("notes") or "") + (
+                        "\n[ERROR] No se pudo identificar el proveedor correctamente. Requiere revisión manual."
+                    )
+
+            except Exception as e:
+                print(f"❌ Error en reextracción: {e}")
+                import traceback
+                print(traceback.format_exc())
+                # Crear proveedor de revisión manual
                 supplier = Supplier.objects.create(
                     company=company,
                     name=f"REVISAR PROVEEDOR - Factura {invoice_data.get('invoice_number', 'SIN-NUM')}",
@@ -2317,14 +2406,27 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
                     document_type=None,
                     document_number=None,
                 )
-
                 invoice_data["notes"] = (invoice_data.get("notes") or "") + (
-                    "\nERROR DE EXTRACCIÓN: OpenAI identificó un CLIENTE como proveedor "
-                    "y no fue posible recuperar el proveedor real automáticamente."
+                    f"\n[ERROR] Excepción al reextraer proveedor: {str(e)}"
                 )
-
         else:
-            print(f"ℹ️ '{supplier_name_extracted}' no es cliente conocido")
+            print(f"⚠️ No hay archivo PDF disponible para reextracción")
+            # Crear proveedor de revisión manual
+            supplier = Supplier.objects.create(
+                company=company,
+                name=f"REVISAR PROVEEDOR - Factura {invoice_data.get('invoice_number', 'SIN-NUM')}",
+                contact_person=None,
+                phone=None,
+                email=None,
+                address=None,
+                document_type=None,
+                document_number=None,
+            )
+            invoice_data["notes"] = (invoice_data.get("notes") or "") + (
+                "\n[ERROR] No se pudo identificar el proveedor correctamente. Requiere revisión manual."
+            )
+    else:
+        print(f"✅ Proveedor validado: '{supplier_name_extracted}' (sin señales de error)")
 
     # ------------------------------------------------------------------
     # 🏗️ CREAR / BUSCAR PROVEEDOR SOLO SI VIENE DEL DOCUMENTO
@@ -2673,17 +2775,17 @@ def api_create_invoice_received(request):
             # La tupla contiene (lista_resultados, pdf_bytes)
             results_list, pdf_bytes = result
             print(f" Procesando {len(results_list)} facturas desde PDF multipágina...")
-            
+
             # 🔍 Analizar si las páginas deben agruparse o crearse por separado
             print("🔍 Analizando coincidencias entre páginas...")
             groups = should_group_invoices(results_list)
             print(f"📊 Se detectaron {len(groups)} grupo(s) de facturas")
-            
+
             created_invoices = []
             errors = []
             original_filename = file.name or "factura.pdf"
             base_name = original_filename.rsplit('.', 1)[0]
-            
+
             import fitz
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 # 🔄 Procesar cada grupo
@@ -2694,25 +2796,25 @@ def api_create_invoice_received(request):
                         single_result = results_list[idx]
                         page_num = single_result.get("page_number", idx + 1)
                         page_index = page_num - 1
-                        
+
                         if single_result.get("error"):
                             errors.append({"page": page_num, "error": single_result.get("error")})
                             continue
-                        
+
                         try:
                             # Crear un PDF con solo esta página
                             single_page_doc = fitz.open()
                             single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
                             single_page_bytes = single_page_doc.tobytes()
                             single_page_doc.close()
-                            
+
                             # Crear un archivo Django para esta página
                             from django.core.files.base import ContentFile
                             import uuid
                             unique_id = uuid.uuid4().hex[:8]
                             page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
                             page_file = ContentFile(single_page_bytes, name=page_filename)
-                            
+
                             inv_result = _create_single_purchase_invoice(company, single_result, page_file)
                             inv_result["page_number"] = page_num
                             created_invoices.append(inv_result)
@@ -2720,14 +2822,14 @@ def api_create_invoice_received(request):
                         except Exception as e:
                             print(f"❌ Error página {page_num}: {e}")
                             errors.append({"page": page_num, "error": str(e)})
-                    
+
                     else:
                         # Múltiples páginas = consolidar y crear una sola factura
                         print(f"📄 Grupo {group_idx + 1}: {len(group_indices)} páginas consolidadas")
-                        
+
                         # Consolidar datos
                         consolidated_result = consolidate_invoice_group(results_list, group_indices)
-                        
+
                         # Crear PDF con todas las páginas del grupo
                         group_doc = fitz.open()
                         for idx in group_indices:
@@ -2735,30 +2837,32 @@ def api_create_invoice_received(request):
                             page_num = page_result.get("page_number", idx + 1)
                             page_index = page_num - 1
                             group_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-                        
+
                         group_bytes = group_doc.tobytes()
                         group_doc.close()
-                        
+
                         # Crear archivo Django para el grupo
                         from django.core.files.base import ContentFile
                         import uuid
                         unique_id = uuid.uuid4().hex[:8]
                         group_filename = f"{base_name}_grupo{group_idx + 1}_{len(group_indices)}pag_{unique_id}.pdf"
                         group_file = ContentFile(group_bytes, name=group_filename)
-                        
+
                         try:
                             inv_result = _create_single_purchase_invoice(company, consolidated_result, group_file)
                             inv_result["page_group"] = group_indices
                             inv_result["consolidated"] = True
                             created_invoices.append(inv_result)
-                            print(f"✅ Factura consolidada creada: {inv_result['invoice_number']} -> archivo: {group_filename}")
+                            print(
+                                f"✅ Factura consolidada creada: {inv_result['invoice_number']} -> archivo: {group_filename}")
                         except Exception as e:
                             print(f"❌ Error grupo {group_idx + 1}: {e}")
                             errors.append({"group": group_idx + 1, "error": str(e)})
-            
+
             if not created_invoices:
-                return JsonResponse({"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
-            
+                return JsonResponse(
+                    {"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
+
             # Determinar mensaje apropiado
             if len(created_invoices) == 1:
                 message = "Se creó 1 factura correctamente."
@@ -2771,7 +2875,7 @@ def api_create_invoice_received(request):
                     message = f"Se crearon {consolidated_count} factura(s) consolidada(s) correctamente."
                 else:
                     message = f"Se crearon {individual_count} factura(s) correctamente."
-            
+
             return JsonResponse({
                 "success": True,
                 "multiple": True,
@@ -2782,137 +2886,29 @@ def api_create_invoice_received(request):
             })
 
         # MODO NORMAL: Una sola factura (comportamiento original)
-        tokens = result.get("tokens")
-
-        invoice_data = result.get("invoice", {}) or {}
-        supplier_data = result.get("supplier", {}) or {}  # Ahora viene como "supplier"
-        lines_data = result.get("lines", []) or []
-
-        # Paso 2: Buscar o crear proveedor (Supplier) con lógica mejorada para evitar duplicados
-        supplier = None
-        
-        # 1. Buscar por document_number si existe (más preciso)
-        if supplier_data.get("document_number"):
-            supplier = Supplier.objects.filter(
-                company=company,
-                document_number=supplier_data["document_number"]
-            ).first()
-        
-        # 2. Si no encuentra por document_number, buscar por nombre normalizado
-        if not supplier and supplier_data.get("name"):
-            supplier_name = supplier_data["name"].strip().upper()
-            # Buscar proveedores con nombres similares (ignorando mayúsculas, espacios y caracteres especiales)
-            existing_suppliers = Supplier.objects.filter(company=company).all()
-            
-            for existing in existing_suppliers:
-                existing_name = existing.name.strip().upper()
-                # Normalizar nombres: remover espacios extras, puntos, comas, S.A./SA/etc
-                normalized_supplier = normalize_company_name(supplier_name)
-                normalized_existing = normalize_company_name(existing_name)
-                
-                if normalized_supplier == normalized_existing:
-                    supplier = existing
-                    break
-        
-        # 3. Si aún no encuentra, crear nuevo proveedor
-        if not supplier:
-            supplier = Supplier.objects.create(
-                company=company,
-                name=supplier_data.get("name") or "Proveedor desconocido",
-                contact_person=supplier_data.get("contact_person"),
-                phone=supplier_data.get("phone"),
-                email=supplier_data.get("email"),
-                address=supplier_data.get("address"),
-                document_type=supplier_data.get("document_type"),
-                document_number=supplier_data.get("document_number"),
-            )
-
-        # 🧾 Paso 3: Crear factura recibida (PurchaseInvoice)
-        discount_value = invoice_data.get("discount_amount")
-        discount_amount_raw = safe_decimal(discount_value) if discount_value else None
-        # Guardar siempre como valor positivo (OpenAI a veces extrae negativos)
-        discount_amount = abs(discount_amount_raw) if discount_amount_raw else None
-        discount_pct_value = invoice_data.get("discount_percentage")
-        discount_percentage = safe_decimal(discount_pct_value) if discount_pct_value else None
-
-        # Extraer valores base
-        base_amount = safe_decimal(invoice_data.get("base_amount"))
-        tax_amount_extracted = safe_decimal(invoice_data.get("tax_amount"))
-        total_amount = safe_decimal(invoice_data.get("total_amount"))
-
-        # Validar y recalcular IVA si hay descuento
-        discount_for_calc = abs(discount_amount) if discount_amount else Decimal('0.00')
-        if discount_for_calc > Decimal('0.00') and base_amount > Decimal('0.00'):
-            # Calcular base neta (después del descuento)
-            base_neta = base_amount - discount_for_calc
-            # Recalcular IVA esperado (21%)
-            tax_amount_expected = (base_neta * Decimal('0.21')).quantize(Decimal('0.01'))
-            # Si el IVA extraído difiere significativamente, usar el calculado
-            if abs(tax_amount_extracted - tax_amount_expected) > Decimal('0.10'):
-                print(f"⚠️ IVA corregido (compra): {tax_amount_extracted} → {tax_amount_expected} (base neta: {base_neta})")
-                tax_amount = tax_amount_expected
-            else:
-                tax_amount = tax_amount_extracted
-        else:
-            tax_amount = tax_amount_extracted
-
-        invoice = PurchaseInvoice.objects.create(
-            company=company,
-            supplier=supplier,
-            pdf_file=file,
-            invoice_number=invoice_data.get("invoice_number") or "SIN-NUMERO",
-            issue_date=invoice_data.get("issue_date") or timezone.now().date(),
-            due_date=invoice_data.get("due_date") or None,
-            payment_method=invoice_data.get("payment_method"),
-            base_amount=base_amount,
-            discount_amount=discount_amount,
-            discount_percentage=discount_percentage,
-            tax_amount=tax_amount,
-            total_amount=total_amount,
-            notes=invoice_data.get("notes") or "",
-        )
-
-        if tokens is not None:
-            invoice.tokens = tokens
-            invoice.save(update_fields=["tokens"])
-
-        # 📝 Paso 4: Crear líneas de factura
-        created_lines = []
-        if lines_data:
-            for line_data in lines_data:
-                line = InvoiceLine.objects.create(
-                    purchase_invoice=invoice,
-                    description=line_data.get("description") or "Sin descripción",
-                    quantity=safe_decimal(line_data.get("quantity", "1")),
-                    unit_price=safe_decimal(line_data.get("unit_price", "0")),
-                    vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
-                )
-                created_lines.append({
-                    "id": line.id,
-                    "description": line.description,
-                    "quantity": str(line.quantity),
-                    "unit_price": str(line.unit_price),
-                    "vat_rate": str(line.vat_rate),
-                    "subtotal": str(line.subtotal()),
-                })
-        else:
-            print("⚠️ No se encontraron líneas en la factura")
+        # Usar la función auxiliar para mantener consistencia y aplicar validación
+        inv_result = _create_single_purchase_invoice(company, result, file)
 
         return JsonResponse({
             "success": True,
             "message": "Factura recibida procesada correctamente.",
-            "invoice_id": invoice.id,
-            "invoice_data": invoice_data,
-            "supplier_data": supplier_data,
-            "lines": created_lines,
+            "invoice_id": inv_result["invoice_id"],
+            "invoice_number": inv_result["invoice_number"],
+            "supplier_name": inv_result["supplier_name"],
+            "total_amount": inv_result["total_amount"],
+            "lines": inv_result["lines"],
         })
 
     except IntegrityError as e:
         transaction.set_rollback(True)
         error_msg = str(e).lower()
         if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
-            return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
-        return JsonResponse({"success": False, "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."}, status=400)
+            return JsonResponse({"success": False,
+                                 "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."},
+                                status=400)
+        return JsonResponse({"success": False,
+                             "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."},
+                            status=400)
     except Exception as e:
         import traceback
         print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
