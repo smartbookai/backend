@@ -140,6 +140,8 @@ class BaseInvoice(models.Model):
     account_vat_output = models.CharField(max_length=20, null=True, blank=True)
 
     notes = models.TextField(null=True, blank=True)
+    is_paid = models.BooleanField(default=False, verbose_name="Pagada")  # Si se ha pagado o no
+    payment_date = models.DateField(null=True, blank=True, verbose_name="Fecha de pago")  # Fecha en que se pagó
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
