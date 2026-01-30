@@ -19,6 +19,9 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 import re
 from difflib import SequenceMatcher
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from openpyxl.utils import get_column_letter
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
@@ -813,6 +816,210 @@ def accounting_entries_filtered(request):
         return JsonResponse({
             'success': False,
             'error': 'Error al filtrar los asientos'
+        }, status=500)
+
+
+@login_required
+def accounting_entries_download(request):
+    """
+    Descargar Excel con todos los asientos contables filtrados por rango de fechas
+    """
+    company = get_current_company(request.user)
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    try:
+        # Obtener asientos filtrados
+        entries = filter_entries_by_document_date(
+            AccountingEntry.objects.filter(company=company),
+            start_date, end_date
+        ).select_related('sales_invoice', 'purchase_invoice', 'payroll__employee').prefetch_related('lines').order_by('-entry_number', '-id')
+        
+        if not entries.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No hay asientos contables en el rango de fechas seleccionado'
+            }, status=400)
+        
+        # Crear workbook de Excel
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Asientos Contables"
+        
+        # Estilos simples - sin colores para evitar problemas
+        header_font = Font(bold=True, size=11)
+        total_font = Font(bold=True, size=11)
+        border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        alignment = Alignment(horizontal='center', vertical='center')
+        left_alignment = Alignment(horizontal='left', vertical='center')
+        
+        # Encabezados principales - igual que tu imagen
+        headers = [
+            "N° Asiento", "Fecha Asiento", "Fecha Emisión", "Tipo", 
+            "N° Documento", "Descripción General", "Cuenta", 
+            "Descripción Línea", "Debe", "Haber", "Estado"
+        ]
+        
+        # Aplicar estilos simples a encabezados
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.border = border
+            cell.alignment = alignment
+        
+        # Llenar datos - estructura exacta como tu imagen
+        row = 2
+        for entry in entries:
+            # Obtener información del documento
+            doc_type = ""
+            doc_number = ""
+            doc_date = ""
+            
+            if entry.sales_invoice:
+                doc_type = "Factura Venta"
+                doc_number = entry.sales_invoice.invoice_number
+                doc_date = entry.sales_invoice.issue_date.strftime("%d/%m/%Y")
+            elif entry.purchase_invoice:
+                doc_type = "Factura Compra"
+                doc_number = entry.purchase_invoice.invoice_number
+                doc_date = entry.purchase_invoice.issue_date.strftime("%d/%m/%Y")
+            elif entry.payroll:
+                doc_type = "Nómina"
+                doc_number = f"{entry.payroll.employee.first_name} {entry.payroll.employee.last_name}"
+                doc_date = entry.payroll.issue_date.strftime("%d/%m/%Y")
+            
+            # Obtener líneas del asiento
+            lines = entry.lines.all()
+            
+            if not lines:
+                # Si no hay líneas, agregar una fila con info básica
+                ws.cell(row=row, column=1, value=entry.entry_number)
+                ws.cell(row=row, column=2, value=entry.date.strftime("%d/%m/%Y"))
+                ws.cell(row=row, column=3, value=doc_date)
+                ws.cell(row=row, column=4, value=doc_type)
+                ws.cell(row=row, column=5, value=doc_number)
+                ws.cell(row=row, column=6, value=entry.description)
+                ws.cell(row=row, column=7, value="")
+                ws.cell(row=row, column=8, value="")
+                ws.cell(row=row, column=9, value="")
+                ws.cell(row=row, column=10, value="")
+                ws.cell(row=row, column=11, value=entry.get_status_display())
+                
+                # Aplicar bordes simples
+                for col in range(1, 12):
+                    ws.cell(row=row, column=col).border = border
+                
+                row += 1
+            else:
+                # Agregar líneas del asiento - estructura exacta como tu imagen
+                first_line = True
+                for line in lines:
+                    if first_line:
+                        # Primera línea con información completa
+                        ws.cell(row=row, column=1, value=entry.entry_number)
+                        ws.cell(row=row, column=2, value=entry.date.strftime("%d/%m/%Y"))
+                        ws.cell(row=row, column=3, value=doc_date)
+                        ws.cell(row=row, column=4, value=doc_type)
+                        ws.cell(row=row, column=5, value=doc_number)
+                        ws.cell(row=row, column=6, value=entry.description)
+                        ws.cell(row=row, column=7, value=line.account_code)
+                        ws.cell(row=row, column=8, value=line.description)
+                        ws.cell(row=row, column=9, value=float(line.debit) if line.debit > 0 else "")
+                        ws.cell(row=row, column=10, value=float(line.credit) if line.credit > 0 else "")
+                        ws.cell(row=row, column=11, value=entry.get_status_display())
+                        first_line = False
+                    else:
+                        # Líneas siguientes solo con datos contables
+                        ws.cell(row=row, column=1, value="")
+                        ws.cell(row=row, column=2, value="")
+                        ws.cell(row=row, column=3, value="")
+                        ws.cell(row=row, column=4, value="")
+                        ws.cell(row=row, column=5, value="")
+                        ws.cell(row=row, column=6, value="")
+                        ws.cell(row=row, column=7, value=line.account_code)
+                        ws.cell(row=row, column=8, value=line.description)
+                        ws.cell(row=row, column=9, value=float(line.debit) if line.debit > 0 else "")
+                        ws.cell(row=row, column=10, value=float(line.credit) if line.credit > 0 else "")
+                        ws.cell(row=row, column=11, value="")
+                    
+                    # Aplicar bordes simples y alineación
+                    for col in range(1, 12):
+                        cell = ws.cell(row=row, column=col)
+                        cell.border = border
+                        # Alineación: izquierda para texto, centro para números
+                        if col in [1, 2, 3, 4, 5, 6, 7, 8]:
+                            cell.alignment = left_alignment
+                        else:
+                            cell.alignment = alignment
+                    
+                    row += 1
+                
+                # Fila de totales del asiento
+                ws.cell(row=row, column=1, value="")
+                ws.cell(row=row, column=2, value="")
+                ws.cell(row=row, column=3, value="")
+                ws.cell(row=row, column=4, value="")
+                ws.cell(row=row, column=5, value="")
+                ws.cell(row=row, column=6, value="")
+                ws.cell(row=row, column=7, value="")
+                ws.cell(row=row, column=8, value="TOTAL ASIENTO")
+                ws.cell(row=row, column=9, value=float(entry.debit_total))
+                ws.cell(row=row, column=10, value=float(entry.credit_total))
+                ws.cell(row=row, column=11, value="")
+                
+                # Aplicar estilos simples a totales
+                for col in range(1, 12):
+                    cell = ws.cell(row=row, column=col)
+                    cell.border = border
+                    if col in [8, 9, 10]:
+                        cell.font = total_font
+                        cell.alignment = alignment
+                
+                row += 1
+        
+        # Ajustar ancho de columnas
+        column_widths = [12, 12, 12, 15, 20, 30, 12, 30, 12, 12, 10]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+        
+        # Crear respuesta HTTP
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+        # Formatear nombre de archivo
+        if start_date and end_date:
+            start_formatted = datetime.strptime(start_date, '%Y-%m-%d').strftime('%d-%m-%Y')
+            end_formatted = datetime.strptime(end_date, '%Y-%m-%d').strftime('%d-%m-%Y')
+            filename = f"asientos-contables-{start_formatted}-a-{end_formatted}.xlsx"
+        else:
+            filename = f"asientos-contables-{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+        
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        
+        # Guardar Excel en un buffer temporal
+        from io import BytesIO
+        excel_buffer = BytesIO()
+        wb.save(excel_buffer)
+        excel_buffer.seek(0)
+        
+        # Escribir el buffer en la respuesta
+        response.write(excel_buffer.getvalue())
+        
+        return response
+    
+    except Exception as e:
+        logger.exception('Error en accounting_entries_download')
+        return JsonResponse({
+            'success': False,
+            'error': 'Error al generar el archivo Excel'
         }, status=500)
 
 

@@ -189,24 +189,67 @@ function downloadEntries() {
   const startDate = start.toISOString().split('T')[0];
   const endDate = end.toISOString().split('T')[0];
   
-  // Formatear fechas en formato español para el nombre del archivo
-  const formatDateES = (date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
-  
   // Construir URL de descarga con parámetros de fecha
-  const downloadUrl = `/accounting-entries/download/?start_date=${startDate}&end_date=${endDate}`;
+  const downloadUrl = `/api/accounting-entries/download/?start_date=${startDate}&end_date=${endDate}`;
   
-  // Crear enlace temporal para descargar con nombre en español
+  // Mostrar indicador de carga
+  const downloadBtn = document.getElementById('downloadBtn');
+  const originalText = downloadBtn.innerHTML;
+  downloadBtn.innerHTML = '<i class="bi bi-hourglass-split" style="margin-right:4px;"></i>Generando...';
+  downloadBtn.disabled = true;
+  
+  // Crear enlace temporal para descargar
   const link = document.createElement('a');
   link.href = downloadUrl;
-  link.download = `asientos-contables-${formatDateES(start)}-a-${formatDateES(end)}.csv`;
+  link.style.display = 'none';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  
+  fetch(downloadUrl)
+    .then(response => {
+      if (response.ok) {
+        return response.blob();
+      } else {
+        return response.json().then(data => {
+          throw new Error(data.error || 'Error al descargar el archivo');
+        });
+      }
+    })
+    .then(blob => {
+      // Crear URL temporal y descargar
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Formatear fechas en formato español para el nombre del archivo
+      const formatDateES = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+      };
+      
+      a.download = `asientos-contables-${formatDateES(start)}-a-${formatDateES(end)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      // Restaurar botón
+      downloadBtn.innerHTML = originalText;
+      downloadBtn.disabled = false;
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert(error.message || 'Error al descargar el archivo Excel');
+      
+      // Restaurar botón
+      downloadBtn.innerHTML = originalText;
+      downloadBtn.disabled = false;
+    })
+    .finally(() => {
+      // Limpiar enlace temporal
+      document.body.removeChild(link);
+    });
 }
 
 // Función para filtrar la tabla por rango de fechas via AJAX

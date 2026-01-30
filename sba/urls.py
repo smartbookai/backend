@@ -89,6 +89,7 @@ urlpatterns = [
     path('api/accounting-entries/<int:entry_id>/export-pdf/', views.api_export_accounting_entry_pdf, name='api_export_accounting_entry_pdf'),
     path('api/accounting-entries/<int:entry_id>/export-xtml/', views.api_export_accounting_entry_xtml, name='api_export_accounting_entry_xtml'),
     path('api/accounting-entries/filtered/', views.accounting_entries_filtered, name='accounting_entries_filtered'),
+    path('api/accounting-entries/download/', views.accounting_entries_download, name='accounting_entries_download'),
 
     #dashboard API endpoints
     path('api/dashboard/last-invoices/', views.api_dashboard_last_invoices, name='api_dashboard_last_invoices'),
