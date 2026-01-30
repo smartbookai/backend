@@ -1782,30 +1782,58 @@ def _are_consecutive_numbers_sales(num1, num2):
 def _are_same_sales_invoice(inv1, client1, inv2, client2):
     """
     Determina si dos páginas pertenecen a la misma factura de venta
-    usando múltiples criterios.
+    usando prioridades con fallback conservador.
+    
+    Orden de prioridad:
+    1. Número de factura (corte duro)
+    2. Texto explícito de continuación
+    3. Página sin cabecera = continuación
+    4. Regla utilities
+    5. Mismo cliente + misma fecha (refuerzo)
+    6. Fallback conservador
     """
-    # Criterio 1: Mismo número de factura (el más fuerte)
+    # 1. Criterio duro: mismo número de factura
     num1 = normalize_document_number(inv1.get("invoice_number"))
     num2 = normalize_document_number(inv2.get("invoice_number"))
-    if num1 and num2 and num1 == num2:
+    
+    if num1 and num2:
+        if num1 == num2:
+            return True  # Mismo número -> agrupar siempre
+        else:
+            return False  # Números diferentes -> cortar siempre
+    
+    # 2. Texto explícito de continuación
+    if _has_continuation_text(inv1) or _has_continuation_text(inv2):
         return True
-
-    # Criterio 2: Mismo cliente + misma fecha
+    
+    # 3. Página sin cabecera = continuación
+    if _page_has_no_header(inv2):
+        return True
+    
+    # 4. Regla especial para utilities (menos común en ventas, pero por si acaso)
+    if _is_utility_provider(client1) or _is_utility_provider(client2):
+        # Para utilities, asumir multipágina por defecto
+        # solo cortar si hay número de factura diferente (ya verificado arriba)
+        return True
+    
+    # 5. Mismo cliente + misma fecha (refuerzo, no como corte duro)
     client1_name = normalize_company_name(client1.get("name"))
     client2_name = normalize_company_name(client2.get("name"))
     date1 = inv1.get("issue_date")
     date2 = inv2.get("issue_date")
-
+    
     if client1_name and client2_name and client1_name == client2_name:
         if date1 and date2 and date1 == date2:
             return True
-
-    # Criterio 3: Mismo cliente + números de factura correlativos
+    
+    # 6. Mismo cliente + números correlativos (refuerzo)
     if client1_name and client2_name and client1_name == client2_name:
         if _are_consecutive_numbers_sales(inv1.get("invoice_number"), inv2.get("invoice_number")):
             return True
-
-    return False
+    
+    # 7. Fallback conservador: si hay duda, agrupar
+    # Es mejor agrupar de más que separar mal
+    return True
 
 
 def should_group_sales_invoices(page_results):
@@ -1896,7 +1924,7 @@ def consolidate_sales_invoice_group(page_results, group_indices):
         "invoice": consolidated_invoice,
         "client": consolidated_client,
         "lines": consolidated_lines,
-        "tokens": sum(page_results[idx].get("tokens", 0) for idx in group_indices),
+        "tokens": sum(page_results[idx].get("tokens", 0) or 0 for idx in group_indices),
         "page_group": group_indices,  # Para referencia
         "consolidated": True
     }
@@ -2912,6 +2940,84 @@ def api_delete_invoice_received(request, invoice_id):
     return JsonResponse({'success': True})
 
 
+def _has_continuation_text(page_data):
+    """
+    Detecta si una página contiene texto explícito de continuación.
+    """
+    if not page_data:
+        return False
+    
+    # Buscar en texto extraído de la página
+    page_text = str(page_data.get("raw_text", "")).lower()
+    
+    # También buscar en los datos extraídos de la factura
+    invoice_data = page_data.get("invoice", {})
+    invoice_text = " ".join([
+        str(invoice_data.get("invoice_number", "")),
+        str(invoice_data.get("notes", "")),
+    ]).lower()
+    
+    combined_text = f"{page_text} {invoice_text}"
+    
+    continuation_phrases = [
+        "continúa",
+        "continua",
+        "ver reverso",
+        "ver al reverso",
+        "detalle en el reverso",
+        "detalle de la factura en el reverso",
+        "continuación",
+        "página siguiente",
+        "siguiente página",
+        "ver página siguiente",
+        "ver siguiente",
+        "página 2",
+        "página 3",
+        "página 4",
+        "página 5",
+        "hoja 2",
+        "hoja 3",
+        "hoja 4",
+        "hoja 5",
+    ]
+    
+    return any(phrase in combined_text for phrase in continuation_phrases)
+
+
+def _page_has_no_header(invoice_data):
+    """
+    Determina si una página no tiene cabecera suficiente para iniciar una factura nueva.
+    """
+    if not invoice_data:
+        return True
+    
+    has_invoice_number = bool(invoice_data.get("invoice_number"))
+    has_total_amount = bool(invoice_data.get("total_amount"))
+    has_issue_date = bool(invoice_data.get("issue_date"))
+    
+    # Si no tiene número, ni total, ni fecha clara -> no puede iniciar factura nueva
+    return not (has_invoice_number or has_total_amount or has_issue_date)
+
+
+def _is_utility_provider(supplier_data):
+    """
+    Determina si un proveedor es una utility (luz, gas, agua, etc.).
+    """
+    if not supplier_data or not supplier_data.get("name"):
+        return False
+    
+    supplier_name = supplier_data.get("name", "").lower()
+    
+    utilities = [
+        "endesa", "iberdrola", "naturgy", "repsol", "gas natural",
+        "aigues", "agbar", "canal de isabel ii", "edp", "eon",
+        "fenosa", "union fenosa", "viesgo", "hidrocantabrico",
+        "electricidad", "gas", "agua", "luz", "energía",
+    ]
+    
+    return any(utility in supplier_name for utility in utilities)
+
+
 def _are_consecutive_numbers(num1, num2):
     """
     Detecta si dos números de factura son correlativos.
@@ -2939,30 +3045,58 @@ def _are_consecutive_numbers(num1, num2):
 def _are_same_invoice(inv1, sup1, inv2, sup2):
     """
     Determina si dos páginas pertenecen a la misma factura
-    usando múltiples criterios.
+    usando prioridades con fallback conservador.
+    
+    Orden de prioridad:
+    1. Número de factura (corte duro)
+    2. Texto explícito de continuación
+    3. Página sin cabecera = continuación
+    4. Regla utilities
+    5. Mismo proveedor + misma fecha (refuerzo)
+    6. Fallback conservador
     """
-    # Criterio 1: Mismo número de factura (el más fuerte)
+    # 1. Criterio duro: mismo número de factura
     num1 = normalize_document_number(inv1.get("invoice_number"))
     num2 = normalize_document_number(inv2.get("invoice_number"))
-    if num1 and num2 and num1 == num2:
+    
+    if num1 and num2:
+        if num1 == num2:
+            return True  # Mismo número -> agrupar siempre
+        else:
+            return False  # Números diferentes -> cortar siempre
+    
+    # 2. Texto explícito de continuación
+    if _has_continuation_text(inv1) or _has_continuation_text(inv2):
         return True
-
-    # Criterio 2: Mismo proveedor + misma fecha
+    
+    # 3. Página sin cabecera = continuación
+    if _page_has_no_header(inv2):
+        return True
+    
+    # 4. Regla especial para utilities
+    if _is_utility_provider(sup1) or _is_utility_provider(sup2):
+        # Para utilities, asumir multipágina por defecto
+        # solo cortar si hay número de factura diferente (ya verificado arriba)
+        return True
+    
+    # 5. Mismo proveedor + misma fecha (refuerzo, no como corte duro)
     sup1_name = normalize_company_name(sup1.get("name"))
     sup2_name = normalize_company_name(sup2.get("name"))
     date1 = inv1.get("issue_date")
     date2 = inv2.get("issue_date")
-
+    
     if sup1_name and sup2_name and sup1_name == sup2_name:
         if date1 and date2 and date1 == date2:
             return True
-
-    # Criterio 3: Mismo proveedor + números de factura correlativos
+    
+    # 6. Mismo proveedor + números correlativos (refuerzo)
     if sup1_name and sup2_name and sup1_name == sup2_name:
         if _are_consecutive_numbers(inv1.get("invoice_number"), inv2.get("invoice_number")):
             return True
-
-    return False
+    
+    # 7. Fallback conservador: si hay duda, agrupar
+    # Es mejor agrupar de más que separar mal
+    return True
 
 
 def should_group_invoices(page_results):
@@ -3053,7 +3187,7 @@ def consolidate_invoice_group(page_results, group_indices):
         "invoice": consolidated_invoice,
         "supplier": consolidated_supplier,
         "lines": consolidated_lines,
-        "tokens": sum(page_results[idx].get("tokens", 0) for idx in group_indices),
+        "tokens": sum(page_results[idx].get("tokens", 0) or 0 for idx in group_indices),
         "page_group": group_indices,  # Para referencia
         "consolidated": True
     }
