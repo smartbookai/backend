@@ -119,6 +119,18 @@
         <label>Total</label>
         <input type="text" name="total_amount">
       </div>
+      <div style="display:flex;gap:20px;align-items:center;">
+        <div class="form-field" style="flex:0 0 auto;">
+          <label>Pagada</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="is_paid" style="margin:0;width:18px;height:38px;">
+          </div>
+        </div>
+        <div class="form-field" style="flex:1;">
+          <label>Fecha de pago</label>
+          <input type="date" name="payment_date">
+        </div>
+      </div>
       <div class="form-field">
         <label>Nombre del cliente</label>
         <input type="text" name="client_name">
@@ -570,6 +582,8 @@ async function editInvoice(id) {
     form.elements['discount_percentage'].value = inv.discount_percentage || '';
     form.elements['tax_amount'].value = inv.tax_amount || '';
     form.elements['total_amount'].value = inv.total_amount || '';
+    form.elements['is_paid'].checked = inv.is_paid || false;
+    form.elements['payment_date'].value = inv.payment_date || '';
     form.elements['client_name'].value = (inv.client && inv.client.name) || '';
 
     const container = document.getElementById('linesContainer');
@@ -601,6 +615,8 @@ async function submitInvoiceEdit(e) {
     discount_percentage: form.elements['discount_percentage'].value,
     tax_amount: form.elements['tax_amount'].value,
     total_amount: form.elements['total_amount'].value,
+    is_paid: form.elements['is_paid'].checked,
+    payment_date: form.elements['payment_date'].value,
     client_name: form.elements['client_name'].value,
     lines: (function(){
       const container = document.getElementById('linesContainer');

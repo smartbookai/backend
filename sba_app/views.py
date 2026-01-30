@@ -1560,13 +1560,11 @@ def api_show_table_invoices_sent(request):
             'issue_date': issue_date,
             'due_date': due_date,
             'total_amount': total_amount,
-            'status': '',  # no hay status en el modelo; queda vacío
+            'status': 'Pagado' if invoice.is_paid else 'A Cobrar',
             'pdf_url': pdf_url,
         })
 
     return JsonResponse({'invoices': invoices})
-
-
 @login_required
 @require_http_methods(["GET"])
 def api_get_invoice_sent(request, invoice_id):
@@ -1595,6 +1593,8 @@ def api_get_invoice_sent(request, invoice_id):
         'tax_amount': f"{invoice.tax_amount:.2f}" if invoice.tax_amount is not None else '',
         'total_amount': f"{invoice.total_amount:.2f}" if invoice.total_amount is not None else '',
         'notes': invoice.notes or '',
+        'is_paid': invoice.is_paid,
+        'payment_date': fmt_date(invoice.payment_date),
         'client': {
             'id': invoice.client.id if invoice.client else None,
             'name': invoice.client.name if invoice.client else '',
@@ -1647,6 +1647,11 @@ def api_update_invoice_sent(request, invoice_id):
     invoice.base_amount = safe_decimal(payload.get('base_amount'))
     invoice.tax_amount = safe_decimal(payload.get('tax_amount'))
     invoice.total_amount = safe_decimal(payload.get('total_amount'))
+    
+    # Nuevos campos de pago
+    invoice.is_paid = payload.get('is_paid', False)
+    invoice.payment_date = parse_date(payload.get('payment_date'))
+    
     if 'notes' in payload:
         invoice.notes = payload.get('notes') or ''
 
@@ -2112,13 +2117,11 @@ def api_show_table_invoices_received(request):
             'issue_date': issue_date_str,
             'due_date': due_date_str,
             'total_amount': total_amount_str,
-            'status': '',  # si no hay campo en el modelo, dejamos vacío
+            'status': 'Pagada' if invoice.is_paid else 'A Pagar',
             'pdf_url': pdf_absolute_url,
         })
 
     return JsonResponse({'purchases': purchases_payload})
-
-
 @login_required
 @require_http_methods(["GET"])
 def api_get_invoice_received(request, invoice_id):
@@ -2147,6 +2150,8 @@ def api_get_invoice_received(request, invoice_id):
         'tax_amount': f"{purchase_invoice.tax_amount:.2f}" if getattr(purchase_invoice, 'tax_amount', None) is not None else '',
         'total_amount': f"{purchase_invoice.total_amount:.2f}" if purchase_invoice.total_amount is not None else '',
         'notes': getattr(purchase_invoice, 'notes', '') or '',
+        'is_paid': purchase_invoice.is_paid,
+        'payment_date': format_date(purchase_invoice.payment_date),
         'supplier': {
             'id': purchase_invoice.supplier.id if purchase_invoice.supplier else None,
             'name': purchase_invoice.supplier.name if purchase_invoice.supplier else '',
@@ -2195,9 +2200,7 @@ def api_update_invoice_received(request, invoice_id):
             return None
 
     # Cabecera (solo si vienen en payload)
-    invoice_number = (request_payload.get('invoice_number') or '').strip()
-    if invoice_number:
-        purchase_invoice.invoice_number = invoice_number
+    purchase_invoice.invoice_number = (request_payload.get('invoice_number') or '').strip()
 
     purchase_invoice.issue_date = parse_date(request_payload.get('issue_date'))
     purchase_invoice.due_date = parse_date(request_payload.get('due_date'))
@@ -2206,6 +2209,10 @@ def api_update_invoice_received(request, invoice_id):
     purchase_invoice.base_amount = safe_decimal(request_payload.get('base_amount'))
     purchase_invoice.tax_amount = safe_decimal(request_payload.get('tax_amount'))
     purchase_invoice.total_amount = safe_decimal(request_payload.get('total_amount'))
+
+    # Nuevos campos de pago
+    purchase_invoice.is_paid = request_payload.get('is_paid', False)
+    purchase_invoice.payment_date = parse_date(request_payload.get('payment_date'))
 
     if 'notes' in request_payload:
         purchase_invoice.notes = request_payload.get('notes') or ''
