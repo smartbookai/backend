@@ -1,6 +1,9 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 {% block title %}Asientos contables | SBA{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
 {% block content %}
 <section>
   <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
@@ -17,7 +20,14 @@
           <h2 style="font-size:16px;margin:0;color:#ffffff;">Listado</h2>
         </div>
         <div class="table-header-search" style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
-          <input id="entrySearch" type="text" placeholder="Buscar..." aria-label="Buscar asientos contables" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+          <input id="entrySearch" type="text" placeholder="Buscar..." aria-label="Buscar asientos contables" style="width:200px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div class="table-header-date" style="flex:0 0 auto;display:flex;align-items:center;gap:8px;">
+          <input id="dateRangePicker" type="text" placeholder="Seleccionar fecha o rango" aria-label="Seleccionar fecha o rango" style="width:200px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;background:white;color:#374151;">
+          <button id="downloadBtn" type="button" class="btn-primary" style="display:none;padding:8px 12px;background:#10b981;border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;white-space:nowrap;" onclick="downloadEntries()">
+            <i class="bi bi-download" style="margin-right:4px;"></i>
+            Descargar
+          </button>
         </div>
         <div class="table-header-spacer" style="flex:1;min-width:0;"></div>
       </div>
@@ -124,6 +134,118 @@ document.addEventListener('DOMContentLoaded', function() {
   input.addEventListener('input', function(e) {
     applyFilter(e.target.value);
   });
+
+  // Inicializar Flatpickr para el selector de fechas
+  const dateRangePicker = flatpickr("#dateRangePicker", {
+    mode: "range",
+    dateFormat: "d/m/Y",
+    locale: "es",
+    months: {
+      shorthand: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+      longhand: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    },
+    weekdays: {
+      shorthand: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
+      longhand: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    },
+    rangeSeparator: " a ",
+    firstDayOfWeek: 1, // Lunes como primer día
+    onChange: function(selectedDates, dateStr, instance) {
+      const downloadBtn = document.getElementById('downloadBtn');
+      if (selectedDates.length > 0) {
+        // Mostrar botón de descargar
+        downloadBtn.style.display = 'inline-flex';
+        
+        // Guardar las fechas seleccionadas
+        window.selectedDateRange = {
+          start: selectedDates[0],
+          end: selectedDates.length > 1 ? selectedDates[1] : selectedDates[0]
+        };
+        
+        // Filtrar la tabla via AJAX
+        filterTableByDateRange(selectedDates);
+      } else {
+        // Ocultar botón de descargar
+        downloadBtn.style.display = 'none';
+        window.selectedDateRange = null;
+        
+        // Recargar todos los datos
+        location.reload();
+      }
+    }
+  });
 });
+
+// Función para descargar asientos filtrados por fecha
+function downloadEntries() {
+  if (!window.selectedDateRange) {
+    alert('Por favor, selecciona una fecha o rango de fechas');
+    return;
+  }
+
+  const { start, end } = window.selectedDateRange;
+  
+  // Formatear fechas en formato YYYY-MM-DD para la URL
+  const startDate = start.toISOString().split('T')[0];
+  const endDate = end.toISOString().split('T')[0];
+  
+  // Formatear fechas en formato español para el nombre del archivo
+  const formatDateES = (date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+  
+  // Construir URL de descarga con parámetros de fecha
+  const downloadUrl = `/accounting-entries/download/?start_date=${startDate}&end_date=${endDate}`;
+  
+  // Crear enlace temporal para descargar con nombre en español
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = `asientos-contables-${formatDateES(start)}-a-${formatDateES(end)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Función para filtrar la tabla por rango de fechas via AJAX
+function filterTableByDateRange(selectedDates) {
+  const startDate = selectedDates[0].toISOString().split('T')[0];
+  const endDate = selectedDates.length > 1 ? 
+    selectedDates[1].toISOString().split('T')[0] : 
+    selectedDates[0].toISOString().split('T')[0];
+  
+  // Mostrar indicador de carga
+  const tableContainer = document.querySelector('.table-container');
+  tableContainer.style.opacity = '0.5';
+  
+  // Realizar petición AJAX
+  fetch(`/api/accounting-entries/filtered/?start_date=${startDate}&end_date=${endDate}`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Error en la respuesta del servidor');
+      }
+      return response.text();
+    })
+    .then(html => {
+      // Actualizar solo la tabla
+      tableContainer.innerHTML = html;
+      tableContainer.style.opacity = '1';
+      
+      // Aplicar el filtro de búsqueda si hay texto
+      const searchInput = document.getElementById('entrySearch');
+      if (searchInput && searchInput.value) {
+        applyFilter(searchInput.value);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      tableContainer.style.opacity = '1';
+      alert('Error al filtrar los asientos. Por favor, inténtalo de nuevo.');
+    });
+}
 </script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 {% endblock %}

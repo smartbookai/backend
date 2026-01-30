@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.core.files.base import ContentFile
 from django.db import transaction, IntegrityError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
@@ -706,7 +706,114 @@ def accounting_entry_detail(request, entry_id):
 def get_current_company(user):
     return CompanyUser.objects.select_related('company').get(user=user).company
 
+def filter_entries_by_document_date(queryset, start_date=None, end_date=None):
+    """
+    Filtra asientos por fecha de emisión del documento que los generó
+    """
+    logger.info(f"filter_entries_by_document_date llamado con start_date={start_date}, end_date={end_date}")
+    
+    if start_date:
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        logger.info(f"start_date convertida a: {start_date}")
+    if end_date:
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        logger.info(f"end_date convertida a: {end_date}")
+    
+    # Crear filtros Q para cada tipo de documento
+    filters = Q()
+    
+    # Facturas de ventas
+    if start_date and end_date:
+        filters |= Q(sales_invoice__issue_date__range=[start_date, end_date])
+    elif start_date:
+        filters |= Q(sales_invoice__issue_date__gte=start_date)
+    elif end_date:
+        filters |= Q(sales_invoice__issue_date__lte=end_date)
+    
+    # Facturas de compra
+    if start_date and end_date:
+        filters |= Q(purchase_invoice__issue_date__range=[start_date, end_date])
+    elif start_date:
+        filters |= Q(purchase_invoice__issue_date__gte=start_date)
+    elif end_date:
+        filters |= Q(purchase_invoice__issue_date__lte=end_date)
+    
+    # Nóminas (usar issue_date)
+    if start_date and end_date:
+        filters |= Q(payroll__issue_date__range=[start_date, end_date])
+    elif start_date:
+        filters |= Q(payroll__issue_date__gte=start_date)
+    elif end_date:
+        filters |= Q(payroll__issue_date__lte=end_date)
+    
+    logger.info(f"Aplicando filtro: {filters}")
+    result = queryset.filter(filters)
+    logger.info(f"Resultados del filtro: {result.count()} asientos")
+    
+    return result
 
+@login_required
+def accounting_entries_filtered(request):
+    """
+    Vista AJAX para filtrar asientos contables por rango de fechas de documentos
+    """
+    company = get_current_company(request.user)
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    # Debug logging
+    logger.info(f"Fechas recibidas - start_date: {start_date}, end_date: {end_date}")
+    
+    try:
+        # Debug: mostrar todos los asientos y sus fechas de documento
+        all_entries = AccountingEntry.objects.filter(company=company).select_related(
+            'sales_invoice', 'purchase_invoice', 'payroll__employee'
+        ).order_by('-entry_number', '-id')
+        
+        debug_info = []
+        for entry in all_entries:
+            doc_date = None
+            doc_type = None
+            
+            if entry.sales_invoice:
+                doc_date = entry.sales_invoice.issue_date
+                doc_type = f"Venta #{entry.sales_invoice.invoice_number}"
+            elif entry.purchase_invoice:
+                doc_date = entry.purchase_invoice.issue_date
+                doc_type = f"Compra #{entry.purchase_invoice.invoice_number}"
+            elif entry.payroll:
+                doc_date = entry.payroll.issue_date
+                doc_type = f"Nómina #{entry.payroll.employee.first_name} {entry.payroll.employee.last_name}"
+            
+            debug_info.append({
+                'entry_id': entry.id,
+                'entry_number': entry.entry_number,
+                'doc_type': doc_type,
+                'doc_date': str(doc_date) if doc_date else None,
+                'entry_date': str(entry.date)
+            })
+        
+        logger.info(f"DEBUG - Todos los asientos: {debug_info}")
+        
+        entries = filter_entries_by_document_date(
+            AccountingEntry.objects.filter(company=company),
+            start_date, end_date
+        ).select_related('sales_invoice', 'purchase_invoice', 'payroll__employee').order_by('-entry_number', '-id')
+        
+        # Debug logging
+        logger.info(f"Se encontraron {entries.count()} asientos filtrados")
+        
+        # Renderizar solo la tabla
+        return render(request, 'partials/accounting_entries_table.html', {
+            'entries': entries,
+        })
+    
+    except Exception as e:
+        logger.exception('Error en accounting_entries_filtered')
+        return JsonResponse({
+            'success': False,
+            'error': 'Error al filtrar los asientos'
+        }, status=500)
 
 
 @login_required

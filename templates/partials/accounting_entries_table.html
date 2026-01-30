@@ -1,0 +1,41 @@
+<table class="table" style="width:100%;border-collapse:collapse;">
+  <thead>
+    <tr>
+      <th class="table-header" style="padding:14px 18px;">Número</th>
+      <th class="table-header" style="padding:14px 18px;">Fecha</th>
+      <th class="table-header" style="padding:14px 18px;">Descripción</th>
+      <th class="table-header" style="padding:14px 18px;">Origen</th>
+      <th class="table-header" style="padding:14px 18px;">Estado</th>
+      <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
+    </tr>
+  </thead>
+  <tbody class="entries-tbody">
+    {% for entry in entries %}
+    <tr>
+      <td>{{ entry.entry_number }}</td>
+      <td>{{ entry.date|date:'d/m/Y' }}</td>
+      <td style="text-align:left;">{{ entry.description }}</td>
+      <td>
+        {% if entry.purchase_invoice %}
+          Factura recibida · {{ entry.purchase_invoice.invoice_number }}
+        {% elif entry.sales_invoice %}
+          Factura enviada · {{ entry.sales_invoice.invoice_number }}
+        {% elif entry.payroll %}
+          Nómina · {{ entry.payroll.employee.first_name }} {{ entry.payroll.employee.last_name }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>{{ entry.get_status_display }}</td>
+      <td class="text-right" style="display:flex;gap:8px;justify-content:flex-end;">
+        <a href="{% url 'accounting_entry_detail' entry.id %}" class="btn-secondary">Ver</a>
+        <button type="button" class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteEntry({{ entry.id }}, '{{ entry.entry_number }}')">Eliminar</button>
+      </td>
+    </tr>
+    {% empty %}
+    <tr class="entries-empty-row">
+      <td colspan="6">No hay asientos contables que coincidan con el filtro seleccionado.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
