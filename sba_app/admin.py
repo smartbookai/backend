@@ -5,6 +5,7 @@ from django.contrib import auth
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.contrib import messages
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import UserProfile, Company, CompanyUser, Supplier, SalesInvoice, PurchaseInvoice, InvoiceLine, Client, \
     AccountingEntry, Payroll, Employee, PrecontractualAcceptance
@@ -197,7 +198,7 @@ from django.contrib.admin import site
 admin.site.unregister(User)
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(DjangoUserAdmin):
     list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'impersonate_actions')
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'groups')
     search_fields = ('username', 'first_name', 'last_name', 'email')
