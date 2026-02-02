@@ -232,7 +232,10 @@ function renderDeliveryNotesTable(rows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="table-cell" style="padding:14px 18px;">
-        ${dn.delivery_note_number || '-'}
+        ${dn.pdf_url
+          ? `<a href="${dn.pdf_url}" target="_blank" rel="noopener noreferrer">${dn.delivery_note_number || 'PDF'}</a>`
+          : (dn.delivery_note_number || '-')
+        }
       </td>
       <td class="table-cell" style="padding:14px 18px;">${dn.client_name || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${dn.issue_date || '-'}</td>

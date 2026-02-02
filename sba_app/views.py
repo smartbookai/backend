@@ -5734,7 +5734,22 @@ def api_create_manual_delivery_note(request):
                     unit_price=Decimal(unit_prices[i]) if unit_prices[i] else None,
                     vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else None,
                 )
-        
+
+        # Generar PDF del albarán
+        try:
+            from sba_app.utils.delivery_note_pdf_generator import generate_delivery_note_pdf
+            pdf_content = generate_delivery_note_pdf(delivery_note)
+
+            # Guardar el PDF en el campo pdf_file del albarán
+            from django.core.files.base import ContentFile
+            filename = f"albaran_{delivery_note.delivery_note_number}.pdf"
+            delivery_note.pdf_file.save(filename, ContentFile(pdf_content))
+            delivery_note.save()
+
+        except Exception as pdf_error:
+            # No fallar la creación del albarán si hay error en el PDF
+            print(f"Error generando PDF del albarán {delivery_note.delivery_note_number}: {str(pdf_error)}")
+
         return JsonResponse({
             "success": True,
             "message": "Albarán creado correctamente",
@@ -5766,10 +5781,11 @@ def api_show_table_delivery_notes_sent(request):
         # Obtener la empresa del usuario
         company_user = CompanyUser.objects.get(user=request.user)
         company = company_user.company
-        
+
         # Obtener albaranes enviados con sus líneas
-        delivery_notes = SalesDeliveryNote.objects.filter(company=company).prefetch_related('lines').order_by('-issue_date')
-        
+        delivery_notes = SalesDeliveryNote.objects.filter(company=company).prefetch_related('lines').order_by(
+            '-issue_date')
+
         # Convertir a formato JSON
         delivery_notes_data = []
         for dn in delivery_notes:
@@ -5783,7 +5799,7 @@ def api_show_table_delivery_notes_sent(request):
                     'unit_price': str(line.unit_price) if line.unit_price else '',
                     'vat_rate': str(line.vat_rate) if line.vat_rate else '',
                 })
-            
+
             delivery_notes_data.append({
                 'id': dn.id,
                 'delivery_note_number': dn.delivery_note_number,
@@ -5800,19 +5816,20 @@ def api_show_table_delivery_notes_sent(request):
                 'lines': lines_info,
                 'has_amounts': bool(dn.total_amount and dn.total_amount > 0),
                 'created_at': dn.created_at.strftime('%d/%m/%Y %H:%M'),
+                'pdf_url': request.build_absolute_uri(dn.pdf_file.url) if dn.pdf_file else '',
             })
-        
+
         return JsonResponse({
             'success': True,
             'delivery_notes': delivery_notes_data
         })
-        
+
     except CompanyUser.DoesNotExist:
         return JsonResponse({
             'success': False,
             'message': 'No tienes una empresa asociada'
         }, status=403)
-        
+
     except Exception as e:
         import traceback
         print(" ERROR en api_show_table_delivery_notes_sent:", traceback.format_exc())
