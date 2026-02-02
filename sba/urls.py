@@ -27,6 +27,7 @@ urlpatterns = [
     path('generar-albaran/', views.generar_albaran, name='generar_albaran'),
     
     #delivery notes API endpoints
+    path('api/upload-delivery-note/', views.api_upload_delivery_note, name='api_upload_delivery_note'),
     path('api/delivery-notes-sent/manual-create/', views.api_create_manual_delivery_note, name='api_create_manual_delivery_note'),
     path('api/show-table-delivery-notes-sent/', views.api_show_table_delivery_notes_sent, name='api_show_table_delivery_notes_sent'),
     path('api/delivery-notes/<int:delivery_note_id>/update/', views.api_update_delivery_note, name='api_update_delivery_note'),

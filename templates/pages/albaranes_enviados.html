@@ -60,16 +60,16 @@
     </div>
     <form id="deliveryNoteForm" onsubmit="submitDeliveryNote(event)" enctype="multipart/form-data">
       <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
-        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta los archivos aquí</div>
-        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivos</div>
-        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
-        <input id="pdfInput" name="pdf_files" type="file" accept="application/pdf,image/*" multiple style="display:none;" />
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta el albarán aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF hasta 10MB</div>
+        <input id="pdfInput" name="delivery_note_file" type="file" accept="application/pdf" style="display:none;" />
         <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
-        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
+        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">OpenAI procesará la información automáticamente</div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closeDeliveryNoteDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Subir</button>
+        <button type="submit" class="btn-primary">Procesar Albarán</button>
       </div>
     </form>
   </aside>
@@ -282,8 +282,27 @@ function setupPdfDropzone() {
 
   function handleFiles(files) {
     if (files.length > 0) {
-      const fileNames = Array.from(files).map(f => f.name).join(', ');
-      fileName.textContent = `Archivos seleccionados: ${fileNames}`;
+      // Solo tomar el primer archivo para albaranes
+      const file = files[0];
+      
+      // Validar que sea PDF
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('El archivo debe ser un PDF');
+        return;
+      }
+      
+      // Validar tamaño
+      if (file.size > 10 * 1024 * 1024) {
+        alert('El archivo no puede superar los 10MB');
+        return;
+      }
+      
+      fileName.textContent = `Archivo seleccionado: ${file.name}`;
+      
+      // Actualizar el input para que solo tenga este archivo
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      input.files = dataTransfer.files;
     }
   }
 }
@@ -330,8 +349,48 @@ function closeDeliveryNoteDrawer() {
 
 function submitDeliveryNote(event) {
   event.preventDefault();
-  // Implementar funcionalidad de subida
-  console.log('Subir albarán - funcionalidad por implementar');
+  
+  const form = event.target;
+  const formData = new FormData(form);
+  
+  // Mostrar loading con la misma animación que facturas
+  document.getElementById('deliveryNoteLoaderTitle').textContent = 'Procesando albarán con OpenAI...';
+  document.getElementById('deliveryNoteLoaderFile').textContent = formData.get('delivery_note_file').name;
+  showDrawerLoader('deliveryNoteDrawer');
+  
+  fetch('/api/upload-delivery-note/', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken')
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    hideDrawerLoader('deliveryNoteDrawer');
+    
+    if (data.success) {
+      closeDeliveryNoteDrawer();
+      loadDeliveryNotes(); // Recargar la tabla
+      
+      // Mostrar mensaje de éxito
+      alert(`Albarán ${data.delivery_note_number} procesado correctamente.\n\n` +
+            `Cliente: ${data.client_name}\n` +
+            `Importes: ${data.has_amounts ? 'Sí' : 'No'}\n` +
+            (data.total_amount ? `Total: ${data.total_amount}€` : ''));
+      
+      // Limpiar formulario
+      form.reset();
+      document.getElementById('pdfFileName').textContent = '';
+    } else {
+      alert(data.message || 'Error al procesar el albarán');
+    }
+  })
+  .catch(error => {
+    hideDrawerLoader('deliveryNoteDrawer');
+    console.error('Error:', error);
+    alert('Error al procesar el albarán. Por favor, inténtalo de nuevo.');
+  });
 }
 
 function closeDeliveryNoteEditDrawer() {
@@ -555,5 +614,20 @@ function generateInvoiceFromDeliveryNote(id) {
   // Implementar funcionalidad de generación de factura
   console.log('Generar factura desde albarán', id);
 }
+
+(async function(){
+  const css = `
+  .drawer-loading-mask { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(249,250,251,0.75); z-index:1000; }
+  .drawer-loading-mask[hidden] { display:none; }
+  .drawer-loading-mask.active { display:flex; }
+  .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:10px 24px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); min-width:300px; }
+  .drawer-loading-box img { width:48px; height:48px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
+  @keyframes sba-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .drawer-loading-box img { animation: none; } }
+  `;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+})();
+function showDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.hidden=false; m.classList.add('active'); } }
+function hideDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.classList.remove('active'); m.hidden=true; } }
 </script>
 {% endblock %}
