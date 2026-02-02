@@ -9,7 +9,7 @@
         <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Albaranes recibidos</h1>
         <div style="color:#6B7280;margin-bottom:20px;">Recibidos de proveedores</div>
       </div>
-      <button type="button" class="btn-primary" onclick="openDeliveryNoteDrawer()">Subir Albarán</button>
+      <button type="button" class="btn-primary" onclick="openPurchaseDeliveryNoteDrawer()">Subir Albarán Recibido</button>
     </div>
 
     <div class="card table-card" style="padding:0;margin-top:12px;">
@@ -46,31 +46,34 @@
   </div>
 
   <!-- Overlay and Drawer -->
-  <div id="deliveryNoteOverlay" class="overlay-mask" onclick="closeDeliveryNoteDrawer()"></div>
-  <aside id="deliveryNoteDrawer" class="drawer" aria-hidden="true">
+  <div id="purchaseDeliveryNoteOverlay" class="overlay-mask" onclick="closePurchaseDeliveryNoteDrawer()"></div>
+  <aside id="purchaseDeliveryNoteDrawer" class="drawer" aria-hidden="true">
     <div class="drawer-loading-mask" hidden>
       <div class="drawer-loading-box" style="flex-direction:column;text-align:center;">
         <img src="{% static 'images/SBA-loader.png' %}" alt="Cargando">
-        <span id="deliveryNoteLoaderTitle" style="font-weight:600;">Procesando...</span>
-        <span id="deliveryNoteLoaderFile" style="font-size:12px;color:#6B7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <span id="purchaseDeliveryNoteLoaderTitle" style="font-weight:600;">Procesando...</span>
+        <span id="purchaseDeliveryNoteLoaderFile" style="font-size:12px;color:#6B7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="margin:0;font-size:18px;">Subir albarán</h3>
-      <button class="btn-secondary" onclick="closeDeliveryNoteDrawer()">Cerrar</button>
+      <h3 style="margin:0;font-size:18px;">Subir Albarán Recibido</h3>
+      <button class="btn-secondary" onclick="closePurchaseDeliveryNoteDrawer()">Cerrar</button>
     </div>
-    <form id="deliveryNoteForm" onsubmit="submitDeliveryNote(event)" enctype="multipart/form-data">
+    <form id="purchaseDeliveryNoteForm" onsubmit="submitPurchaseDeliveryNote(event)" enctype="multipart/form-data">
       <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
-        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta los archivos aquí</div>
-        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivos</div>
-        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
-        <input id="pdfInput" name="pdf_files" type="file" accept="application/pdf,image/*" multiple style="display:none;" />
-        <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
-        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+          <i class="fas fa-file-pdf" style="font-size:48px;color:#9CA3AF;"></i>
+          <div>
+            <div style="font-weight:600;color:#374151;">Arrastra el PDF del albarán aquí</div>
+            <div style="color:#6B7280;font-size:14px;margin-top:4px;">o haz clic para seleccionar</div>
+          </div>
+          <div id="pdfFileName" style="color:#059669;font-size:14px;font-weight:500;"></div>
+        </div>
+        <input type="file" id="pdfInput" name="purchase_delivery_note_file" accept=".pdf" style="display:none;" required>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
-        <button type="button" class="btn-secondary" onclick="closeDeliveryNoteDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Subir</button>
+        <button type="button" class="btn-secondary" onclick="closePurchaseDeliveryNoteDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Procesar con OpenAI</button>
       </div>
     </form>
   </aside>
@@ -216,7 +219,7 @@ function renderDeliveryNotesTable() {
     row.innerHTML = `
       <td style="padding:14px 18px;">
         <div style="font-weight:600;">${note.delivery_note_number}</div>
-        ${note.pdf_file ? `<div style="font-size:12px;color:#6B7280;"><a href="${note.pdf_file}" target="_blank">Ver PDF</a></div>` : ''}
+        ${note.pdf_url ? `<div style="font-size:12px;color:#6B7280;"><a href="${note.pdf_url}" target="_blank">Ver PDF</a></div>` : ''}
       </td>
       <td style="padding:14px 18px;">${note.supplier_name}</td>
       <td style="padding:14px 18px;">${note.supplier_email || '-'}</td>
@@ -323,6 +326,66 @@ function submitDeliveryNote(event) {
   console.log('Subir albarán - funcionalidad por implementar');
 }
 
+function openPurchaseDeliveryNoteDrawer() {
+  document.getElementById('purchaseDeliveryNoteOverlay').style.display = 'block';
+  document.getElementById('purchaseDeliveryNoteDrawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('purchaseDeliveryNoteDrawer').style.right = '0';
+}
+
+function closePurchaseDeliveryNoteDrawer() {
+  document.getElementById('purchaseDeliveryNoteOverlay').style.display = 'none';
+  document.getElementById('purchaseDeliveryNoteDrawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('purchaseDeliveryNoteDrawer').style.right = '-440px';
+  document.getElementById('purchaseDeliveryNoteForm').reset();
+  document.getElementById('pdfFileName').textContent = '';
+}
+
+function submitPurchaseDeliveryNote(event) {
+  event.preventDefault();
+  
+  const form = event.target;
+  const formData = new FormData(form);
+  
+  // Mostrar loading con la misma animación que facturas
+  document.getElementById('purchaseDeliveryNoteLoaderTitle').textContent = 'Procesando albarán recibido con OpenAI...';
+  document.getElementById('purchaseDeliveryNoteLoaderFile').textContent = formData.get('purchase_delivery_note_file').name;
+  showDrawerLoader('purchaseDeliveryNoteDrawer');
+  
+  fetch('/api/upload-purchase-delivery-note/', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken')
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    hideDrawerLoader('purchaseDeliveryNoteDrawer');
+    
+    if (data.success) {
+      closePurchaseDeliveryNoteDrawer();
+      loadDeliveryNotes(); // Recargar la tabla
+      
+      // Mostrar mensaje de éxito
+      alert(`Albarán ${data.delivery_note_number} procesado correctamente.\n\n` +
+            `Proveedor: ${data.supplier_name}\n` +
+            `Importes: ${data.has_amounts ? 'Sí' : 'No'}\n` +
+            (data.total_amount ? `Total: ${data.total_amount}€` : ''));
+      
+      // Limpiar formulario
+      form.reset();
+      document.getElementById('pdfFileName').textContent = '';
+    } else {
+      alert(data.message || 'Error al procesar el albarán recibido');
+    }
+  })
+  .catch(error => {
+    hideDrawerLoader('purchaseDeliveryNoteDrawer');
+    console.error('Error:', error);
+    alert('Error al procesar el albarán recibido. Por favor, inténtalo de nuevo.');
+  });
+}
+
 function closeDeliveryNoteEditDrawer() {
   document.getElementById('deliveryNoteEditOverlay').style.display = 'none';
   document.getElementById('deliveryNoteEditDrawer').setAttribute('aria-hidden', 'true');
@@ -360,5 +423,20 @@ function generateInvoiceFromDeliveryNote(id) {
   // Implementar funcionalidad de generación de factura
   console.log('Generar factura desde albarán', id);
 }
+
+(async function(){
+  const css = `
+  .drawer-loading-mask { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(249,250,251,0.75); z-index:1000; }
+  .drawer-loading-mask[hidden] { display:none; }
+  .drawer-loading-mask.active { display:flex; }
+  .drawer-loading-box { display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E5E7EB; padding:10px 24px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06); min-width:300px; }
+  .drawer-loading-box img { width:48px; height:48px; animation: sba-spin 0.9s linear infinite; transform-origin:50% 50%; }
+  @keyframes sba-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .drawer-loading-box img { animation: none; } }
+  `;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+})();
+function showDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.hidden=false; m.classList.add('active'); } }
+function hideDrawerLoader(drawerId){ const d=document.getElementById(drawerId); const m=d&&d.querySelector('.drawer-loading-mask'); if(m){ m.classList.remove('active'); m.hidden=true; } }
 </script>
 {% endblock %}

@@ -24,7 +24,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
-    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, DeliveryNoteLine
+    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
     process_invoice_header_only
@@ -5847,6 +5847,85 @@ def api_show_table_delivery_notes_sent(request):
 
 
 @login_required
+def api_show_table_delivery_notes_received(request):
+    """
+    API para mostrar los albaranes recibidos en formato tabla (similar a facturas)
+    """
+    try:
+        print("🔍 DEBUG: Iniciando api_show_table_delivery_notes_received")
+        
+        # Obtener la empresa del usuario
+        print("🔍 DEBUG: Obteniendo CompanyUser...")
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        print(f"🔍 DEBUG: Empresa encontrada: {company.name}")
+
+        # Obtener albaranes recibidos con sus líneas
+        print("🔍 DEBUG: Obteniendo PurchaseDeliveryNotes...")
+        delivery_notes = PurchaseDeliveryNote.objects.filter(company=company).prefetch_related('lines').order_by(
+            '-issue_date')
+        print(f"🔍 DEBUG: Encontrados {delivery_notes.count()} albaranes recibidos")
+
+        # Convertir a formato JSON
+        delivery_notes_data = []
+        for dn in delivery_notes:
+            print(f"🔍 DEBUG: Procesando albarán {dn.delivery_note_number}")
+            
+            # Obtener información de líneas
+            lines_info = []
+            for line in dn.lines.all():
+                lines_info.append({
+                    'description': line.description,
+                    'quantity': str(line.quantity),
+                    'reference': line.reference or '',
+                    'unit_price': str(line.unit_price) if line.unit_price else '',
+                    'vat_rate': str(line.vat_rate) if line.vat_rate else '',
+                })
+
+            delivery_notes_data.append({
+                'id': dn.id,
+                'delivery_note_number': dn.delivery_note_number,
+                'issue_date': dn.issue_date.strftime('%d/%m/%Y'),
+                'delivery_date': dn.delivery_date.strftime('%d/%m/%Y') if dn.delivery_date else '',
+                'supplier_name': dn.supplier.name,
+                'supplier_id': dn.supplier.id,
+                'supplier_email': dn.supplier.email,
+                'delivery_method': dn.delivery_method or '',
+                'base_amount': str(dn.base_amount) if dn.base_amount else '0.00',
+                'tax_amount': str(dn.tax_amount) if dn.tax_amount else '0.00',
+                'total_amount': str(dn.total_amount) if dn.total_amount else '0.00',
+                'status': dn.status,
+                'notes': dn.notes or '',
+                'lines': lines_info,
+                'has_amounts': bool(dn.total_amount and dn.total_amount > 0),
+                'created_at': dn.created_at.strftime('%d/%m/%Y %H:%M'),
+                'pdf_url': request.build_absolute_uri(dn.pdf_file.url) if dn.pdf_file else '',
+            })
+
+        print("🔍 DEBUG: Enviando respuesta JSON")
+        return JsonResponse({
+            'success': True,
+            'delivery_notes': delivery_notes_data
+        })
+
+    except CompanyUser.DoesNotExist:
+        print("❌ ERROR: CompanyUser.DoesNotExist")
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+
+    except Exception as e:
+        print(f"❌ ERROR en api_show_table_delivery_notes_received: {str(e)}")
+        import traceback
+        print(f"❌ TRACEBACK: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al cargar los albaranes recibidos: {str(e)}'
+        }, status=500)
+
+
+@login_required
 def api_update_delivery_note(request, delivery_note_id):
     """
     API para actualizar un albarán existente
@@ -6050,4 +6129,62 @@ def api_upload_delivery_note(request):
         return JsonResponse({
             'success': False,
             'message': f'Error procesando el albarán: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_POST
+def api_upload_purchase_delivery_note(request):
+    """
+    API para subir y procesar un albarán recibido (de proveedor) con OpenAI
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+
+        # Verificar que se subió un archivo
+        if 'purchase_delivery_note_file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No se ha subido ningún archivo'
+            }, status=400)
+
+        file = request.FILES['purchase_delivery_note_file']
+
+        # Validar que sea un PDF
+        if not file.name.lower().endswith('.pdf'):
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo debe ser un PDF'
+            }, status=400)
+
+        # Validar tamaño del archivo (10MB máximo)
+        if file.size > 10 * 1024 * 1024:
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo no puede superar los 10MB'
+            }, status=400)
+
+        # Procesar el albarán con el servicio
+        from sba_app.services.purchase_delivery_note_service import PurchaseDeliveryNoteService
+        purchase_delivery_note_service = PurchaseDeliveryNoteService(company)
+
+        result = purchase_delivery_note_service.process_delivery_note_from_file(file)
+
+        if result['success']:
+            return JsonResponse(result)
+        else:
+            return JsonResponse(result, status=400)
+
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Usuario no asociado a ninguna empresa'
+        }, status=403)
+    except Exception as e:
+        logger.error(f"Error en api_upload_purchase_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error procesando el albarán recibido: {str(e)}'
         }, status=500)
