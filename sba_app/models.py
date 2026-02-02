@@ -355,3 +355,106 @@ class Payroll(models.Model):
         ordering = ['-payment_date']
         unique_together = ('company', 'employee', 'period_start')
 
+
+class BaseDeliveryNote(models.Model):
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name="%(class)s_delivery_notes")
+    pdf_file = models.FileField(upload_to='delivery_notes/pdfs/', null=True, blank=True)
+    delivery_note_number = models.CharField(max_length=50)  # Número de albarán
+    issue_date = models.DateField(default=timezone.now)  # Fecha de emisión
+    delivery_date = models.DateField(null=True, blank=True)  # Fecha de entrega/realización
+    delivery_method = models.CharField(max_length=100, null=True, blank=True)  # Forma de entrega
+
+    # Campos opcionales para albaranes con importe
+    base_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Base imponible
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Total de impuestos
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Total albarán
+
+    # Estado y conversión
+    status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pendiente facturar'),
+        ('invoiced', 'Facturado'),
+        ('cancelled', 'Cancelado')
+    ], default='pending')
+
+    # Relación con factura (una vez facturado)
+    notes = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
+
+    class Meta:
+        abstract = True
+        ordering = ['-issue_date']
+
+    def __str__(self):
+        return f"{self.delivery_note_number} ({self.company.name})"
+
+
+class SalesDeliveryNote(BaseDeliveryNote):
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='sales_delivery_notes')
+
+    # Cuentas contables (para referencia futura)
+    account_income = models.CharField(max_length=20, null=True, blank=True)
+    account_customer = models.CharField(max_length=20, null=True, blank=True)
+    account_vat_output = models.CharField(max_length=20, null=True, blank=True)
+
+    # Relación con factura generada
+    sales_invoice = models.ForeignKey('SalesInvoice', on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='origin_delivery_notes')
+
+    class Meta:
+        verbose_name = "Albarán enviado"
+        verbose_name_plural = "Albaranes enviados"
+        unique_together = ('company', 'delivery_note_number')
+
+
+class PurchaseDeliveryNote(BaseDeliveryNote):
+    supplier = models.ForeignKey('Supplier', on_delete=models.CASCADE, related_name='purchase_delivery_notes')
+
+    # Cuentas contables (para referencia futura)
+    account_expense = models.CharField(max_length=20, null=True, blank=True)
+    account_supplier = models.CharField(max_length=20, null=True, blank=True)
+    account_vat_input = models.CharField(max_length=20, null=True, blank=True)
+
+    # Relación con factura generada
+    purchase_invoice = models.ForeignKey('PurchaseInvoice', on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name='origin_delivery_notes')
+
+    class Meta:
+        verbose_name = "Albarán recibido"
+        verbose_name_plural = "Albaranes recibidos"
+        unique_together = ('company', 'delivery_note_number')
+
+
+class DeliveryNoteLine(models.Model):
+    sales_delivery_note = models.ForeignKey('SalesDeliveryNote', on_delete=models.CASCADE, related_name='lines',
+                                            null=True, blank=True)
+    purchase_delivery_note = models.ForeignKey('PurchaseDeliveryNote', on_delete=models.CASCADE, related_name='lines',
+                                               null=True, blank=True)
+
+    description = models.CharField(max_length=255)  # Descripción del producto/servicio
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    reference = models.CharField(max_length=100, null=True, blank=True)  # Referencia o código
+
+    # Campos opcionales para albaranes con importe
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+                                   help_text="Porcentaje de IVA, ej: 21")
+
+    def subtotal(self):
+        if self.unit_price:
+            return self.quantity * self.unit_price
+        return Decimal('0.00')
+
+    def total_with_vat(self):
+        if self.unit_price and self.vat_rate:
+            return self.subtotal() * (1 + self.vat_rate / 100)
+        return self.subtotal()
+
+    def __str__(self):
+        if self.sales_delivery_note:
+            return f"{self.description} ({self.sales_delivery_note.delivery_note_number})"
+        elif self.purchase_delivery_note:
+            return f"{self.description} ({self.purchase_delivery_note.delivery_note_number})"
+        return f"{self.description} (Sin albarán asociado)"
+

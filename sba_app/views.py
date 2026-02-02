@@ -657,6 +657,34 @@ def nominas(request):
 
 
 @login_required
+def albaranes_recibidos(request):
+    return render(request, 'pages/albaranes_recibidos.html')
+
+
+@login_required
+def albaranes_enviados(request):
+    return render(request, 'pages/albaranes_enviados.html')
+
+
+@login_required
+def generar_albaran(request):
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener clientes de la empresa
+        clients = Client.objects.filter(company=company).order_by('name')
+        
+        context = {
+            'clients': clients,
+        }
+        return render(request, 'pages/generar_albaran.html', context)
+    except CompanyUser.DoesNotExist:
+        return render(request, 'pages/generar_albaran.html')
+
+
+@login_required
 def generar_nomina(request):
     try:
         # Obtener la empresa del usuario

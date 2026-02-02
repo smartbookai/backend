@@ -1,0 +1,516 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+{% block title %}Generar Albarán | SBA{% endblock %}
+{% block content %}
+<section>
+  <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
+    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+      <div>
+        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Generar Albarán</h1>
+        <div style="color:#6B7280;margin-bottom:20px;">Crear nuevo albarán de entrega</div>
+      </div>
+    </div>
+
+    <form id="deliveryNoteForm" style="margin-top:24px;">
+      <!-- Tipo de albarán y destinatario -->
+      <div class="card" style="padding:24px;margin-bottom:24px;">
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Datos del Cliente</h2>
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
+          <!-- Cliente -->
+          <div class="form-field">
+            <label for="client">Cliente *</label>
+            <select id="client" name="client" required>
+              <option value="">Seleccionar cliente...</option>
+              {% for client in clients %}
+                <option value="{{ client.id }}">{{ client.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datos principales del albarán -->
+      <div class="card" style="padding:24px;margin-bottom:24px;">
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Datos del Albarán</h2>
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
+          <!-- Número de albarán -->
+          <div class="form-field">
+            <label for="delivery_note_number">Número de Albarán *</label>
+            <input type="text" id="delivery_note_number" name="delivery_note_number" required placeholder="Ej: ALB-E-2024-001">
+          </div>
+
+          <!-- Fecha de emisión -->
+          <div class="form-field">
+            <label for="issue_date">Fecha de Emisión *</label>
+            <input type="date" id="issue_date" name="issue_date" required>
+          </div>
+
+          <!-- Fecha de entrega -->
+          <div class="form-field">
+            <label for="delivery_date">Fecha de Entrega</label>
+            <input type="date" id="delivery_date" name="delivery_date">
+          </div>
+
+          <!-- Método de entrega -->
+          <div class="form-field">
+            <label for="delivery_method">Método de Entrega</label>
+            <input type="text" id="delivery_method" name="delivery_method" placeholder="Ej: Transporte propio, Mensajería">
+          </div>
+        </div>
+      </div>
+
+      <!-- Líneas del albarán -->
+      <div class="card" style="padding:24px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Líneas del Albarán</h2>
+          <button type="button" class="btn-secondary" onclick="addDeliveryNoteLine()">+ Añadir Línea</button>
+        </div>
+        
+        <div id="deliveryNoteLines" style="margin-bottom:20px;">
+          <!-- Primera línea por defecto -->
+          <div class="delivery-note-line" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;">
+            <div class="form-field">
+              <label>Descripción *</label>
+              <input type="text" name="line_description[]" required placeholder="Ej: Producto entregado">
+            </div>
+            <div class="form-field">
+              <label>Cantidad *</label>
+              <input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals()">
+            </div>
+            <div class="form-field">
+              <label>Referencia</label>
+              <input type="text" name="line_reference[]" placeholder="Ej: SKU-001">
+            </div>
+            <div class="form-field price-field">
+              <label>Precio Unitario</label>
+              <input type="number" name="line_unit_price[]" min="0" step="0.01" onchange="calculateTotals()">
+            </div>
+            <div class="form-field price-field">
+              <label>% IVA</label>
+              <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
+            </div>
+            <button type="button" onclick="removeDeliveryNoteLine(this)" class="btn btn-outline-danger btn-sm" style="padding:8px 12px;border-radius:6px;">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="hasAmounts" onchange="togglePriceFields()" style="margin:0;">
+            <span style="font-size:14px;">Este albarán incluye importes (precios e IVA)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Totales (solo si tiene importes) -->
+      <div class="card" id="totalsCard" style="padding:24px;margin-bottom:24px;display:none;">
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Resumen de Totales</h2>
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
+          <div class="form-field">
+            <label>Base Imponible</label>
+            <input type="number" id="base_amount" name="base_amount" readonly style="background:#F3F4F6;">
+          </div>
+          <div class="form-field">
+            <label>Importe IVA</label>
+            <input type="number" id="tax_amount" name="tax_amount" readonly style="background:#F3F4F6;">
+          </div>
+          <div class="form-field">
+            <label>Total Albarán</label>
+            <input type="number" id="total_amount" name="total_amount" readonly style="background:#F3F4F6;font-weight:600;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Cuentas contables (solo si tiene importes) -->
+      <div class="card" id="accountsCard" style="padding:24px;margin-bottom:24px;display:none;">
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Cuentas Contables (Opcional)</h2>
+        
+        <div id="sentAccounts" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
+          <div class="form-field">
+            <label for="account_income">Cuenta Ingresos</label>
+            <input type="text" id="account_income" name="account_income" placeholder="Ej: 700000">
+          </div>
+          <div class="form-field">
+            <label for="account_customer">Cuenta Cliente</label>
+            <input type="text" id="account_customer" name="account_customer" placeholder="Ej: 430000">
+          </div>
+          <div class="form-field">
+            <label for="account_vat_output">Cuenta IVA Repercutido</label>
+            <input type="text" id="account_vat_output" name="account_vat_output" placeholder="Ej: 477000">
+          </div>
+        </div>
+      </div>
+
+      <!-- Notas -->
+      <div class="card" style="padding:24px;margin-bottom:24px;">
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Notas Adicionales</h2>
+        <div class="form-field">
+          <textarea id="notes" name="notes" rows="4" placeholder="Observaciones o notas adicionales sobre la entrega..."></textarea>
+        </div>
+      </div>
+
+      <!-- Botones -->
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <button type="button" class="btn-secondary" onclick="window.history.back()">Cancelar</button>
+        <button type="submit" class="btn-primary">Generar Albarán</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+// Establecer fecha actual por defecto
+document.addEventListener('DOMContentLoaded', function() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('issue_date').value = today;
+  
+  // Ocultar campos de precios por defecto
+  togglePriceFields();
+});
+
+// Toggle campos de precios
+function togglePriceFields() {
+  const hasAmounts = document.getElementById('hasAmounts').checked;
+  const priceFields = document.querySelectorAll('.price-field');
+  const totalsCard = document.getElementById('totalsCard');
+  const accountsCard = document.getElementById('accountsCard');
+  
+  // Mostrar/ocultar campos de precios
+  const showPriceFields = hasAmounts;
+  priceFields.forEach(field => {
+    field.style.display = showPriceFields ? 'block' : 'none';
+  });
+  
+  // Mostrar/ocultar totales y cuentas
+  totalsCard.style.display = showPriceFields ? 'block' : 'none';
+  accountsCard.style.display = showPriceFields ? 'block' : 'none';
+  
+  // Calcular totales si se muestran campos de precios
+  if (showPriceFields) {
+    calculateTotals();
+  }
+}
+
+// Añadir nueva línea de albarán
+function addDeliveryNoteLine() {
+  const linesContainer = document.getElementById('deliveryNoteLines');
+  const newLine = document.createElement('div');
+  newLine.className = 'delivery-note-line';
+  newLine.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;';
+  
+  const hasAmounts = document.getElementById('hasAmounts').checked;
+  const priceDisplay = hasAmounts ? 'block' : 'none';
+  
+  newLine.innerHTML = `
+    <div class="form-field">
+      <label>Descripción *</label>
+      <input type="text" name="line_description[]" required placeholder="Ej: Producto entregado">
+    </div>
+    <div class="form-field">
+      <label>Cantidad *</label>
+      <input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals()">
+    </div>
+    <div class="form-field">
+      <label>Referencia</label>
+      <input type="text" name="line_reference[]" placeholder="Ej: SKU-001">
+    </div>
+    <div class="form-field price-field" style="display:${priceDisplay};">
+      <label>Precio Unitario</label>
+      <input type="number" name="line_unit_price[]" min="0" step="0.01" onchange="calculateTotals()">
+    </div>
+    <div class="form-field price-field" style="display:${priceDisplay};">
+      <label>% IVA</label>
+      <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
+    </div>
+    <button type="button" onclick="removeDeliveryNoteLine(this)" class="btn btn-outline-danger btn-sm" style="padding:8px 12px;border-radius:6px;">
+              <i class="bi bi-trash"></i>
+            </button>
+  `;
+  
+  linesContainer.appendChild(newLine);
+}
+
+// Eliminar línea de albarán
+function removeDeliveryNoteLine(button) {
+  const linesContainer = document.getElementById('deliveryNoteLines');
+  if (linesContainer.children.length > 1) {
+    button.parentElement.remove();
+    calculateTotals();
+  } else {
+    alert('Debe haber al menos una línea en el albarán.');
+  }
+}
+
+// Calcular totales
+function calculateTotals() {
+  const hasAmounts = document.getElementById('hasAmounts').checked;
+  
+  if (!hasAmounts) {
+    // Limpiar campos de totales si no hay importes
+    document.getElementById('base_amount').value = '';
+    document.getElementById('tax_amount').value = '';
+    document.getElementById('total_amount').value = '';
+    return;
+  }
+  
+  let baseAmount = 0;
+  let taxAmount = 0;
+  
+  const descriptions = document.getElementsByName('line_description[]');
+  const quantities = document.getElementsByName('line_quantity[]');
+  const unitPrices = document.getElementsByName('line_unit_price[]');
+  const vatRates = document.getElementsByName('line_vat_rate[]');
+  
+  for (let i = 0; i < descriptions.length; i++) {
+    const quantity = parseFloat(quantities[i].value) || 0;
+    const unitPrice = parseFloat(unitPrices[i].value) || 0;
+    const vatRate = parseFloat(vatRates[i].value) || 0;
+    
+    const subtotal = quantity * unitPrice;
+    baseAmount += subtotal;
+    taxAmount += subtotal * (vatRate / 100);
+  }
+  
+  const totalAmount = baseAmount + taxAmount;
+  
+  document.getElementById('base_amount').value = baseAmount.toFixed(2);
+  document.getElementById('tax_amount').value = taxAmount.toFixed(2);
+  document.getElementById('total_amount').value = totalAmount.toFixed(2);
+}
+
+function updateProgress(percent) {
+  document.querySelector('.progress-bar').style.width = percent + '%';
+}
+
+function showExtractionResults(data) {
+  document.getElementById('uploadProgress').classList.add('d-none');
+  document.getElementById('extractionResults').classList.remove('d-none');
+  
+  // Mostrar información general
+  const generalInfo = data.delivery_note || {};
+  document.getElementById('extractedGeneralInfo').innerHTML = `
+    <p><strong>Número:</strong> ${generalInfo.delivery_note_number || 'No detectado'}</p>
+    <p><strong>Fecha:</strong> ${generalInfo.issue_date || 'No detectada'}</p>
+    <p><strong>Tipo:</strong> ${generalInfo.has_amounts ? 'Con importes' : 'Sin importes'}</p>
+  `;
+  
+  // Mostrar tercero
+  const thirdParty = data.third_party || {};
+  document.getElementById('extractedThirdParty').innerHTML = `
+    <p><strong>Tipo:</strong> ${thirdParty.type === 'client' ? 'Cliente' : 'Proveedor'}</p>
+    <p><strong>Nombre:</strong> ${thirdParty.name || 'No detectado'}</p>
+    <p><strong>Documento:</strong> ${thirdParty.document_number || 'No detectado'}</p>
+  `;
+  
+  // Mostrar líneas
+  const lines = data.lines || [];
+  let linesHtml = '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Descripción</th><th>Cantidad</th><th>Referencia</th>';
+  if (generalInfo.has_amounts) {
+    linesHtml += '<th>Precio</th><th>IVA</th>';
+  }
+  linesHtml += '</tr></thead><tbody>';
+  
+  lines.forEach(line => {
+    linesHtml += '<tr>';
+    linesHtml += `<td>${line.description}</td>`;
+    linesHtml += `<td>${line.quantity}</td>`;
+    linesHtml += `<td>${line.reference || '-'}</td>`;
+    if (generalInfo.has_amounts) {
+      linesHtml += `<td>€${line.unit_price || '0'}</td>`;
+      linesHtml += `<td>${line.vat_rate || '0'}%</td>`;
+    }
+    linesHtml += '</tr>';
+  });
+  
+  linesHtml += '</tbody></table></div>';
+  document.getElementById('extractedLines').innerHTML = linesHtml;
+}
+
+function createFromExtraction() {
+  if (!extractedData) {
+    alert('No hay datos extraídos para crear el albarán');
+    return;
+  }
+  
+  // Implementar creación desde extracción
+  alert('Creación desde extracción - Próximamente');
+}
+
+function createManualDeliveryNote() {
+  const form = document.getElementById('manualDeliveryNoteForm');
+  const formData = new FormData(form);
+  
+  // Validar formulario
+  if (!formData.get('delivery_note_type') || !formData.get('issue_date') || !formData.get('third_party_type')) {
+    alert('Por favor, completa los campos obligatorios');
+    return;
+  }
+  
+  // Construir datos para enviar
+  const lines = [];
+  document.querySelectorAll('#manualLinesContainer .line-item').forEach(item => {
+    const description = item.querySelector('.line-description').value;
+    const quantity = item.querySelector('.line-quantity').value;
+    
+    if (description && quantity) {
+      lines.push({
+        description: description,
+        quantity: parseFloat(quantity),
+        reference: item.querySelector('.line-reference').value,
+        unit_price: item.querySelector('.line-price')?.value || null,
+        vat_rate: item.querySelector('.line-vat')?.value || null
+      });
+    }
+  });
+  
+  if (lines.length === 0) {
+    alert('Añade al menos una línea al albarán');
+    return;
+  }
+  
+  const data = {
+    delivery_note_type: formData.get('delivery_note_type'),
+    issue_date: formData.get('issue_date'),
+    third_party_type: formData.get('third_party_type'),
+    client_id: formData.get('client_id'),
+    supplier_id: formData.get('supplier_id'),
+    notes: formData.get('notes'),
+    lines: lines
+  };
+  
+  fetch('/api/albaranes/create/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify(data)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(`Albarán ${data.delivery_note_number} creado correctamente`);
+      resetManualForm();
+      // Redirigir o recargar según corresponda
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al crear el albarán');
+  });
+}
+
+document.getElementById('deliveryNoteForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  // Validar cliente
+  if (!document.getElementById('client').value) {
+    alert('Debe seleccionar un cliente.');
+    return;
+  }
+  
+  // Validar que haya al menos una línea con descripción
+  const descriptions = document.getElementsByName('line_description[]');
+  let hasValidLine = false;
+  
+  for (let i = 0; i < descriptions.length; i++) {
+    if (descriptions[i].value.trim()) {
+      hasValidLine = true;
+      break;
+    }
+  }
+  
+  if (!hasValidLine) {
+    alert('Debe agregar al menos una línea con descripción.');
+    return;
+  }
+  
+  // Enviar datos al servidor
+  const formData = new FormData(this);
+  
+  fetch('/api/delivery-notes-sent/manual-create/', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken')
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert('Albarán generado correctamente: ' + data.delivery_note_number);
+      // Redirigir a albaranes enviados
+      window.location.href = '/albaranes-enviados/';
+    } else {
+      alert('Error al generar el albarán: ' + data.message);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al generar el albarán. Por favor, inténtelo de nuevo.');
+  });
+});
+
+function resetUpload() {
+  document.getElementById('uploadDeliveryNoteForm').reset();
+  document.getElementById('uploadProgress').classList.add('d-none');
+  document.getElementById('extractionResults').classList.add('d-none');
+  extractedData = null;
+  updateProgress(0);
+  document.getElementById('step1').innerHTML = '⏳';
+  document.getElementById('step2').innerHTML = '⏳';
+  document.getElementById('step3').innerHTML = '⏳';
+}
+
+function resetManualForm() {
+  document.getElementById('manualDeliveryNoteForm').reset();
+  document.getElementById('manualLinesContainer').innerHTML = `
+    <div class="line-item border p-3 mb-2">
+      <div class="row align-items-center">
+        <div class="col-md-4">
+          <input type="text" placeholder="Descripción *" class="form-control line-description" required>
+        </div>
+        <div class="col-md-2">
+          <input type="number" placeholder="Cantidad *" class="form-control line-quantity" step="0.01" value="1" required>
+        </div>
+        <div class="col-md-2">
+          <input type="text" placeholder="Referencia" class="form-control line-reference">
+        </div>
+        <div class="col-md-2 manual-price-field" style="display:none;">
+          <input type="number" placeholder="Precio" class="form-control line-price" step="0.01">
+        </div>
+        <div class="col-md-2 manual-price-field" style="display:none;">
+          <input type="number" placeholder="IVA %" class="form-control line-vat" step="0.01" value="21">
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-danger btn-sm" onclick="removeManualLine(this)">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+</script>
+{% endblock %}

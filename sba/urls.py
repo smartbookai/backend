@@ -22,6 +22,9 @@ urlpatterns = [
     path('empleados/', views.empleados, name='empleados'),
     path('nominas/', views.nominas, name='nominas'),
     path('generar-nomina/', views.generar_nomina, name='generar_nomina'),
+    path('albaranes-recibidos/', views.albaranes_recibidos, name='albaranes_recibidos'),
+    path('albaranes-enviados/', views.albaranes_enviados, name='albaranes_enviados'),
+    path('generar-albaran/', views.generar_albaran, name='generar_albaran'),
     path('asientos-contables/', views.accounting_entries, name='accounting_entries'),
     path('asientos-contables/<int:entry_id>/', views.accounting_entry_detail, name='accounting_entry_detail'),
 

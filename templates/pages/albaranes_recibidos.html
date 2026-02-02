@@ -1,0 +1,364 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+{% block title %}Albaranes recibidos | SBA{% endblock %}
+{% block content %}
+<section>
+  <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
+    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+      <div>
+        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Albaranes recibidos</h1>
+        <div style="color:#6B7280;margin-bottom:20px;">Recibidos de proveedores</div>
+      </div>
+      <button type="button" class="btn-primary" onclick="openDeliveryNoteDrawer()">Subir Albarán</button>
+    </div>
+
+    <div class="card table-card" style="padding:0;margin-top:12px;">
+      <div class="table-header-bar" style="display:flex;align-items:center;padding:16px 20px;gap:12px;background:#62328A;color:#ffffff;border-radius:0.5rem 0.5rem 0 0;">
+        <div class="table-header-title" style="flex:1;min-width:0;">
+          <h2 style="font-size:16px;margin:0;color:#ffffff;">Listado</h2>
+        </div>
+        <div class="table-header-search" style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
+          <input id="deliveryNoteSearch" type="text" placeholder="Buscar..." aria-label="Buscar albaranes recibidos" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
+        </div>
+        <div class="table-header-spacer" style="flex:1;min-width:0;"></div>
+      </div>
+
+      <div class="table-container">
+        <table class="table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="table-header" style="padding:14px 18px;">Albarán</th>
+              <th class="table-header" style="padding:14px 18px;">Proveedor</th>
+              <th class="table-header" style="padding:14px 18px;">Email</th>
+              <th class="table-header" style="padding:14px 18px;">Fecha</th>
+              <th class="table-header" style="padding:14px 18px;">Entrega</th>
+              <th class="table-header" style="padding:14px 18px;">Importe</th>
+              <th class="table-header" style="padding:14px 18px;">Estado</th>
+              <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="delivery-notes-tbody">
+
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay and Drawer -->
+  <div id="deliveryNoteOverlay" class="overlay-mask" onclick="closeDeliveryNoteDrawer()"></div>
+  <aside id="deliveryNoteDrawer" class="drawer" aria-hidden="true">
+    <div class="drawer-loading-mask" hidden>
+      <div class="drawer-loading-box" style="flex-direction:column;text-align:center;">
+        <img src="{% static 'images/SBA-loader.png' %}" alt="Cargando">
+        <span id="deliveryNoteLoaderTitle" style="font-weight:600;">Procesando...</span>
+        <span id="deliveryNoteLoaderFile" style="font-size:12px;color:#6B7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Subir albarán</h3>
+      <button class="btn-secondary" onclick="closeDeliveryNoteDrawer()">Cerrar</button>
+    </div>
+    <form id="deliveryNoteForm" onsubmit="submitDeliveryNote(event)" enctype="multipart/form-data">
+      <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta los archivos aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivos</div>
+        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF o imagen (JPG/PNG) hasta 10MB</div>
+        <input id="pdfInput" name="pdf_files" type="file" accept="application/pdf,image/*" multiple style="display:none;" />
+        <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
+        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeDeliveryNoteDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Subir</button>
+      </div>
+    </form>
+  </aside>
+
+  <!-- Edit Drawer -->
+  <div id="deliveryNoteEditOverlay" class="overlay-mask" onclick="closeDeliveryNoteEditDrawer()"></div>
+  <aside id="deliveryNoteEditDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:18px;">Editar albarán</h3>
+      <button class="btn-secondary" onclick="closeDeliveryNoteEditDrawer()">Cerrar</button>
+    </div>
+    <form id="deliveryNoteEditForm" onsubmit="submitDeliveryNoteEdit(event)">
+      <div class="form-field">
+        <label>Número</label>
+        <input type="text" name="delivery_note_number">
+      </div>
+      <div class="form-field">
+        <label>Fecha de emisión</label>
+        <input type="date" name="issue_date">
+      </div>
+      <div class="form-field">
+        <label>Fecha de entrega</label>
+        <input type="date" name="delivery_date">
+      </div>
+      <div class="form-field">
+        <label>Método de entrega</label>
+        <input type="text" name="delivery_method">
+      </div>
+      <div class="form-field">
+        <label>Base imponible</label>
+        <input type="text" name="base_amount" placeholder="Opcional - solo si tiene importes">
+      </div>
+      <div class="form-field">
+        <label>Impuestos</label>
+        <input type="text" name="tax_amount" placeholder="Opcional - solo si tiene importes">
+      </div>
+      <div class="form-field">
+        <label>Total</label>
+        <input type="text" name="total_amount" placeholder="Opcional - solo si tiene importes">
+      </div>
+      <div class="form-field">
+        <label>Estado</label>
+        <select name="status">
+          <option value="pending">Pendiente facturar</option>
+          <option value="invoiced">Facturado</option>
+          <option value="cancelled">Cancelado</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Nombre del proveedor</label>
+        <input type="text" name="supplier_name">
+      </div>
+      <div id="linesEditor" style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <h4 style="margin:0; font-size:16px;">Líneas</h4>
+          <button type="button" class="btn-secondary" onclick="addDeliveryNoteLineRow()">Agregar línea</button>
+        </div>
+        <div id="deliveryNoteLinesContainer" style="margin-top:10px;"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" onclick="closeDeliveryNoteEditDrawer()">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </aside>
+  <template id="deliveryNoteLineRowTpl">
+    <div class="card" style="padding:10px; margin-bottom:8px;">
+      <input type="hidden" class="line-id" />
+      <div class="form-field">
+        <label>Descripción</label>
+        <input type="text" class="line-desc">
+      </div>
+      <div class="form-field">
+        <label>Cantidad</label>
+        <input type="number" step="0.01" class="line-qty">
+      </div>
+      <div class="form-field">
+        <label>Referencia</label>
+        <input type="text" class="line-reference">
+      </div>
+      <div class="form-field">
+        <label>Precio unitario</label>
+        <input type="number" step="0.01" class="line-price" placeholder="Opcional">
+      </div>
+      <div class="form-field">
+        <label>IVA %</label>
+        <input type="number" step="0.01" class="line-vat" placeholder="Opcional">
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="button" class="btn-primary" style="background:#DC2626;" onclick="removeDeliveryNoteLineRow(this)">Eliminar</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- Overlay global para generación de facturas desde albaranes -->
+  <div id="invoiceGenerationOverlay" class="overlay-mask" style="display:none;align-items:center;justify-content:center;z-index:1200;">
+    <div class="drawer-loading-box" style="display:flex;flex-direction:column;align-items:center;gap:12px;background:#FFFFFF;border:1px solid #E5E7EB;padding:20px 32px;border-radius:14px;box-shadow:0 10px 40px rgba(15,23,42,0.25);min-width:320px;">
+      <img src="{% static 'images/SBA-loader.png' %}" alt="Generando factura" style="width:72px;height:72px;animation:sba-spin 0.9s linear infinite;transform-origin:50% 50%;">
+      <div style="font-weight:600;color:#111827;font-size:16px;">Generando factura desde albarán…</div>
+      <div style="color:#6B7280;font-size:13px;text-align:center;max-width:260px;">Estamos procesando el albarán para generar la factura correspondiente.</div>
+    </div>
+  </div>
+
+</section>
+
+<script>
+const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+let DELIVERY_NOTES_DATA = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadDeliveryNotes();
+  setupPdfDropzone();
+  setupDeliveryNoteSearch();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('openDrawer') === 'deliveryNote') {
+    openDeliveryNoteDrawer();
+  }
+});
+
+function loadDeliveryNotes() {
+  fetch('/api/show-table-delivery-notes-received/')
+    .then(response => response.json())
+    .then(data => {
+      DELIVERY_NOTES_DATA = data.delivery_notes || [];
+      renderDeliveryNotesTable();
+    })
+    .catch(error => {
+      console.error('Error loading delivery notes:', error);
+    });
+}
+
+function renderDeliveryNotesTable() {
+  const tbody = document.querySelector('.delivery-notes-tbody');
+  tbody.innerHTML = '';
+
+  if (DELIVERY_NOTES_DATA.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay albaranes recibidos</td></tr>';
+    return;
+  }
+
+  DELIVERY_NOTES_DATA.forEach(note => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td style="padding:14px 18px;">
+        <div style="font-weight:600;">${note.delivery_note_number}</div>
+        ${note.pdf_file ? `<div style="font-size:12px;color:#6B7280;"><a href="${note.pdf_file}" target="_blank">Ver PDF</a></div>` : ''}
+      </td>
+      <td style="padding:14px 18px;">${note.supplier_name}</td>
+      <td style="padding:14px 18px;">${note.supplier_email || '-'}</td>
+      <td style="padding:14px 18px;">${note.issue_date}</td>
+      <td style="padding:14px 18px;">${note.delivery_date || '-'}</td>
+      <td style="padding:14px 18px;">
+        ${note.total_amount ? `<div style="font-weight:600;">€${parseFloat(note.total_amount).toFixed(2)}</div>` : '-'}
+      </td>
+      <td style="padding:14px 18px;">
+        <span class="badge bg-${note.status === 'invoiced' ? 'success' : note.status === 'cancelled' ? 'danger' : 'warning'}">
+          ${note.status === 'invoiced' ? 'Facturado' : note.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
+        </span>
+      </td>
+      <td style="padding:14px 18px;" class="text-right">
+        <div class="btn-group" role="group">
+          <button class="btn btn-sm btn-outline-primary" onclick="viewDeliveryNote(${note.id})" title="Ver">
+            <i class="bi bi-eye"></i>
+          </button>
+          ${IS_ADMIN ? `
+            <button class="btn btn-sm btn-outline-secondary" onclick="editDeliveryNote(${note.id})" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </button>
+            ${note.status === 'pending' ? `
+              <button class="btn btn-sm btn-outline-success" onclick="generateInvoiceFromDeliveryNote(${note.id})" title="Generar factura">
+                <i class="bi bi-file-earmark-text"></i>
+              </button>
+            ` : ''}
+          ` : ''}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function setupPdfDropzone() {
+  const dropzone = document.getElementById('pdfDropzone');
+  const input = document.getElementById('pdfInput');
+  const fileName = document.getElementById('pdfFileName');
+
+  dropzone.addEventListener('click', () => input.click());
+  
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.style.background = '#F3F4F6';
+  });
+
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.style.background = '#F9FAFB';
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.background = '#F9FAFB';
+    handleFiles(e.dataTransfer.files);
+  });
+
+  input.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+  });
+
+  function handleFiles(files) {
+    if (files.length > 0) {
+      const fileNames = Array.from(files).map(f => f.name).join(', ');
+      fileName.textContent = `Archivos seleccionados: ${fileNames}`;
+    }
+  }
+}
+
+function setupDeliveryNoteSearch() {
+  const searchInput = document.getElementById('deliveryNoteSearch');
+  searchInput.addEventListener('input', (e) => {
+    const searchTerm = e.target.value.toLowerCase();
+    const filtered = DELIVERY_NOTES_DATA.filter(note => 
+      note.delivery_note_number.toLowerCase().includes(searchTerm) ||
+      note.supplier_name.toLowerCase().includes(searchTerm) ||
+      (note.supplier_email && note.supplier_email.toLowerCase().includes(searchTerm))
+    );
+    
+    const originalData = DELIVERY_NOTES_DATA;
+    DELIVERY_NOTES_DATA = filtered;
+    renderDeliveryNotesTable();
+    DELIVERY_NOTES_DATA = originalData;
+  });
+}
+
+function openDeliveryNoteDrawer() {
+  document.getElementById('deliveryNoteOverlay').style.display = 'block';
+  document.getElementById('deliveryNoteDrawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('deliveryNoteDrawer').style.right = '0';
+}
+
+function closeDeliveryNoteDrawer() {
+  document.getElementById('deliveryNoteOverlay').style.display = 'none';
+  document.getElementById('deliveryNoteDrawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('deliveryNoteDrawer').style.right = '-440px';
+  document.getElementById('deliveryNoteForm').reset();
+  document.getElementById('pdfFileName').textContent = '';
+}
+
+function submitDeliveryNote(event) {
+  event.preventDefault();
+  // Implementar funcionalidad de subida
+  console.log('Subir albarán - funcionalidad por implementar');
+}
+
+function closeDeliveryNoteEditDrawer() {
+  document.getElementById('deliveryNoteEditOverlay').style.display = 'none';
+  document.getElementById('deliveryNoteEditDrawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('deliveryNoteEditDrawer').style.right = '-440px';
+}
+
+function submitDeliveryNoteEdit(event) {
+  event.preventDefault();
+  // Implementar funcionalidad de edición
+  console.log('Editar albarán - funcionalidad por implementar');
+}
+
+function addDeliveryNoteLineRow() {
+  const container = document.getElementById('deliveryNoteLinesContainer');
+  const template = document.getElementById('deliveryNoteLineRowTpl');
+  const clone = template.content.cloneNode(true);
+  container.appendChild(clone);
+}
+
+function removeDeliveryNoteLineRow(button) {
+  button.closest('.card').remove();
+}
+
+function viewDeliveryNote(id) {
+  // Implementar funcionalidad de vista
+  console.log('Ver albarán', id);
+}
+
+function editDeliveryNote(id) {
+  // Implementar funcionalidad de edición
+  console.log('Editar albarán', id);
+}
+
+function generateInvoiceFromDeliveryNote(id) {
+  // Implementar funcionalidad de generación de factura
+  console.log('Generar factura desde albarán', id);
+}
+</script>
+{% endblock %}
