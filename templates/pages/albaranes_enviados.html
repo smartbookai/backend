@@ -196,9 +196,13 @@ function loadDeliveryNotes() {
   fetch('/api/show-table-delivery-notes-sent/')
     .then(response => response.json())
     .then(data => {
-      DELIVERY_NOTES_DATA = data.delivery_notes || [];
+      const delivery_notes = data.delivery_notes || [];
+      DELIVERY_NOTES_DATA = delivery_notes;
       console.log('Datos cargados:', DELIVERY_NOTES_DATA); // Debug
-      renderDeliveryNotesTable();
+      const input = document.getElementById('deliveryNoteSearch');
+      const term = input ? (input.value || '').trim().toLowerCase() : '';
+      const rows = term ? filterDeliveryNotes(term) : DELIVERY_NOTES_DATA;
+      renderDeliveryNotesTable(rows);
     })
     .catch(error => {
       console.error('Error loading delivery notes:', error);
@@ -285,19 +289,28 @@ function setupPdfDropzone() {
 }
 
 function setupDeliveryNoteSearch() {
-  const searchInput = document.getElementById('deliveryNoteSearch');
-  searchInput.addEventListener('input', (e) => {
-    const searchTerm = e.target.value.toLowerCase();
-    const filtered = DELIVERY_NOTES_DATA.filter(note => 
-      note.delivery_note_number.toLowerCase().includes(searchTerm) ||
-      note.client_name.toLowerCase().includes(searchTerm) ||
-      (note.client_email && note.client_email.toLowerCase().includes(searchTerm))
-    );
-    
-    const originalData = DELIVERY_NOTES_DATA;
-    DELIVERY_NOTES_DATA = filtered;
-    renderDeliveryNotesTable();
-    DELIVERY_NOTES_DATA = originalData;
+  const input = document.getElementById('deliveryNoteSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    const rows = filterDeliveryNotes(term);
+    renderDeliveryNotesTable(rows);
+  });
+}
+
+function filterDeliveryNotes(term) {
+  if (!term) return DELIVERY_NOTES_DATA;
+  return DELIVERY_NOTES_DATA.filter(dn => {
+    const fields = [
+      dn.delivery_note_number,
+      dn.client_name,
+      dn.issue_date,
+      dn.delivery_date,
+      dn.total_amount,
+      dn.status,
+      dn.delivery_method,
+    ];
+    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
   });
 }
 
