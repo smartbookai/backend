@@ -29,7 +29,6 @@
             <tr>
               <th class="table-header" style="padding:14px 18px;">Albarán</th>
               <th class="table-header" style="padding:14px 18px;">Cliente</th>
-              <th class="table-header" style="padding:14px 18px;">Email</th>
               <th class="table-header" style="padding:14px 18px;">Fecha</th>
               <th class="table-header" style="padding:14px 18px;">Entrega</th>
               <th class="table-header" style="padding:14px 18px;">Importe</th>
@@ -177,7 +176,7 @@
 </section>
 
 <script>
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = true; // Disponible para todos los usuarios
 let DELIVERY_NOTES_DATA = [];
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -191,64 +190,60 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadDeliveryNotes() {
+  const tbody = document.querySelector('.delivery-notes-tbody');
+  if (!tbody) return;
+
   fetch('/api/show-table-delivery-notes-sent/')
     .then(response => response.json())
     .then(data => {
       DELIVERY_NOTES_DATA = data.delivery_notes || [];
+      console.log('Datos cargados:', DELIVERY_NOTES_DATA); // Debug
       renderDeliveryNotesTable();
     })
     .catch(error => {
       console.error('Error loading delivery notes:', error);
+      tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px;">Error al cargar albaranes enviados</td></tr>';
     });
 }
 
-function renderDeliveryNotesTable() {
+function renderDeliveryNotesTable(rows) {
   const tbody = document.querySelector('.delivery-notes-tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (DELIVERY_NOTES_DATA.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay albaranes enviados</td></tr>';
+  // Si no se pasan rows, usar los datos globales
+  const dataToRender = rows || DELIVERY_NOTES_DATA;
+
+  if (!dataToRender || dataToRender.length === 0) {
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay albaranes enviados.</td></tr>';
     return;
   }
 
-  DELIVERY_NOTES_DATA.forEach(note => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td style="padding:14px 18px;">
-        <div style="font-weight:600;">${note.delivery_note_number}</div>
-        ${note.pdf_file ? `<div style="font-size:12px;color:#6B7280;"><a href="${note.pdf_file}" target="_blank">Ver PDF</a></div>` : ''}
-      </td>
-      <td style="padding:14px 18px;">${note.client_name}</td>
-      <td style="padding:14px 18px;">${note.client_email || '-'}</td>
-      <td style="padding:14px 18px;">${note.issue_date}</td>
-      <td style="padding:14px 18px;">${note.delivery_date || '-'}</td>
-      <td style="padding:14px 18px;">
-        ${note.total_amount ? `<div style="font-weight:600;">€${parseFloat(note.total_amount).toFixed(2)}</div>` : '-'}
-      </td>
-      <td style="padding:14px 18px;">
-        <span class="badge bg-${note.status === 'invoiced' ? 'success' : note.status === 'cancelled' ? 'danger' : 'warning'}">
-          ${note.status === 'invoiced' ? 'Facturado' : note.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-        </span>
-      </td>
-      <td style="padding:14px 18px;" class="text-right">
-        <div class="btn-group" role="group">
-          <button class="btn btn-sm btn-outline-primary" onclick="viewDeliveryNote(${note.id})" title="Ver">
-            <i class="bi bi-eye"></i>
-          </button>
-          ${IS_ADMIN ? `
-            <button class="btn btn-sm btn-outline-secondary" onclick="editDeliveryNote(${note.id})" title="Editar">
-              <i class="bi bi-pencil"></i>
-            </button>
-            ${note.status === 'pending' ? `
-              <button class="btn btn-sm btn-outline-success" onclick="generateInvoiceFromDeliveryNote(${note.id})" title="Generar factura">
-                <i class="bi bi-file-earmark-text"></i>
-              </button>
-            ` : ''}
-          ` : ''}
+  dataToRender.forEach(dn => {
+    const actions = IS_ADMIN
+      ? `
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editDeliveryNote(${dn.id})">Editar</button>
+          <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteDeliveryNote(${dn.id})">Eliminar</button>
         </div>
+      `
+      : `<span style="color:#9CA3AF;">-</span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">
+        ${dn.delivery_note_number || '-'}
+      </td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.client_name || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.issue_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.delivery_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.total_amount || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.status || '-'}</td>
+      <td class="table-cell text-right" style="padding:14px 18px;">
+        ${actions}
       </td>
     `;
-    tbody.appendChild(row);
+    tbody.appendChild(tr);
   });
 }
 
@@ -331,15 +326,94 @@ function closeDeliveryNoteEditDrawer() {
 
 function submitDeliveryNoteEdit(event) {
   event.preventDefault();
-  // Implementar funcionalidad de edición
-  console.log('Editar albarán - funcionalidad por implementar');
+  const form = event.target;
+  const id = form.dataset.deliveryNoteId;
+
+  // Recolectar datos del formulario
+  const formData = {
+    delivery_note_number: form.delivery_note_number.value,
+    issue_date: form.issue_date.value,
+    delivery_date: form.delivery_date.value,
+    delivery_method: form.delivery_method.value,
+    base_amount: form.base_amount.value,
+    tax_amount: form.tax_amount.value,
+    total_amount: form.total_amount.value,
+    status: form.status.value,
+    client_name: form.client_name.value,
+    lines: []
+  };
+
+  // Recolectar líneas
+  const lineDivs = document.querySelectorAll('#deliveryNoteLinesContainer .card');
+  lineDivs.forEach(lineDiv => {
+    const line = {
+      description: lineDiv.querySelector('.line-desc').value,
+      quantity: lineDiv.querySelector('.line-qty').value,
+      reference: lineDiv.querySelector('.line-ref').value,
+      unit_price: lineDiv.querySelector('.line-price').value,
+      vat_rate: lineDiv.querySelector('.line-vat').value
+    };
+    if (line.description) {
+      formData.lines.push(line);
+    }
+  });
+
+  // Enviar datos al servidor
+  fetch(`/api/delivery-notes/${id}/update/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify(formData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      closeDeliveryNoteEditDrawer();
+      loadDeliveryNotes(); // Recargar la tabla
+    } else {
+      alert(data.message || 'Error al actualizar el albarán');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al actualizar el albarán');
+  });
 }
 
 function addDeliveryNoteLineRow() {
   const container = document.getElementById('deliveryNoteLinesContainer');
-  const template = document.getElementById('deliveryNoteLineRowTpl');
-  const clone = template.content.cloneNode(true);
-  container.appendChild(clone);
+  const lineDiv = document.createElement('div');
+  lineDiv.className = 'card';
+  lineDiv.style.cssText = 'padding:10px; margin-bottom:8px;';
+  lineDiv.innerHTML = `
+    <input type="hidden" class="line-id" />
+    <div class="form-field">
+      <label>Descripción</label>
+      <input type="text" class="line-desc" placeholder="Ej: Producto entregado" />
+    </div>
+    <div class="form-field">
+      <label>Cantidad</label>
+      <input type="number" step="0.01" class="line-qty" value="1" />
+    </div>
+    <div class="form-field">
+      <label>Referencia</label>
+      <input type="text" class="line-ref" placeholder="Ej: SKU-001" />
+    </div>
+    <div class="form-field">
+      <label>Precio unitario</label>
+      <input type="number" step="0.01" class="line-price" placeholder="Opcional" />
+    </div>
+    <div class="form-field">
+      <label>IVA %</label>
+      <input type="number" step="0.01" class="line-vat" value="21" placeholder="Opcional" />
+    </div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" class="btn-primary" style="background:#DC2626;" onclick="removeDeliveryNoteLineRow(this)">Eliminar</button>
+    </div>
+  `;
+  container.appendChild(lineDiv);
 }
 
 function removeDeliveryNoteLineRow(button) {
@@ -352,8 +426,113 @@ function viewDeliveryNote(id) {
 }
 
 function editDeliveryNote(id) {
-  // Implementar funcionalidad de edición
-  console.log('Editar albarán', id);
+  const deliveryNote = DELIVERY_NOTES_DATA.find(dn => dn.id === id);
+  if (!deliveryNote) return;
+
+  const form = document.getElementById('deliveryNoteEditForm');
+  
+  // Cargar datos básicos
+  form.delivery_note_number.value = deliveryNote.delivery_note_number || '';
+  form.issue_date.value = deliveryNote.issue_date ? deliveryNote.issue_date.split('/').reverse().join('-') : '';
+  form.delivery_date.value = deliveryNote.delivery_date ? deliveryNote.delivery_date.split('/').reverse().join('-') : '';
+  form.delivery_method.value = deliveryNote.delivery_method || '';
+  form.base_amount.value = deliveryNote.base_amount || '';
+  form.tax_amount.value = deliveryNote.tax_amount || '';
+  form.total_amount.value = deliveryNote.total_amount || '';
+  form.status.value = deliveryNote.status || 'pending';
+  form.client_name.value = deliveryNote.client_name || '';
+
+  // Guardar el ID del albarán
+  form.dataset.deliveryNoteId = id;
+
+  // Cargar líneas
+  const linesContainer = document.getElementById('deliveryNoteLinesContainer');
+  linesContainer.innerHTML = '';
+
+  if (deliveryNote.lines && deliveryNote.lines.length > 0) {
+    deliveryNote.lines.forEach((line, index) => {
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'card';
+      lineDiv.style.cssText = 'padding:10px; margin-bottom:8px;';
+      lineDiv.innerHTML = `
+        <input type="hidden" class="line-id" value="${index}" />
+        <div class="form-field">
+          <label>Descripción</label>
+          <input type="text" class="line-desc" value="${line.description || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Cantidad</label>
+          <input type="number" step="0.01" class="line-qty" value="${line.quantity || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Referencia</label>
+          <input type="text" class="line-ref" value="${line.reference || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Precio unitario</label>
+          <input type="number" step="0.01" class="line-price" value="${line.unit_price || ''}" />
+        </div>
+        <div class="form-field">
+          <label>IVA %</label>
+          <input type="number" step="0.01" class="line-vat" value="${line.vat_rate || ''}" />
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="button" class="btn-primary" style="background:#DC2626;" onclick="removeDeliveryNoteLineRow(this)">Eliminar</button>
+        </div>
+      `;
+      linesContainer.appendChild(lineDiv);
+    });
+  } else {
+    // Si no hay líneas, añadir una línea vacía
+    addDeliveryNoteLineRow();
+  }
+
+  // Abrir el drawer
+  openDeliveryNoteEditDrawer();
+}
+
+function deleteDeliveryNote(id) {
+  if (!confirm('¿Estás seguro de que quieres eliminar este albarán?')) return;
+
+  fetch(`/api/delivery-notes/${id}/delete/`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken')
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      loadDeliveryNotes();
+    } else {
+      alert(data.message || 'Error al eliminar el albarán');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al eliminar el albarán');
+  });
+}
+
+function openDeliveryNoteEditDrawer() {
+  document.getElementById('deliveryNoteEditOverlay').style.display = 'block';
+  document.getElementById('deliveryNoteEditDrawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('deliveryNoteEditDrawer').style.right = '0';
+}
+
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
 }
 
 function generateInvoiceFromDeliveryNote(id) {

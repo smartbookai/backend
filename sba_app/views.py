@@ -24,7 +24,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 
 from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
-    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance
+    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, DeliveryNoteLine
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
     process_invoice_header_only
@@ -663,7 +663,20 @@ def albaranes_recibidos(request):
 
 @login_required
 def albaranes_enviados(request):
-    return render(request, 'pages/albaranes_enviados.html')
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener albaranes enviados de la empresa
+        delivery_notes = SalesDeliveryNote.objects.filter(company=company).order_by('-issue_date')
+        
+        context = {
+            'delivery_notes': delivery_notes,
+        }
+        return render(request, 'pages/albaranes_enviados.html', context)
+    except CompanyUser.DoesNotExist:
+        return render(request, 'pages/albaranes_enviados.html')
 
 
 @login_required
@@ -5629,3 +5642,330 @@ def api_create_manual_payroll(request):
             'success': False,
             'message': f'Error al generar la nómina: {str(e)}'
         }, status=500)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def api_create_manual_delivery_note(request):
+    """
+    Crea un albarán manualmente desde el formulario de generar_albaran.html
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener datos del formulario
+        client_id = request.POST.get('client')
+        delivery_note_number = request.POST.get('delivery_note_number')
+        issue_date_str = request.POST.get('issue_date')
+        delivery_date_str = request.POST.get('delivery_date')
+        delivery_method = request.POST.get('delivery_method')
+        base_amount = request.POST.get('base_amount')
+        tax_amount = request.POST.get('tax_amount')
+        total_amount = request.POST.get('total_amount')
+        notes = request.POST.get('notes')
+        
+        # Cuentas contables
+        account_income = request.POST.get('account_income')
+        account_customer = request.POST.get('account_customer')
+        account_vat_output = request.POST.get('account_vat_output')
+        
+        # Líneas del albarán
+        descriptions = request.POST.getlist('line_description[]')
+        quantities = request.POST.getlist('line_quantity[]')
+        references = request.POST.getlist('line_reference[]')
+        unit_prices = request.POST.getlist('line_unit_price[]')
+        vat_rates = request.POST.getlist('line_vat_rate[]')
+        
+        # Validaciones básicas
+        if not client_id or not delivery_note_number or not issue_date_str:
+            return JsonResponse({
+                "success": False, 
+                "message": "Faltan campos obligatorios: cliente, número de albarán o fecha de emisión"
+            }, status=400)
+        
+        # Convertir fechas
+        issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+        delivery_date = datetime.strptime(delivery_date_str, '%Y-%m-%d').date() if delivery_date_str else None
+        
+        # Verificar que no exista un albarán con el mismo número
+        if SalesDeliveryNote.objects.filter(company=company, delivery_note_number=delivery_note_number).exists():
+            return JsonResponse({
+                "success": False, 
+                "message": "Ya existe un albarán con este número. Por favor, verifica que no esté duplicado."
+            }, status=400)
+        
+        # Obtener cliente
+        try:
+            client = Client.objects.get(id=client_id, company=company)
+        except Client.DoesNotExist:
+            return JsonResponse({
+                "success": False, 
+                "message": "El cliente seleccionado no es válido"
+            }, status=400)
+        
+        # Crear albarán
+        delivery_note = SalesDeliveryNote.objects.create(
+            company=company,
+            client=client,
+            delivery_note_number=delivery_note_number,
+            issue_date=issue_date,
+            delivery_date=delivery_date,
+            delivery_method=delivery_method if delivery_method else None,
+            base_amount=Decimal(base_amount) if base_amount else None,
+            tax_amount=Decimal(tax_amount) if tax_amount else None,
+            total_amount=Decimal(total_amount) if total_amount else None,
+            notes=notes if notes else None,
+            account_income=account_income if account_income else None,
+            account_customer=account_customer if account_customer else None,
+            account_vat_output=account_vat_output if account_vat_output else None,
+        )
+        
+        # Crear líneas del albarán
+        for i, description in enumerate(descriptions):
+            if description.strip():  # Solo crear líneas con descripción
+                DeliveryNoteLine.objects.create(
+                    sales_delivery_note=delivery_note,
+                    description=description.strip(),
+                    quantity=Decimal(quantities[i]) if quantities[i] else Decimal('1.00'),
+                    reference=references[i] if references[i] else '',
+                    unit_price=Decimal(unit_prices[i]) if unit_prices[i] else None,
+                    vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else None,
+                )
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Albarán creado correctamente",
+            "delivery_note_id": delivery_note.id,
+            "delivery_note_number": delivery_note.delivery_note_number
+        })
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_create_manual_delivery_note:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al crear el albarán: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def api_show_table_delivery_notes_sent(request):
+    """
+    API para mostrar los albaranes enviados en formato tabla (similar a facturas)
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener albaranes enviados con sus líneas
+        delivery_notes = SalesDeliveryNote.objects.filter(company=company).prefetch_related('lines').order_by('-issue_date')
+        
+        # Convertir a formato JSON
+        delivery_notes_data = []
+        for dn in delivery_notes:
+            # Obtener información de líneas
+            lines_info = []
+            for line in dn.lines.all():
+                lines_info.append({
+                    'description': line.description,
+                    'quantity': str(line.quantity),
+                    'reference': line.reference or '',
+                    'unit_price': str(line.unit_price) if line.unit_price else '',
+                    'vat_rate': str(line.vat_rate) if line.vat_rate else '',
+                })
+            
+            delivery_notes_data.append({
+                'id': dn.id,
+                'delivery_note_number': dn.delivery_note_number,
+                'issue_date': dn.issue_date.strftime('%d/%m/%Y'),
+                'delivery_date': dn.delivery_date.strftime('%d/%m/%Y') if dn.delivery_date else '',
+                'client_name': dn.client.name,
+                'client_id': dn.client.id,
+                'delivery_method': dn.delivery_method or '',
+                'base_amount': str(dn.base_amount) if dn.base_amount else '0.00',
+                'tax_amount': str(dn.tax_amount) if dn.tax_amount else '0.00',
+                'total_amount': str(dn.total_amount) if dn.total_amount else '0.00',
+                'status': dn.status,
+                'notes': dn.notes or '',
+                'lines': lines_info,
+                'has_amounts': bool(dn.total_amount and dn.total_amount > 0),
+                'created_at': dn.created_at.strftime('%d/%m/%Y %H:%M'),
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'delivery_notes': delivery_notes_data
+        })
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_show_table_delivery_notes_sent:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al cargar los albaranes: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def api_update_delivery_note(request, delivery_note_id):
+    """
+    API para actualizar un albarán existente
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener el albarán
+        try:
+            delivery_note = SalesDeliveryNote.objects.get(id=delivery_note_id, company=company)
+        except SalesDeliveryNote.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Albarán no encontrado'
+            }, status=404)
+        
+        # Obtener datos del formulario
+        data = json.loads(request.body)
+        
+        # Campos básicos
+        delivery_note.delivery_note_number = data.get('delivery_note_number', delivery_note.delivery_note_number)
+        delivery_note.issue_date = datetime.strptime(data.get('issue_date', delivery_note.issue_date.strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+        delivery_note.delivery_date = datetime.strptime(data.get('delivery_date', delivery_note.delivery_date.strftime('%Y-%m-%d') if delivery_note.delivery_date else ''), '%Y-%m-%d').date() if data.get('delivery_date') else delivery_note.delivery_date
+        delivery_note.delivery_method = data.get('delivery_method', delivery_note.delivery_method)
+        delivery_note.status = data.get('status', delivery_note.status)
+        delivery_note.notes = data.get('notes', delivery_note.notes)
+        
+        # Importes (si se proporcionan)
+        if data.get('base_amount'):
+            delivery_note.base_amount = Decimal(data['base_amount'])
+        if data.get('tax_amount'):
+            delivery_note.tax_amount = Decimal(data['tax_amount'])
+        if data.get('total_amount'):
+            delivery_note.total_amount = Decimal(data['total_amount'])
+        
+        # Guardar cambios básicos
+        delivery_note.save()
+        
+        # Procesar líneas
+        lines_data = data.get('lines', [])
+        
+        # Eliminar líneas existentes
+        delivery_note.lines.all().delete()
+        
+        # Crear nuevas líneas
+        for line_data in lines_data:
+            if line_data.get('description'):  # Solo crear líneas con descripción
+                DeliveryNoteLine.objects.create(
+                    sales_delivery_note=delivery_note,
+                    description=line_data['description'].strip(),
+                    quantity=Decimal(line_data.get('quantity', '1.00')),
+                    reference=line_data.get('reference', ''),
+                    unit_price=Decimal(line_data.get('unit_price', '0')) if line_data.get('unit_price') else None,
+                    vat_rate=Decimal(line_data.get('vat_rate', '0')) if line_data.get('vat_rate') else None,
+                )
+        
+        # Recalcular totales si hay importes
+        if delivery_note.base_amount is not None or any(line.unit_price for line in delivery_note.lines.all()):
+            recalculate_delivery_note_totals(delivery_note)
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Albarán actualizado correctamente',
+            'delivery_note_id': delivery_note.id,
+            'delivery_note_number': delivery_note.delivery_note_number
+        })
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_update_delivery_note:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al actualizar el albarán: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def api_delete_delivery_note(request, delivery_note_id):
+    """
+    API para eliminar un albarán
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener y eliminar el albarán
+        try:
+            delivery_note = SalesDeliveryNote.objects.get(id=delivery_note_id, company=company)
+            delivery_note_number = delivery_note.delivery_note_number
+            delivery_note.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Albarán {delivery_note_number} eliminado correctamente'
+            })
+        except SalesDeliveryNote.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Albarán no encontrado'
+            }, status=404)
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_delete_delivery_note:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al eliminar el albarán: {str(e)}'
+        }, status=500)
+
+
+def recalculate_delivery_note_totals(delivery_note):
+    """
+    Recalcula los totales de un albarán basándose en sus líneas
+    """
+    base_amount = Decimal('0.00')
+    tax_amount = Decimal('0.00')
+    
+    for line in delivery_note.lines.all():
+        if line.unit_price:
+            subtotal = line.quantity * line.unit_price
+            base_amount += subtotal
+            
+            if line.vat_rate:
+                tax_amount += subtotal * (line.vat_rate / 100)
+    
+    total_amount = base_amount + tax_amount
+    
+    delivery_note.base_amount = base_amount if base_amount > 0 else None
+    delivery_note.tax_amount = tax_amount if tax_amount > 0 else None
+    delivery_note.total_amount = total_amount if total_amount > 0 else None
+    delivery_note.save()
