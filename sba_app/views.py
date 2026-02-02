@@ -5706,8 +5706,8 @@ def api_create_manual_delivery_note(request):
                 "message": "El cliente seleccionado no es válido"
             }, status=400)
 
-        # Determinar si hay importes
-        has_amounts = request.POST.get('has_amounts') == 'on'
+        # Determinar si hay importes (si alguna línea tiene precio unitario)
+        has_line_amounts = any(unit_prices[i] and unit_prices[i].strip() for i in range(len(unit_prices)))
 
         # Crear albarán
         delivery_note = SalesDeliveryNote.objects.create(
@@ -5717,9 +5717,9 @@ def api_create_manual_delivery_note(request):
             issue_date=issue_date,
             delivery_date=delivery_date,
             delivery_method=delivery_method if delivery_method else None,
-            base_amount=Decimal(base_amount) if has_amounts and base_amount else None,
-            tax_amount=Decimal(tax_amount) if has_amounts and tax_amount else None,
-            total_amount=Decimal(total_amount) if has_amounts and total_amount else None,
+            base_amount=Decimal(base_amount) if has_line_amounts and base_amount else None,
+            tax_amount=Decimal(tax_amount) if has_line_amounts and tax_amount else None,
+            total_amount=Decimal(total_amount) if has_line_amounts and total_amount else None,
             notes=notes if notes else None,
             account_income=account_income if account_income else None,
             account_customer=account_customer if account_customer else None,
@@ -5729,16 +5729,9 @@ def api_create_manual_delivery_note(request):
         # Crear líneas del albarán
         for i, description in enumerate(descriptions):
             if description.strip():  # Solo crear líneas con descripción
-                # Determinar si hay importes
-                has_amounts = request.POST.get('has_amounts') == 'on'
-
-                # Solo procesar precios si se marcó el checkbox de importes
-                unit_price = None
-                vat_rate = None
-
-                if has_amounts:
-                    unit_price = Decimal(unit_prices[i]) if unit_prices[i] and unit_prices[i].strip() else None
-                    vat_rate = Decimal(vat_rates[i]) if vat_rates[i] and vat_rates[i].strip() else None
+                # Procesar precios si la línea tiene precio unitario
+                unit_price = Decimal(unit_prices[i]) if unit_prices[i] and unit_prices[i].strip() else None
+                vat_rate = Decimal(vat_rates[i]) if vat_rates[i] and vat_rates[i].strip() else None
 
                 DeliveryNoteLine.objects.create(
                     sales_delivery_note=delivery_note,
@@ -6000,3 +5993,61 @@ def recalculate_delivery_note_totals(delivery_note):
     delivery_note.tax_amount = tax_amount if tax_amount > 0 else None
     delivery_note.total_amount = total_amount if total_amount > 0 else None
     delivery_note.save()
+
+
+@login_required
+@require_POST
+def api_upload_delivery_note(request):
+    """
+    API para subir y procesar un albarán con OpenAI
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+
+        # Verificar que se subió un archivo
+        if 'delivery_note_file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No se ha subido ningún archivo'
+            }, status=400)
+
+        file = request.FILES['delivery_note_file']
+
+        # Validar que sea un PDF
+        if not file.name.lower().endswith('.pdf'):
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo debe ser un PDF'
+            }, status=400)
+
+        # Validar tamaño del archivo (10MB máximo)
+        if file.size > 10 * 1024 * 1024:
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo no puede superar los 10MB'
+            }, status=400)
+
+        # Procesar el albarán con el servicio
+        from sba_app.services.delivery_note_service import DeliveryNoteService
+        delivery_note_service = DeliveryNoteService(company)
+
+        result = delivery_note_service.process_delivery_note_from_file(file)
+
+        if result['success']:
+            return JsonResponse(result)
+        else:
+            return JsonResponse(result, status=400)
+
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Usuario no asociado a ninguna empresa'
+        }, status=403)
+    except Exception as e:
+        logger.error(f"Error en api_upload_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error procesando el albarán: {str(e)}'
+        }, status=500)
