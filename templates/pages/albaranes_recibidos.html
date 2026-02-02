@@ -29,7 +29,6 @@
             <tr>
               <th class="table-header" style="padding:14px 18px;">Albarán</th>
               <th class="table-header" style="padding:14px 18px;">Proveedor</th>
-              <th class="table-header" style="padding:14px 18px;">Email</th>
               <th class="table-header" style="padding:14px 18px;">Fecha</th>
               <th class="table-header" style="padding:14px 18px;">Entrega</th>
               <th class="table-header" style="padding:14px 18px;">Importe</th>
@@ -61,19 +60,16 @@
     </div>
     <form id="purchaseDeliveryNoteForm" onsubmit="submitPurchaseDeliveryNote(event)" enctype="multipart/form-data">
       <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
-          <i class="fas fa-file-pdf" style="font-size:48px;color:#9CA3AF;"></i>
-          <div>
-            <div style="font-weight:600;color:#374151;">Arrastra el PDF del albarán aquí</div>
-            <div style="color:#6B7280;font-size:14px;margin-top:4px;">o haz clic para seleccionar</div>
-          </div>
-          <div id="pdfFileName" style="color:#059669;font-size:14px;font-weight:500;"></div>
-        </div>
-        <input type="file" id="pdfInput" name="purchase_delivery_note_file" accept=".pdf" style="display:none;" required>
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta el albarán aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF hasta 10MB</div>
+        <input id="pdfInput" name="purchase_delivery_note_file" type="file" accept="application/pdf" style="display:none;" />
+        <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
+        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">OpenAI procesará la información automáticamente</div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closePurchaseDeliveryNoteDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Procesar con OpenAI</button>
+        <button type="submit" class="btn-primary">Procesar Albarán</button>
       </div>
     </form>
   </aside>
@@ -210,48 +206,38 @@ function renderDeliveryNotesTable() {
   tbody.innerHTML = '';
 
   if (DELIVERY_NOTES_DATA.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay albaranes recibidos</td></tr>';
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay albaranes recibidos.</td></tr>';
     return;
   }
 
-  DELIVERY_NOTES_DATA.forEach(note => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td style="padding:14px 18px;">
-        <div style="font-weight:600;">${note.delivery_note_number}</div>
-        ${note.pdf_url ? `<div style="font-size:12px;color:#6B7280;"><a href="${note.pdf_url}" target="_blank">Ver PDF</a></div>` : ''}
-      </td>
-      <td style="padding:14px 18px;">${note.supplier_name}</td>
-      <td style="padding:14px 18px;">${note.supplier_email || '-'}</td>
-      <td style="padding:14px 18px;">${note.issue_date}</td>
-      <td style="padding:14px 18px;">${note.delivery_date || '-'}</td>
-      <td style="padding:14px 18px;">
-        ${note.total_amount ? `<div style="font-weight:600;">€${parseFloat(note.total_amount).toFixed(2)}</div>` : '-'}
-      </td>
-      <td style="padding:14px 18px;">
-        <span class="badge bg-${note.status === 'invoiced' ? 'success' : note.status === 'cancelled' ? 'danger' : 'warning'}">
-          ${note.status === 'invoiced' ? 'Facturado' : note.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-        </span>
-      </td>
-      <td style="padding:14px 18px;" class="text-right">
-        <div class="btn-group" role="group">
-          <button class="btn btn-sm btn-outline-primary" onclick="viewDeliveryNote(${note.id})" title="Ver">
-            <i class="bi bi-eye"></i>
-          </button>
-          ${IS_ADMIN ? `
-            <button class="btn btn-sm btn-outline-secondary" onclick="editDeliveryNote(${note.id})" title="Editar">
-              <i class="bi bi-pencil"></i>
-            </button>
-            ${note.status === 'pending' ? `
-              <button class="btn btn-sm btn-outline-success" onclick="generateInvoiceFromDeliveryNote(${note.id})" title="Generar factura">
-                <i class="bi bi-file-earmark-text"></i>
-              </button>
-            ` : ''}
-          ` : ''}
+  DELIVERY_NOTES_DATA.forEach(dn => {
+    const actions = IS_ADMIN
+      ? `
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editDeliveryNote(${dn.id})">Editar</button>
+          <button class="btn-primary" style="background:#DC2626; padding:.35rem .6rem; font-size:12px;" onclick="deleteDeliveryNote(${dn.id})">Eliminar</button>
         </div>
+      `
+      : `<span style="color:#9CA3AF;">-</span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">
+        ${dn.pdf_url
+          ? `<a href="${dn.pdf_url}" target="_blank" rel="noopener noreferrer">${dn.delivery_note_number || 'PDF'}</a>`
+          : (dn.delivery_note_number || '-')
+        }
+      </td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.supplier_name || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.issue_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.delivery_date || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.total_amount || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${dn.status || '-'}</td>
+      <td class="table-cell text-right" style="padding:14px 18px;">
+        ${actions}
       </td>
     `;
-    tbody.appendChild(row);
+    tbody.appendChild(tr);
   });
 }
 
