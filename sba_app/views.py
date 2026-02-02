@@ -5705,7 +5705,10 @@ def api_create_manual_delivery_note(request):
                 "success": False, 
                 "message": "El cliente seleccionado no es válido"
             }, status=400)
-        
+
+        # Determinar si hay importes
+        has_amounts = request.POST.get('has_amounts') == 'on'
+
         # Crear albarán
         delivery_note = SalesDeliveryNote.objects.create(
             company=company,
@@ -5714,25 +5717,36 @@ def api_create_manual_delivery_note(request):
             issue_date=issue_date,
             delivery_date=delivery_date,
             delivery_method=delivery_method if delivery_method else None,
-            base_amount=Decimal(base_amount) if base_amount else None,
-            tax_amount=Decimal(tax_amount) if tax_amount else None,
-            total_amount=Decimal(total_amount) if total_amount else None,
+            base_amount=Decimal(base_amount) if has_amounts and base_amount else None,
+            tax_amount=Decimal(tax_amount) if has_amounts and tax_amount else None,
+            total_amount=Decimal(total_amount) if has_amounts and total_amount else None,
             notes=notes if notes else None,
             account_income=account_income if account_income else None,
             account_customer=account_customer if account_customer else None,
             account_vat_output=account_vat_output if account_vat_output else None,
         )
-        
+
         # Crear líneas del albarán
         for i, description in enumerate(descriptions):
             if description.strip():  # Solo crear líneas con descripción
+                # Determinar si hay importes
+                has_amounts = request.POST.get('has_amounts') == 'on'
+
+                # Solo procesar precios si se marcó el checkbox de importes
+                unit_price = None
+                vat_rate = None
+
+                if has_amounts:
+                    unit_price = Decimal(unit_prices[i]) if unit_prices[i] and unit_prices[i].strip() else None
+                    vat_rate = Decimal(vat_rates[i]) if vat_rates[i] and vat_rates[i].strip() else None
+
                 DeliveryNoteLine.objects.create(
                     sales_delivery_note=delivery_note,
                     description=description.strip(),
                     quantity=Decimal(quantities[i]) if quantities[i] else Decimal('1.00'),
                     reference=references[i] if references[i] else '',
-                    unit_price=Decimal(unit_prices[i]) if unit_prices[i] else None,
-                    vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else None,
+                    unit_price=unit_price,
+                    vat_rate=vat_rate,
                 )
 
         # Generar PDF del albarán

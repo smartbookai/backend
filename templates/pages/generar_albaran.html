@@ -89,7 +89,7 @@
             </div>
             <div class="form-field price-field">
               <label>% IVA</label>
-              <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
+              <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="" onchange="calculateTotals()">
             </div>
             <button type="button" onclick="removeDeliveryNoteLine(this)" class="btn btn-outline-danger btn-sm" style="padding:8px 12px;border-radius:6px;">
               <i class="bi bi-trash"></i>
@@ -224,7 +224,7 @@ function addDeliveryNoteLine() {
     </div>
     <div class="form-field price-field" style="display:${priceDisplay};">
       <label>% IVA</label>
-      <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
+      <input type="number" name="line_vat_rate[]" min="0" max="100" step="0.01" value="" onchange="calculateTotals()">
     </div>
     <button type="button" onclick="removeDeliveryNoteLine(this)" class="btn btn-outline-danger btn-sm" style="padding:8px 12px;border-radius:6px;">
               <i class="bi bi-trash"></i>
