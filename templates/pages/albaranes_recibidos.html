@@ -201,16 +201,20 @@ function loadDeliveryNotes() {
     });
 }
 
-function renderDeliveryNotesTable() {
+function renderDeliveryNotesTable(rows) {
   const tbody = document.querySelector('.delivery-notes-tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (DELIVERY_NOTES_DATA.length === 0) {
+  // Si no se pasan rows, usar los datos globales
+  const dataToRender = rows || DELIVERY_NOTES_DATA;
+
+  if (!dataToRender || dataToRender.length === 0) {
     tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay albaranes recibidos.</td></tr>';
     return;
   }
 
-  DELIVERY_NOTES_DATA.forEach(dn => {
+  dataToRender.forEach(dn => {
     const actions = IS_ADMIN
       ? `
         <div style="display:flex; gap:8px; justify-content:center;">
@@ -276,19 +280,28 @@ function setupPdfDropzone() {
 }
 
 function setupDeliveryNoteSearch() {
-  const searchInput = document.getElementById('deliveryNoteSearch');
-  searchInput.addEventListener('input', (e) => {
-    const searchTerm = e.target.value.toLowerCase();
-    const filtered = DELIVERY_NOTES_DATA.filter(note => 
-      note.delivery_note_number.toLowerCase().includes(searchTerm) ||
-      note.supplier_name.toLowerCase().includes(searchTerm) ||
-      (note.supplier_email && note.supplier_email.toLowerCase().includes(searchTerm))
-    );
-    
-    const originalData = DELIVERY_NOTES_DATA;
-    DELIVERY_NOTES_DATA = filtered;
-    renderDeliveryNotesTable();
-    DELIVERY_NOTES_DATA = originalData;
+  const input = document.getElementById('deliveryNoteSearch');
+  if (!input) return;
+  input.addEventListener('input', (e) => {
+    const term = (e.target.value || '').trim().toLowerCase();
+    const rows = filterDeliveryNotes(term);
+    renderDeliveryNotesTable(rows);
+  });
+}
+
+function filterDeliveryNotes(term) {
+  if (!term) return DELIVERY_NOTES_DATA;
+  return DELIVERY_NOTES_DATA.filter(dn => {
+    const fields = [
+      dn.delivery_note_number,
+      dn.supplier_name,
+      dn.issue_date,
+      dn.delivery_date,
+      dn.total_amount,
+      dn.status,
+      dn.delivery_method,
+    ];
+    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
   });
 }
 
@@ -380,15 +393,94 @@ function closeDeliveryNoteEditDrawer() {
 
 function submitDeliveryNoteEdit(event) {
   event.preventDefault();
-  // Implementar funcionalidad de edición
-  console.log('Editar albarán - funcionalidad por implementar');
+  const form = event.target;
+  const id = form.dataset.deliveryNoteId;
+
+  // Recolectar datos del formulario
+  const formData = {
+    delivery_note_number: form.delivery_note_number.value,
+    issue_date: form.issue_date.value,
+    delivery_date: form.delivery_date.value,
+    delivery_method: form.delivery_method.value,
+    base_amount: form.base_amount.value,
+    tax_amount: form.tax_amount.value,
+    total_amount: form.total_amount.value,
+    status: form.status.value,
+    supplier_name: form.supplier_name.value,
+    lines: []
+  };
+
+  // Recolectar líneas
+  const lineDivs = document.querySelectorAll('#deliveryNoteLinesContainer .card');
+  lineDivs.forEach(lineDiv => {
+    const line = {
+      description: lineDiv.querySelector('.line-desc').value,
+      quantity: lineDiv.querySelector('.line-qty').value,
+      reference: lineDiv.querySelector('.line-ref').value,
+      unit_price: lineDiv.querySelector('.line-price').value,
+      vat_rate: lineDiv.querySelector('.line-vat').value
+    };
+    if (line.description) {
+      formData.lines.push(line);
+    }
+  });
+
+  // Enviar datos al servidor
+  fetch(`/api/purchase-delivery-notes/${id}/update/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify(formData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      closeDeliveryNoteEditDrawer();
+      loadDeliveryNotes(); // Recargar la tabla
+    } else {
+      alert(data.message || 'Error al actualizar el albarán');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al actualizar el albarán');
+  });
 }
 
 function addDeliveryNoteLineRow() {
   const container = document.getElementById('deliveryNoteLinesContainer');
-  const template = document.getElementById('deliveryNoteLineRowTpl');
-  const clone = template.content.cloneNode(true);
-  container.appendChild(clone);
+  const lineDiv = document.createElement('div');
+  lineDiv.className = 'card';
+  lineDiv.style.cssText = 'padding:10px; margin-bottom:8px;';
+  lineDiv.innerHTML = `
+    <input type="hidden" class="line-id" />
+    <div class="form-field">
+      <label>Descripción</label>
+      <input type="text" class="line-desc" placeholder="Ej: Producto recibido" />
+    </div>
+    <div class="form-field">
+      <label>Cantidad</label>
+      <input type="number" step="0.01" class="line-qty" value="1" />
+    </div>
+    <div class="form-field">
+      <label>Referencia</label>
+      <input type="text" class="line-ref" placeholder="Ej: SKU-001" />
+    </div>
+    <div class="form-field">
+      <label>Precio unitario</label>
+      <input type="number" step="0.01" class="line-price" placeholder="Opcional" />
+    </div>
+    <div class="form-field">
+      <label>IVA %</label>
+      <input type="number" step="0.01" class="line-vat" value="21" placeholder="Opcional" />
+    </div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" class="btn-primary" style="background:#DC2626;" onclick="removeDeliveryNoteLineRow(this)">Eliminar</button>
+    </div>
+  `;
+  container.appendChild(lineDiv);
 }
 
 function removeDeliveryNoteLineRow(button) {
@@ -401,8 +493,98 @@ function viewDeliveryNote(id) {
 }
 
 function editDeliveryNote(id) {
-  // Implementar funcionalidad de edición
-  console.log('Editar albarán', id);
+  const deliveryNote = DELIVERY_NOTES_DATA.find(dn => dn.id === id);
+  if (!deliveryNote) return;
+
+  const form = document.getElementById('deliveryNoteEditForm');
+  
+  // Cargar datos básicos
+  form.delivery_note_number.value = deliveryNote.delivery_note_number || '';
+  form.issue_date.value = deliveryNote.issue_date ? deliveryNote.issue_date.split('/').reverse().join('-') : '';
+  form.delivery_date.value = deliveryNote.delivery_date ? deliveryNote.delivery_date.split('/').reverse().join('-') : '';
+  form.delivery_method.value = deliveryNote.delivery_method || '';
+  form.base_amount.value = deliveryNote.base_amount || '';
+  form.tax_amount.value = deliveryNote.tax_amount || '';
+  form.total_amount.value = deliveryNote.total_amount || '';
+  form.status.value = deliveryNote.status || 'pending';
+  form.supplier_name.value = deliveryNote.supplier_name || '';
+
+  // Guardar el ID del albarán
+  form.dataset.deliveryNoteId = id;
+
+  // Cargar líneas
+  const linesContainer = document.getElementById('deliveryNoteLinesContainer');
+  linesContainer.innerHTML = '';
+
+  if (deliveryNote.lines && deliveryNote.lines.length > 0) {
+    deliveryNote.lines.forEach((line, index) => {
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'card';
+      lineDiv.style.cssText = 'padding:10px; margin-bottom:8px;';
+      lineDiv.innerHTML = `
+        <input type="hidden" class="line-id" value="${index}" />
+        <div class="form-field">
+          <label>Descripción</label>
+          <input type="text" class="line-desc" value="${line.description || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Cantidad</label>
+          <input type="number" step="0.01" class="line-qty" value="${line.quantity || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Referencia</label>
+          <input type="text" class="line-ref" value="${line.reference || ''}" />
+        </div>
+        <div class="form-field">
+          <label>Precio unitario</label>
+          <input type="number" step="0.01" class="line-price" value="${line.unit_price || ''}" />
+        </div>
+        <div class="form-field">
+          <label>IVA %</label>
+          <input type="number" step="0.01" class="line-vat" value="${line.vat_rate || ''}" />
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="button" class="btn-primary" style="background:#DC2626;" onclick="removeDeliveryNoteLineRow(this)">Eliminar</button>
+        </div>
+      `;
+      linesContainer.appendChild(lineDiv);
+    });
+  } else {
+    // Si no hay líneas, añadir una línea vacía
+    addDeliveryNoteLineRow();
+  }
+
+  // Abrir el drawer
+  openDeliveryNoteEditDrawer();
+}
+
+function deleteDeliveryNote(id) {
+  if (!confirm('¿Estás seguro de que quieres eliminar este albarán?')) return;
+
+  fetch(`/api/purchase-delivery-notes/${id}/delete/`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken')
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      loadDeliveryNotes();
+    } else {
+      alert(data.message || 'Error al eliminar el albarán');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error al eliminar el albarán');
+  });
+}
+
+function openDeliveryNoteEditDrawer() {
+  document.getElementById('deliveryNoteEditOverlay').style.display = 'block';
+  document.getElementById('deliveryNoteEditDrawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('deliveryNoteEditDrawer').style.right = '0';
 }
 
 function generateInvoiceFromDeliveryNote(id) {

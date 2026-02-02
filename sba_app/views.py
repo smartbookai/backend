@@ -6051,6 +6051,132 @@ def api_delete_delivery_note(request, delivery_note_id):
         }, status=500)
 
 
+@login_required
+def api_update_purchase_delivery_note(request, delivery_note_id):
+    """
+    API para actualizar un albarán recibido existente
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener el albarán
+        try:
+            delivery_note = PurchaseDeliveryNote.objects.get(id=delivery_note_id, company=company)
+        except PurchaseDeliveryNote.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Albarán no encontrado'
+            }, status=404)
+        
+        # Obtener datos del formulario
+        data = json.loads(request.body)
+        
+        # Campos básicos
+        delivery_note.delivery_note_number = data.get('delivery_note_number', delivery_note.delivery_note_number)
+        delivery_note.issue_date = datetime.strptime(data.get('issue_date', delivery_note.issue_date.strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+        delivery_note.delivery_date = datetime.strptime(data.get('delivery_date', delivery_note.delivery_date.strftime('%Y-%m-%d') if delivery_note.delivery_date else ''), '%Y-%m-%d').date() if data.get('delivery_date') else delivery_note.delivery_date
+        delivery_note.delivery_method = data.get('delivery_method', delivery_note.delivery_method)
+        delivery_note.status = data.get('status', delivery_note.status)
+        delivery_note.notes = data.get('notes', delivery_note.notes)
+        
+        # Importes (si se proporcionan)
+        if data.get('base_amount'):
+            delivery_note.base_amount = Decimal(data['base_amount'])
+        if data.get('tax_amount'):
+            delivery_note.tax_amount = Decimal(data['tax_amount'])
+        if data.get('total_amount'):
+            delivery_note.total_amount = Decimal(data['total_amount'])
+        
+        # Guardar cambios básicos
+        delivery_note.save()
+        
+        # Procesar líneas
+        lines_data = data.get('lines', [])
+        
+        # Eliminar líneas existentes
+        delivery_note.lines.all().delete()
+        
+        # Crear nuevas líneas
+        for line_data in lines_data:
+            if line_data.get('description'):
+                DeliveryNoteLine.objects.create(
+                    purchase_delivery_note=delivery_note,
+                    description=line_data['description'].strip(),
+                    quantity=Decimal(line_data.get('quantity', '1.00')),
+                    reference=line_data.get('reference', ''),
+                    unit_price=Decimal(line_data.get('unit_price', '0')) if line_data.get('unit_price') else None,
+                    vat_rate=Decimal(line_data.get('vat_rate', '0')) if line_data.get('vat_rate') else None,
+                )
+        
+        # Recalcular totales si hay importes
+        if delivery_note.base_amount is not None or any(line.unit_price for line in delivery_note.lines.all()):
+            recalculate_delivery_note_totals(delivery_note)
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Albarán actualizado correctamente',
+            'delivery_note_id': delivery_note.id,
+            'delivery_note_number': delivery_note.delivery_note_number
+        })
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_update_purchase_delivery_note:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al actualizar el albarán: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def api_delete_purchase_delivery_note(request, delivery_note_id):
+    """
+    API para eliminar un albarán recibido
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+        
+        # Obtener y eliminar el albarán
+        try:
+            delivery_note = PurchaseDeliveryNote.objects.get(id=delivery_note_id, company=company)
+            delivery_note_number = delivery_note.delivery_note_number
+            delivery_note.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Albarán {delivery_note_number} eliminado correctamente'
+            })
+        except PurchaseDeliveryNote.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Albarán no encontrado'
+            }, status=404)
+        
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'No tienes una empresa asociada'
+        }, status=403)
+        
+    except Exception as e:
+        import traceback
+        print(" ERROR en api_delete_purchase_delivery_note:", traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': f'Error al eliminar el albarán: {str(e)}'
+        }, status=500)
+
+
 def recalculate_delivery_note_totals(delivery_note):
     """
     Recalcula los totales de un albarán basándose en sus líneas

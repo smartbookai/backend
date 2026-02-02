@@ -34,6 +34,8 @@ urlpatterns = [
     path('api/delivery-notes-sent/manual-create/', views.api_create_manual_delivery_note, name='api_create_manual_delivery_note'),
     path('api/delivery-notes/<int:delivery_note_id>/update/', views.api_update_delivery_note, name='api_update_delivery_note'),
     path('api/delivery-notes/<int:delivery_note_id>/delete/', views.api_delete_delivery_note, name='api_delete_delivery_note'),
+    path('api/purchase-delivery-notes/<int:delivery_note_id>/update/', views.api_update_purchase_delivery_note, name='api_update_purchase_delivery_note'),
+    path('api/purchase-delivery-notes/<int:delivery_note_id>/delete/', views.api_delete_purchase_delivery_note, name='api_delete_purchase_delivery_note'),
     path('asientos-contables/', views.accounting_entries, name='accounting_entries'),
     path('asientos-contables/<int:entry_id>/', views.accounting_entry_detail, name='accounting_entry_detail'),
 
