@@ -3457,17 +3457,39 @@ def api_create_invoice_received(request):
 
         print(f"🔍 Result type: {type(result)}", file=sys.stderr)
 
+        # 🆕 DEBUGGING DETALLADO DE LA TUPLA
+        if isinstance(result, tuple):
+            print(f"✅ Es tupla. Longitud: {len(result)}", file=sys.stderr)
+            try:
+                results_list, pdf_bytes = result
+                print(f"✅ Desempaquetado OK. results_list tiene {len(results_list)} elementos", file=sys.stderr)
+                print(f"✅ pdf_bytes tiene {len(pdf_bytes)} bytes", file=sys.stderr)
+            except Exception as unpack_error:
+                print(f"❌ Error al desempaquetar tupla: {unpack_error}", file=sys.stderr)
+                import traceback
+                print(traceback.format_exc(), file=sys.stderr)
+                raise
+        else:
+            print(f"ℹ️ NO es tupla, es {type(result)}", file=sys.stderr)
+
         # Detectar si es múltiples facturas (tupla con lista y bytes) o una sola (dict)
         if isinstance(result, tuple) and len(result) == 2:
             # MODO MÚLTIPLE: PDF con varias páginas
             # La tupla contiene (lista_resultados, pdf_bytes)
             results_list, pdf_bytes = result
-            print(f" Procesando {len(results_list)} facturas desde PDF multipágina...")
+            print(f"📄 Procesando {len(results_list)} facturas desde PDF multipágina...", file=sys.stderr)
 
             # 🔍 Analizar si las páginas deben agruparse o crearse por separado
-            print("🔍 Analizando coincidencias entre páginas...")
-            groups = should_group_invoices(results_list)
-            print(f"📊 Se detectaron {len(groups)} grupo(s) de facturas")
+            print("🔍 Analizando coincidencias entre páginas...", file=sys.stderr)
+
+            try:
+                groups = should_group_invoices(results_list)
+                print(f"📊 Se detectaron {len(groups)} grupo(s) de facturas", file=sys.stderr)
+            except Exception as e:
+                print(f"❌ ERROR en should_group_invoices: {e}", file=sys.stderr)
+                import traceback
+                print(traceback.format_exc(), file=sys.stderr)
+                raise
 
             created_invoices = []
             errors = []
@@ -3475,79 +3497,104 @@ def api_create_invoice_received(request):
             base_name = original_filename.rsplit('.', 1)[0]
 
             import fitz
-            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                # 🔄 Procesar cada grupo
-                for group_idx, group_indices in enumerate(groups):
-                    if len(group_indices) == 1:
-                        # Una sola página = procesar individualmente
-                        idx = group_indices[0]
-                        single_result = results_list[idx]
-                        page_num = single_result.get("page_number", idx + 1)
-                        page_index = page_num - 1
+            print(f"📂 Abriendo PDF con fitz...", file=sys.stderr)
 
-                        if single_result.get("error"):
-                            errors.append({"page": page_num, "error": single_result.get("error")})
-                            continue
+            try:
+                with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                    print(f"✅ PDF abierto. Total páginas en doc: {len(doc)}", file=sys.stderr)
 
-                        try:
-                            # Crear un PDF con solo esta página
-                            single_page_doc = fitz.open()
-                            single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-                            single_page_bytes = single_page_doc.tobytes()
-                            single_page_doc.close()
+                    # 🔄 Procesar cada grupo
+                    for group_idx, group_indices in enumerate(groups):
+                        print(f"🔄 Procesando grupo {group_idx + 1}/{len(groups)}: {group_indices}", file=sys.stderr)
 
-                            # Crear un archivo Django para esta página
-                            from django.core.files.base import ContentFile
-                            import uuid
-                            unique_id = uuid.uuid4().hex[:8]
-                            page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
-                            page_file = ContentFile(single_page_bytes, name=page_filename)
-
-                            inv_result = _create_single_purchase_invoice(company, single_result, page_file)
-                            inv_result["page_number"] = page_num
-                            created_invoices.append(inv_result)
-                            print(f"📄 Grupo {group_idx + 1}: 1 página -> Factura {inv_result['invoice_number']}")
-                        except Exception as e:
-                            print(f"❌ Error página {page_num}: {e}")
-                            errors.append({"page": page_num, "error": str(e)})
-
-                    else:
-                        # Múltiples páginas = consolidar y crear una sola factura
-                        print(f"📄 Grupo {group_idx + 1}: {len(group_indices)} páginas consolidadas")
-
-                        # Consolidar datos
-                        consolidated_result = consolidate_invoice_group(results_list, group_indices)
-
-                        # Crear PDF con todas las páginas del grupo
-                        group_doc = fitz.open()
-                        for idx in group_indices:
-                            page_result = results_list[idx]
-                            page_num = page_result.get("page_number", idx + 1)
+                        if len(group_indices) == 1:
+                            # Una sola página = procesar individualmente
+                            idx = group_indices[0]
+                            single_result = results_list[idx]
+                            page_num = single_result.get("page_number", idx + 1)
                             page_index = page_num - 1
-                            group_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
 
-                        group_bytes = group_doc.tobytes()
-                        group_doc.close()
+                            if single_result.get("error"):
+                                print(f"⚠️ Página {page_num} tiene error: {single_result.get('error')}",
+                                      file=sys.stderr)
+                                errors.append({"page": page_num, "error": single_result.get("error")})
+                                continue
 
-                        # Crear archivo Django para el grupo
-                        from django.core.files.base import ContentFile
-                        import uuid
-                        unique_id = uuid.uuid4().hex[:8]
-                        group_filename = f"{base_name}_grupo{group_idx + 1}_{len(group_indices)}pag_{unique_id}.pdf"
-                        group_file = ContentFile(group_bytes, name=group_filename)
+                            try:
+                                # Crear un PDF con solo esta página
+                                single_page_doc = fitz.open()
+                                single_page_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+                                single_page_bytes = single_page_doc.tobytes()
+                                single_page_doc.close()
 
-                        try:
-                            inv_result = _create_single_purchase_invoice(company, consolidated_result, group_file)
-                            inv_result["page_group"] = group_indices
-                            inv_result["consolidated"] = True
-                            created_invoices.append(inv_result)
-                            print(
-                                f"✅ Factura consolidada creada: {inv_result['invoice_number']} -> archivo: {group_filename}")
-                        except Exception as e:
-                            print(f"❌ Error grupo {group_idx + 1}: {e}")
-                            errors.append({"group": group_idx + 1, "error": str(e)})
+                                # Crear un archivo Django para esta página
+                                from django.core.files.base import ContentFile
+                                import uuid
+                                unique_id = uuid.uuid4().hex[:8]
+                                page_filename = f"{base_name}_pag{page_num}_{unique_id}.pdf"
+                                page_file = ContentFile(single_page_bytes, name=page_filename)
+
+                                inv_result = _create_single_purchase_invoice(company, single_result, page_file)
+                                inv_result["page_number"] = page_num
+                                created_invoices.append(inv_result)
+                                print(f"✅ Grupo {group_idx + 1}: 1 página -> Factura {inv_result['invoice_number']}",
+                                      file=sys.stderr)
+                            except Exception as e:
+                                print(f"❌ Error página {page_num}: {e}", file=sys.stderr)
+                                import traceback
+                                print(traceback.format_exc(), file=sys.stderr)
+                                errors.append({"page": page_num, "error": str(e)})
+
+                        else:
+                            # Múltiples páginas = consolidar y crear una sola factura
+                            print(f"📄 Grupo {group_idx + 1}: {len(group_indices)} páginas consolidadas",
+                                  file=sys.stderr)
+
+                            try:
+                                # Consolidar datos
+                                consolidated_result = consolidate_invoice_group(results_list, group_indices)
+
+                                # Crear PDF con todas las páginas del grupo
+                                group_doc = fitz.open()
+                                for idx in group_indices:
+                                    page_result = results_list[idx]
+                                    page_num = page_result.get("page_number", idx + 1)
+                                    page_index = page_num - 1
+                                    group_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+
+                                group_bytes = group_doc.tobytes()
+                                group_doc.close()
+
+                                # Crear archivo Django para el grupo
+                                from django.core.files.base import ContentFile
+                                import uuid
+                                unique_id = uuid.uuid4().hex[:8]
+                                group_filename = f"{base_name}_grupo{group_idx + 1}_{len(group_indices)}pag_{unique_id}.pdf"
+                                group_file = ContentFile(group_bytes, name=group_filename)
+
+                                inv_result = _create_single_purchase_invoice(company, consolidated_result, group_file)
+                                inv_result["page_group"] = group_indices
+                                inv_result["consolidated"] = True
+                                created_invoices.append(inv_result)
+                                print(
+                                    f"✅ Factura consolidada creada: {inv_result['invoice_number']} -> archivo: {group_filename}",
+                                    file=sys.stderr)
+                            except Exception as e:
+                                print(f"❌ Error grupo {group_idx + 1}: {e}", file=sys.stderr)
+                                import traceback
+                                print(traceback.format_exc(), file=sys.stderr)
+                                errors.append({"group": group_idx + 1, "error": str(e)})
+
+            except Exception as e:
+                print(f"❌ ERROR al abrir/procesar PDF con fitz: {e}", file=sys.stderr)
+                import traceback
+                print(traceback.format_exc(), file=sys.stderr)
+                raise
+
+            print(f"📊 Resumen: {len(created_invoices)} facturas creadas, {len(errors)} errores", file=sys.stderr)
 
             if not created_invoices:
+                print("❌ No se creó ninguna factura", file=sys.stderr)
                 return JsonResponse(
                     {"success": False, "message": "No se pudo crear ninguna factura.", "errors": errors}, status=400)
 
@@ -3564,6 +3611,7 @@ def api_create_invoice_received(request):
                 else:
                     message = f"Se crearon {individual_count} factura(s) correctamente."
 
+            print(f"✅ Retornando éxito: {message}", file=sys.stderr)
             return JsonResponse({
                 "success": True,
                 "multiple": True,
@@ -3575,8 +3623,10 @@ def api_create_invoice_received(request):
 
         # MODO NORMAL: Una sola factura (comportamiento original)
         # Usar la función auxiliar para mantener consistencia y aplicar validación
+        print("📄 Procesando factura de una sola página...", file=sys.stderr)
         inv_result = _create_single_purchase_invoice(company, result, file)
 
+        print(f"✅ Factura única creada: {inv_result['invoice_number']}", file=sys.stderr)
         return JsonResponse({
             "success": True,
             "message": "Factura recibida procesada correctamente.",
@@ -3588,6 +3638,7 @@ def api_create_invoice_received(request):
         })
 
     except IntegrityError as e:
+        print(f"❌ IntegrityError: {e}", file=sys.stderr)
         transaction.set_rollback(True)
         error_msg = str(e).lower()
         if ('unique constraint' in error_msg or 'duplicate key' in error_msg) and 'invoice_number' in error_msg:
@@ -3605,6 +3656,7 @@ def api_create_invoice_received(request):
         print(error_trace, file=sys.stderr)
         transaction.set_rollback(True)
         return JsonResponse({"success": False, "message": str(e), "trace": error_trace}, status=500)
+
 
 @login_required
 def api_show_table_employees(request):
