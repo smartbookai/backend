@@ -100,25 +100,43 @@ def extract_invoice_data(file):
                     print(f"📐 Tamaño: {pix.width}x{pix.height}")
                     return _extract_single_page_sales_invoice(image_bytes, "image/png")
                 
-                # Múltiples páginas: procesar cada una
+                # Múltiples páginas: procesar cada una EN PARALELO
                 # Retorna tupla (resultados, pdf_bytes) para que views.py use los mismos bytes
-                print(f"📄 Procesando {num_pages} páginas como facturas separadas...")
-                results = []
+                print(f"📄 Procesando {num_pages} páginas como facturas separadas (en paralelo)...")
                 
+                # Preparar imágenes de todas las páginas primero
+                page_images = []
                 for page_idx in range(num_pages):
-                    page_number = page_idx + 1  # 1-based para mostrar
-                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
                     mat = fitz.Matrix(2, 2)
                     pix = doc[page_idx].get_pixmap(matrix=mat)
                     image_bytes = pix.tobytes("png")
-                    
+                    page_images.append((page_idx, image_bytes))
+                
+                # Función para procesar una página
+                def process_single_page(args):
+                    page_idx, image_bytes = args
+                    page_number = page_idx + 1
+                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
                     try:
                         result = _extract_single_page_sales_invoice(image_bytes, "image/png")
                         result["page_number"] = page_number
-                        results.append(result)
+                        return (page_idx, result)
                     except Exception as e:
                         print(f"⚠️ Error en página {page_number}: {e}")
-                        results.append({"error": str(e), "page_number": page_number, "tokens": None})
+                        return (page_idx, {"error": str(e), "page_number": page_number, "tokens": None})
+                
+                # Procesar en paralelo con ThreadPoolExecutor
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                results_dict = {}
+                
+                with ThreadPoolExecutor(max_workers=min(4, num_pages)) as executor:
+                    futures = [executor.submit(process_single_page, args) for args in page_images]
+                    for future in as_completed(futures):
+                        page_idx, result = future.result()
+                        results_dict[page_idx] = result
+                
+                # Ordenar resultados por índice de página
+                results = [results_dict[i] for i in range(num_pages)]
                 
                 print(f"\n✅ Procesadas {len(results)} páginas")
                 # Retornar tupla con resultados Y los bytes del PDF para usar después
@@ -141,60 +159,68 @@ def extract_invoice_data(file):
         return {"tokens": None, "error": str(e)}
 
 
-def _extract_single_page_sales_invoice(image_bytes, mime_type="image/png"):
+def _extract_single_page_sales_invoice(image_bytes, mime_type="image/png", max_retries=2):
     """
     Extrae datos de una sola página/imagen de factura de ventas.
-    Función auxiliar interna.
+    Función auxiliar interna con retry automático.
     """
     import time
-    start_time = time.time()
-    print(f"🤖 Llamando a OpenAI para procesar imagen ({len(image_bytes)} bytes)...")
     
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": BASE_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extraé los datos de esta factura EMITIDA y devolvé el resultado en formato JSON. El client es quien RECIBE la factura."},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}"
-                            }
-                        },
-                    ],
-                },
-            ],
-            response_format={"type": "json_object"},
-            timeout=60,  # Timeout de 60 segundos para la llamada a OpenAI
-        )
+    for attempt in range(max_retries):
+        start_time = time.time()
+        timeout_seconds = 45 if attempt == 0 else 60  # Primer intento más corto
         
-        elapsed_time = time.time() - start_time
-        print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+        print(f"🤖 Llamando a OpenAI (intento {attempt + 1}/{max_retries}, timeout={timeout_seconds}s, {len(image_bytes)} bytes)...")
         
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
-        raise
-    
-    usage = getattr(response, "usage", None)
-    tokens = getattr(usage, "total_tokens", None) if usage else None
-    
-    content = response.choices[0].message.content
-    
-    # Manejar caso donde OpenAI devuelve None (no puede procesar la imagen)
-    if content is None:
-        raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
-    
-    result = json.loads(content)
-    result["tokens"] = tokens
-    
-    return result
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": BASE_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extraé los datos de esta factura EMITIDA y devolvé el resultado en formato JSON. El client es quien RECIBE la factura."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{base64_image}"
+                                }
+                            },
+                        ],
+                    },
+                ],
+                response_format={"type": "json_object"},
+                timeout=timeout_seconds,
+            )
+            
+            elapsed_time = time.time() - start_time
+            print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+            
+            usage = getattr(response, "usage", None)
+            tokens = getattr(usage, "total_tokens", None) if usage else None
+            
+            content = response.choices[0].message.content
+            
+            if content is None:
+                raise ValueError("OpenAI no pudo procesar la imagen o no encontró datos válidos")
+            
+            result = json.loads(content)
+            result["tokens"] = tokens
+            
+            return result
+            
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
+            
+            if attempt < max_retries - 1:
+                print(f"🔄 Reintentando...")
+                continue
+            else:
+                raise
 
 
 #############################################Here stars the code for purchase invoices#####################################################
@@ -282,46 +308,55 @@ PURCHASE_INVOICE_PROMPT = (
 )
 
 
-def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png"):
+def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png", max_retries=2):
     """
     Extrae datos de una sola página/imagen de factura de compra.
-    Función auxiliar interna.
+    Función auxiliar interna con retry automático.
     """
     import time
-    start_time = time.time()
-    print(f"🤖 Llamando a OpenAI para procesar imagen ({len(image_bytes)} bytes)...")
     
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA y devolvé el resultado en formato JSON. El supplier es quien EMITE la factura."},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}"
-                            }
-                        },
-                    ],
-                },
-            ],
-            response_format={"type": "json_object"},
-            timeout=60,  # Timeout de 60 segundos para la llamada a OpenAI
-        )
+    for attempt in range(max_retries):
+        start_time = time.time()
+        timeout_seconds = 45 if attempt == 0 else 60  # Primer intento más corto
         
-        elapsed_time = time.time() - start_time
-        print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+        print(f"🤖 Llamando a OpenAI (intento {attempt + 1}/{max_retries}, timeout={timeout_seconds}s, {len(image_bytes)} bytes)...")
         
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
-        raise
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extraé los datos de esta factura RECIBIDA y devolvé el resultado en formato JSON. El supplier es quien EMITE la factura."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{base64_image}"
+                                }
+                            },
+                        ],
+                    },
+                ],
+                response_format={"type": "json_object"},
+                timeout=timeout_seconds,
+            )
+            
+            elapsed_time = time.time() - start_time
+            print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+            
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            print(f"❌ Error en OpenAI después de {elapsed_time:.1f}s: {e}")
+            
+            if attempt < max_retries - 1:
+                print(f"🔄 Reintentando...")
+                continue
+            else:
+                raise
     
     usage = getattr(response, "usage", None)
     tokens = getattr(usage, "total_tokens", None) if usage else None
@@ -530,25 +565,43 @@ def extract_purchase_invoice_data(file):
                     print(f"📐 Tamaño: {pix.width}x{pix.height}")
                     return _extract_single_page_purchase_invoice(image_bytes, "image/png")
                 
-                # Múltiples páginas: procesar cada una
+                # Múltiples páginas: procesar cada una EN PARALELO
                 # Retorna tupla (resultados, pdf_bytes) para que views.py use los mismos bytes
-                print(f"📄 Procesando {num_pages} páginas como facturas separadas...")
-                results = []
+                print(f"📄 Procesando {num_pages} páginas como facturas separadas (en paralelo)...")
                 
+                # Preparar imágenes de todas las páginas primero
+                page_images = []
                 for page_idx in range(num_pages):
-                    page_number = page_idx + 1  # 1-based para mostrar
-                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
                     mat = fitz.Matrix(2, 2)
                     pix = doc[page_idx].get_pixmap(matrix=mat)
                     image_bytes = pix.tobytes("png")
-                    
+                    page_images.append((page_idx, image_bytes))
+                
+                # Función para procesar una página
+                def process_single_page(args):
+                    page_idx, image_bytes = args
+                    page_number = page_idx + 1
+                    print(f"\n📄 Extrayendo página {page_number}/{num_pages} (índice {page_idx})...")
                     try:
                         result = _extract_single_page_purchase_invoice(image_bytes, "image/png")
                         result["page_number"] = page_number
-                        results.append(result)
+                        return (page_idx, result)
                     except Exception as e:
                         print(f"⚠️ Error en página {page_number}: {e}")
-                        results.append({"error": str(e), "page_number": page_number, "tokens": None})
+                        return (page_idx, {"error": str(e), "page_number": page_number, "tokens": None})
+                
+                # Procesar en paralelo con ThreadPoolExecutor
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                results_dict = {}
+                
+                with ThreadPoolExecutor(max_workers=min(4, num_pages)) as executor:
+                    futures = [executor.submit(process_single_page, args) for args in page_images]
+                    for future in as_completed(futures):
+                        page_idx, result = future.result()
+                        results_dict[page_idx] = result
+                
+                # Ordenar resultados por índice de página
+                results = [results_dict[i] for i in range(num_pages)]
                 
                 print(f"\n✅ Procesadas {len(results)} páginas")
                 # Retornar tupla con resultados Y los bytes del PDF para usar después
