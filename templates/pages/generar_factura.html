@@ -12,6 +12,22 @@
     </div>
 
     <form id="invoiceForm" style="margin-top:24px;">
+      <!-- Campo oculto para IDs de albaranes -->
+      {% if preloaded_data %}
+      <input type="hidden" name="delivery_note_ids" id="delivery_note_ids" value="{{ preloaded_data.albaran_ids }}">
+      
+      <!-- Banner informativo de albaranes -->
+      <div class="card" style="padding:16px 24px;margin-bottom:16px;background:linear-gradient(135deg,#F3E8FF 0%,#E9D5FF 100%);border:1px solid #C084FC;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:24px;">📦</span>
+          <div>
+            <div style="font-weight:600;color:#7C3AED;">Factura desde albaranes</div>
+            <div style="font-size:14px;color:#6B7280;">Albaranes: {{ preloaded_data.albaran_numbers }}</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      
       <!-- Datos principales de la factura -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
         <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Datos de la Factura</h2>
@@ -20,12 +36,17 @@
           <!-- Cliente -->
           <div class="form-field">
             <label for="client">Cliente *</label>
+            {% if preloaded_data %}
+            <input type="hidden" name="client" value="{{ preloaded_data.client_id }}">
+            <input type="text" value="{{ preloaded_data.client_name }}" disabled style="background:#F3F4F6;cursor:not-allowed;">
+            {% else %}
             <select id="client" name="client" required>
               <option value="">Seleccionar cliente...</option>
               {% for client in clients %}
                 <option value="{{ client.id }}">{{ client.name }}</option>
               {% endfor %}
             </select>
+            {% endif %}
           </div>
 
           <!-- Número de factura -->
@@ -62,6 +83,29 @@
         </div>
         
         <div id="invoiceLines" style="margin-bottom:20px;">
+          {% if preloaded_data and preloaded_data.lines %}
+            {% for line in preloaded_data.lines %}
+            <div class="invoice-line" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;">
+              <div class="form-field">
+                <label>Descripción * <span style="font-size:11px;color:#9CA3AF;">({{ line.albaran_number }})</span></label>
+                <input type="text" name="line_description[]" required placeholder="Ej: Consultoría técnica" value="{{ line.description }}">
+              </div>
+              <div class="form-field">
+                <label>Cantidad *</label>
+                <input type="number" name="line_quantity[]" required min="0" step="0.01" value="{{ line.quantity }}" onchange="calculateTotals()">
+              </div>
+              <div class="form-field">
+                <label>Precio Unitario *</label>
+                <input type="number" name="line_unit_price[]" required min="0" step="0.01" value="{{ line.unit_price }}" onchange="calculateTotals()" {% if not line.unit_price %}style="border-color:#F59E0B;background:#FFFBEB;"{% endif %}>
+              </div>
+              <div class="form-field">
+                <label>% IVA *</label>
+                <input type="number" name="line_vat_rate[]" required min="0" max="100" step="0.01" value="{{ line.vat_rate|default:'21' }}" onchange="calculateTotals()">
+              </div>
+              <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>
+            </div>
+            {% endfor %}
+          {% else %}
           <!-- Primera línea por defecto -->
           <div class="invoice-line" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;">
             <div class="form-field">
@@ -82,6 +126,7 @@
             </div>
             <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>
           </div>
+          {% endif %}
         </div>
       </div>
 

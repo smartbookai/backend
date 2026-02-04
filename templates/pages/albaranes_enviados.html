@@ -27,6 +27,9 @@
         <table class="table" style="width:100%;border-collapse:collapse;">
           <thead>
             <tr>
+              <th class="table-header" style="padding:14px 18px;width:50px;">
+                <input type="checkbox" id="selectAllDeliveryNotes" onclick="toggleSelectAll(this)" title="Seleccionar todos los pendientes">
+              </th>
               <th class="table-header" style="padding:14px 18px;">Albarán</th>
               <th class="table-header" style="padding:14px 18px;">Cliente</th>
               <th class="table-header" style="padding:14px 18px;">Fecha</th>
@@ -189,6 +192,15 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+function getStatusLabel(status) {
+  const labels = {
+    'pending': 'Pendiente facturar',
+    'invoiced': 'Facturado',
+    'cancelled': 'Cancelado'
+  };
+  return labels[status] || status || '-';
+}
+
 function loadDeliveryNotes() {
   const tbody = document.querySelector('.delivery-notes-tbody');
   if (!tbody) return;
@@ -233,8 +245,16 @@ function renderDeliveryNotesTable(rows) {
       `
       : `<span style="color:#9CA3AF;">-</span>`;
 
+    const isPending = dn.status === 'pending' || dn.status === 'Pendiente facturar';
+    const checkboxCell = isPending
+      ? `<input type="checkbox" class="dn-checkbox" data-id="${dn.id}" data-client-id="${dn.client_id}" data-client-name="${dn.client_name || ''}" onclick="updateSelectedDeliveryNotes()">`
+      : `<span style="color:#D1D5DB;">—</span>`;
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;text-align:center;">
+        ${checkboxCell}
+      </td>
       <td class="table-cell" style="padding:14px 18px;">
         ${dn.pdf_url
           ? `<a href="${dn.pdf_url}" target="_blank" rel="noopener noreferrer">${dn.delivery_note_number || 'PDF'}</a>`
@@ -245,13 +265,16 @@ function renderDeliveryNotesTable(rows) {
       <td class="table-cell" style="padding:14px 18px;">${dn.issue_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${dn.delivery_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${dn.total_amount || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${dn.status || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${getStatusLabel(dn.status)}</td>
       <td class="table-cell text-right" style="padding:14px 18px;">
         ${actions}
       </td>
     `;
     tbody.appendChild(tr);
   });
+  
+  // Actualizar estado del checkbox "seleccionar todos"
+  updateSelectAllCheckbox();
 }
 
 function setupPdfDropzone() {
@@ -613,6 +636,92 @@ function getCookie(name) {
 function generateInvoiceFromDeliveryNote(id) {
   // Implementar funcionalidad de generación de factura
   console.log('Generar factura desde albarán', id);
+}
+
+// ========== SELECCIÓN DE ALBARANES PARA FACTURAR ==========
+let selectedDeliveryNotes = [];
+
+function toggleSelectAll(checkbox) {
+  const allCheckboxes = document.querySelectorAll('.dn-checkbox');
+  allCheckboxes.forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  updateSelectedDeliveryNotes();
+}
+
+function updateSelectAllCheckbox() {
+  const allCheckboxes = document.querySelectorAll('.dn-checkbox');
+  const selectAllCheckbox = document.getElementById('selectAllDeliveryNotes');
+  if (!selectAllCheckbox || allCheckboxes.length === 0) return;
+  
+  const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+  const someChecked = Array.from(allCheckboxes).some(cb => cb.checked);
+  
+  selectAllCheckbox.checked = allChecked;
+  selectAllCheckbox.indeterminate = someChecked && !allChecked;
+}
+
+function updateSelectedDeliveryNotes() {
+  const checkboxes = document.querySelectorAll('.dn-checkbox:checked');
+  selectedDeliveryNotes = Array.from(checkboxes).map(cb => ({
+    id: parseInt(cb.dataset.id),
+    clientId: cb.dataset.clientId,
+    clientName: cb.dataset.clientName
+  }));
+  
+  updateSelectAllCheckbox();
+  updateGenerateInvoiceButton();
+}
+
+function updateGenerateInvoiceButton() {
+  let btn = document.getElementById('generateInvoiceFromDNBtn');
+  
+  if (selectedDeliveryNotes.length === 0) {
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  
+  // Crear botón si no existe
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'generateInvoiceFromDNBtn';
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:14px 24px;font-size:15px;font-weight:600;box-shadow:0 4px 14px rgba(98,50,138,0.35);z-index:1000;display:flex;align-items:center;gap:8px;';
+    btn.onclick = goToGenerateInvoiceFromDeliveryNotes;
+    document.body.appendChild(btn);
+  }
+  
+  // Verificar que todos sean del mismo cliente
+  const clientIds = [...new Set(selectedDeliveryNotes.map(dn => dn.clientId))];
+  
+  if (clientIds.length > 1) {
+    btn.innerHTML = `<span style="color:#FCA5A5;">⚠️ Clientes distintos (${selectedDeliveryNotes.length})</span>`;
+    btn.disabled = true;
+    btn.style.background = '#9CA3AF';
+    btn.style.cursor = 'not-allowed';
+  } else {
+    const clientName = selectedDeliveryNotes[0]?.clientName || 'Cliente';
+    btn.innerHTML = `📄 Generar Factura (${selectedDeliveryNotes.length} albarán${selectedDeliveryNotes.length > 1 ? 'es' : ''})`;
+    btn.disabled = false;
+    btn.style.background = '#62328A';
+    btn.style.cursor = 'pointer';
+  }
+  
+  btn.style.display = 'flex';
+}
+
+function goToGenerateInvoiceFromDeliveryNotes() {
+  if (selectedDeliveryNotes.length === 0) return;
+  
+  // Verificar mismo cliente
+  const clientIds = [...new Set(selectedDeliveryNotes.map(dn => dn.clientId))];
+  if (clientIds.length > 1) {
+    alert('Solo puedes generar una factura con albaranes del mismo cliente.');
+    return;
+  }
+  
+  const ids = selectedDeliveryNotes.map(dn => dn.id).join(',');
+  window.location.href = `/generar-factura/?albaranes=${ids}`;
 }
 
 (async function(){

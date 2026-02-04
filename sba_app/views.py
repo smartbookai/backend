@@ -462,9 +462,56 @@ def generar_factura(request):
         # Obtener clientes disponibles
         clients = Client.objects.filter(company=company).order_by('name')
         
+        # Verificar si vienen albaranes por query params
+        albaran_ids_str = request.GET.get('albaranes', '')
+        preloaded_data = None
+        
+        if albaran_ids_str:
+            try:
+                albaran_ids = [int(x) for x in albaran_ids_str.split(',') if x.strip().isdigit()]
+                if albaran_ids:
+                    # Cargar albaranes pendientes de la empresa
+                    albaranes = SalesDeliveryNote.objects.filter(
+                        id__in=albaran_ids,
+                        company=company,
+                        status='pending'
+                    ).prefetch_related('lines').select_related('client')
+                    
+                    if albaranes.exists():
+                        # Verificar que todos sean del mismo cliente
+                        client_ids = set(dn.client_id for dn in albaranes)
+                        if len(client_ids) == 1:
+                            first_albaran = albaranes.first()
+                            client = first_albaran.client
+                            
+                            # Preparar líneas de todos los albaranes
+                            preloaded_lines = []
+                            albaran_numbers = []
+                            for albaran in albaranes:
+                                albaran_numbers.append(albaran.delivery_note_number)
+                                for line in albaran.lines.all():
+                                    preloaded_lines.append({
+                                        'description': line.description,
+                                        'quantity': str(line.quantity),
+                                        'unit_price': str(line.unit_price) if line.unit_price else '',
+                                        'vat_rate': str(line.vat_rate) if line.vat_rate else '21',
+                                        'albaran_number': albaran.delivery_note_number,
+                                    })
+                            
+                            preloaded_data = {
+                                'client_id': client.id,
+                                'client_name': client.name,
+                                'albaran_ids': albaran_ids_str,
+                                'albaran_numbers': ', '.join(albaran_numbers),
+                                'lines': preloaded_lines,
+                            }
+            except (ValueError, TypeError):
+                pass  # Si hay error parseando, ignorar y mostrar formulario vacío
+        
         context = {
             'clients': clients,
             'company': company,
+            'preloaded_data': preloaded_data,
         }
         return render(request, 'pages/generar_factura.html', context)
         
@@ -564,6 +611,27 @@ def api_create_manual_invoice(request):
                     unit_price=Decimal(unit_prices[i]) if unit_prices[i] else Decimal('0.00'),
                     vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else Decimal('21.00'),
                 )
+        
+        # Vincular albaranes si vienen en el formulario
+        delivery_note_ids_str = request.POST.get('delivery_note_ids', '')
+        linked_delivery_notes = []
+        if delivery_note_ids_str:
+            try:
+                dn_ids = [int(x) for x in delivery_note_ids_str.split(',') if x.strip().isdigit()]
+                if dn_ids:
+                    # Actualizar albaranes: vincular a factura y cambiar estado
+                    delivery_notes = SalesDeliveryNote.objects.filter(
+                        id__in=dn_ids,
+                        company=company,
+                        status='pending'
+                    )
+                    for dn in delivery_notes:
+                        dn.sales_invoice = invoice
+                        dn.status = 'invoiced'
+                        dn.save()
+                        linked_delivery_notes.append(dn.delivery_note_number)
+            except (ValueError, TypeError):
+                pass  # Si hay error, continuar sin vincular
         
         # Generar PDF
         try:

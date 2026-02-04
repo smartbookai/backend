@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import UserProfile, Company, CompanyUser, Supplier, SalesInvoice, PurchaseInvoice, InvoiceLine, Client, \
-    AccountingEntry, Payroll, Employee, PrecontractualAcceptance
+    AccountingEntry, Payroll, Employee, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine
 
 
 class UserProfileAdmin(admin.ModelAdmin):
@@ -181,6 +181,82 @@ class PrecontractualAcceptanceAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # No permitir eliminar para mantener registro legal
         return False
+
+
+# ==================== ALBARANES ====================
+
+class DeliveryNoteLineInline(admin.TabularInline):
+    model = DeliveryNoteLine
+    extra = 0
+    fields = ('description', 'quantity', 'reference', 'unit_price', 'vat_rate')
+    can_delete = True
+
+
+@admin.register(SalesDeliveryNote)
+class SalesDeliveryNoteAdmin(admin.ModelAdmin):
+    list_display = ('delivery_note_number', 'company', 'client', 'issue_date', 'delivery_date', 'status', 'total_amount', pdf_link)
+    list_filter = ('company', 'status', 'issue_date')
+    search_fields = ('delivery_note_number', 'client__name', 'company__name')
+    inlines = [DeliveryNoteLineInline]
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Información General', {
+            'fields': ('company', 'client', 'delivery_note_number', 'status')
+        }),
+        ('Fechas', {
+            'fields': ('issue_date', 'delivery_date')
+        }),
+        ('Importes', {
+            'fields': ('base_amount', 'tax_amount', 'total_amount')
+        }),
+        ('Factura Vinculada', {
+            'fields': ('sales_invoice',),
+            'classes': ('collapse',)
+        }),
+        ('Otros', {
+            'fields': ('delivery_method', 'notes', 'pdf_file'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(PurchaseDeliveryNote)
+class PurchaseDeliveryNoteAdmin(admin.ModelAdmin):
+    list_display = ('delivery_note_number', 'company', 'supplier', 'issue_date', 'delivery_date', 'status', 'total_amount', pdf_link)
+    list_filter = ('company', 'status', 'issue_date')
+    search_fields = ('delivery_note_number', 'supplier__name', 'company__name')
+    inlines = [DeliveryNoteLineInline]
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Información General', {
+            'fields': ('company', 'supplier', 'delivery_note_number', 'status')
+        }),
+        ('Fechas', {
+            'fields': ('issue_date', 'delivery_date')
+        }),
+        ('Importes', {
+            'fields': ('base_amount', 'tax_amount', 'total_amount')
+        }),
+        ('Factura Vinculada', {
+            'fields': ('purchase_invoice',),
+            'classes': ('collapse',)
+        }),
+        ('Otros', {
+            'fields': ('delivery_method', 'notes', 'pdf_file'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
 
 # Registrar todo al final
 admin.site.register(UserProfile, UserProfileAdmin)
