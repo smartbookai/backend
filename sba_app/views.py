@@ -1901,16 +1901,21 @@ def _are_same_sales_invoice(inv1, client1, inv2, client2):
     5. Mismo cliente + misma fecha (refuerzo)
     6. Fallback conservador
     """
-    # 1. Criterio duro: mismo número de factura
+    # 1. Criterio duro: mismo número de factura (o muy similar por errores de OCR)
     num1 = normalize_document_number(inv1.get("invoice_number"))
     num2 = normalize_document_number(inv2.get("invoice_number"))
-    
-    if num1 and num2:
-        if num1 == num2:
-            return True  # Mismo número -> agrupar siempre
+
+    # Ignorar N/A, null, vacío como número válido para comparación
+    num1_valid = num1 and num1.upper() not in ('NA', 'N/A', 'NULL', 'NONE', '')
+    num2_valid = num2 and num2.upper() not in ('NA', 'N/A', 'NULL', 'NONE', '')
+
+    if num1_valid and num2_valid:
+        # Usar similitud para tolerar errores de OCR
+        if num1 == num2 or _are_similar_invoice_numbers(num1, num2, threshold=0.85):
+            return True  # Mismo número o muy similar -> agrupar
         else:
-            return False  # Números diferentes -> cortar siempre
-    
+            return False  # Números claramente diferentes -> cortar
+
     # 2. Texto explícito de continuación
     if _has_continuation_text(inv1) or _has_continuation_text(inv2):
         return True
@@ -1939,8 +1944,25 @@ def _are_same_sales_invoice(inv1, client1, inv2, client2):
     if client1_name and client2_name and client1_name == client2_name:
         if _are_consecutive_numbers_sales(inv1.get("invoice_number"), inv2.get("invoice_number")):
             return True
+
+    # 7. Cliente contenido en otro (ej: "Glovo" contenido en "Glovoapp Spain Platform SL")
+    if client1_name and client2_name:
+        # Verificar si uno contiene al otro
+        if client1_name in client2_name or client2_name in client1_name:
+            return True
+        # Verificar si comparten prefijo significativo (mínimo 5 caracteres)
+        min_len = min(len(client1_name), len(client2_name))
+        if min_len >= 5:
+            prefix_len = 0
+            for i in range(min_len):
+                if client1_name[i] == client2_name[i]:
+                    prefix_len += 1
+                else:
+                    break
+            if prefix_len >= 5:
+                return True
     
-    # 7. Fallback conservador: si hay duda, agrupar
+    # 8. Fallback conservador: si hay duda, agrupar
     # Es mejor agrupar de más que separar mal
     return True
 
@@ -3166,59 +3188,111 @@ def _are_consecutive_numbers(num1, num2):
     return False
 
 
+def _are_similar_invoice_numbers(num1, num2, threshold=0.85):
+    """
+    Compara dos números de factura usando similitud de texto.
+    Útil para detectar errores de OCR como 'I268EYB7IR000003' vs 'I26EBYB7IR000003'.
+    
+    Retorna True si la similitud es >= threshold (por defecto 85%).
+    """
+    if not num1 or not num2:
+        return False
+    
+    # Normalizar: mayúsculas, sin espacios ni guiones
+    n1 = str(num1).upper().replace(' ', '').replace('-', '').replace('_', '')
+    n2 = str(num2).upper().replace(' ', '').replace('-', '').replace('_', '')
+    
+    if not n1 or not n2:
+        return False
+    
+    # Si son exactamente iguales
+    if n1 == n2:
+        return True
+    
+    # Calcular similitud
+    from difflib import SequenceMatcher
+    similarity = SequenceMatcher(None, n1, n2).ratio()
+    
+    return similarity >= threshold
+
+
 def _are_same_invoice(inv1, sup1, inv2, sup2):
     """
     Determina si dos páginas pertenecen a la misma factura
     usando prioridades con fallback conservador.
-    
+
     Orden de prioridad:
     1. Número de factura (corte duro)
     2. Texto explícito de continuación
     3. Página sin cabecera = continuación
     4. Regla utilities
     5. Mismo proveedor + misma fecha (refuerzo)
-    6. Fallback conservador
+    6. Mismo proveedor + números correlativos
+    7. Proveedor contenido en otro (Glovo en Glovoapp)
+    8. Fallback conservador
     """
     # 1. Criterio duro: mismo número de factura
     num1 = normalize_document_number(inv1.get("invoice_number"))
     num2 = normalize_document_number(inv2.get("invoice_number"))
-    
-    if num1 and num2:
-        if num1 == num2:
-            return True  # Mismo número -> agrupar siempre
+
+    # Ignorar N/A, null, vacío como número válido para comparación
+    num1_valid = num1 and num1.upper() not in ('NA', 'N/A', 'NULL', 'NONE', '')
+    num2_valid = num2 and num2.upper() not in ('NA', 'N/A', 'NULL', 'NONE', '')
+
+    if num1_valid and num2_valid:
+        # Usar similitud para tolerar errores de OCR (ej: I268EYB7IR vs I26EBYB7IR)
+        if num1 == num2 or _are_similar_invoice_numbers(num1, num2, threshold=0.85):
+            return True  # Mismo número o muy similar -> agrupar
         else:
-            return False  # Números diferentes -> cortar siempre
-    
+            return False  # Números claramente diferentes -> cortar
+
     # 2. Texto explícito de continuación
     if _has_continuation_text(inv1) or _has_continuation_text(inv2):
         return True
-    
+
     # 3. Página sin cabecera = continuación
     if _page_has_no_header(inv2):
         return True
-    
+
     # 4. Regla especial para utilities
     if _is_utility_provider(sup1) or _is_utility_provider(sup2):
         # Para utilities, asumir multipágina por defecto
         # solo cortar si hay número de factura diferente (ya verificado arriba)
         return True
-    
+
     # 5. Mismo proveedor + misma fecha (refuerzo, no como corte duro)
     sup1_name = normalize_company_name(sup1.get("name"))
     sup2_name = normalize_company_name(sup2.get("name"))
     date1 = inv1.get("issue_date")
     date2 = inv2.get("issue_date")
-    
+
     if sup1_name and sup2_name and sup1_name == sup2_name:
         if date1 and date2 and date1 == date2:
             return True
-    
+
     # 6. Mismo proveedor + números correlativos (refuerzo)
     if sup1_name and sup2_name and sup1_name == sup2_name:
         if _are_consecutive_numbers(inv1.get("invoice_number"), inv2.get("invoice_number")):
             return True
-    
-    # 7. Fallback conservador: si hay duda, agrupar
+
+    # 7. Proveedor contenido en otro (ej: "Glovo" contenido en "Glovoapp Spain Platform SL")
+    if sup1_name and sup2_name:
+        # Verificar si uno contiene al otro
+        if sup1_name in sup2_name or sup2_name in sup1_name:
+            return True
+        # Verificar si comparten prefijo significativo (mínimo 5 caracteres)
+        min_len = min(len(sup1_name), len(sup2_name))
+        if min_len >= 5:
+            prefix_len = 0
+            for i in range(min_len):
+                if sup1_name[i] == sup2_name[i]:
+                    prefix_len += 1
+                else:
+                    break
+            if prefix_len >= 5:  # Comparten al menos 5 caracteres iniciales
+                return True
+
+    # 8. Fallback conservador: si hay duda, agrupar
     # Es mejor agrupar de más que separar mal
     return True
 
