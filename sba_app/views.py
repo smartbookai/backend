@@ -33,6 +33,22 @@ from sba_app.utils.payroll_pdf_generator import generate_payroll_pdf
 logger = logging.getLogger(__name__)
 
 
+def truncate_description(description, max_length=250):
+    """
+    Trunca una descripción si supera max_length caracteres.
+    Añade '...' al final si se trunca.
+    """
+    if not description:
+        return description
+
+    description = str(description).strip()
+
+    if len(description) > max_length:
+        return description[:max_length - 3] + "..."
+
+    return description
+
+
 def normalize_document_number(doc_number):
     """
     Normaliza y limpia un número de documento (NIF/DNI).
@@ -606,7 +622,7 @@ def api_create_manual_invoice(request):
             if description.strip():  # Solo crear líneas con descripción
                 InvoiceLine.objects.create(
                     sales_invoice=invoice,
-                    description=description.strip(),
+                    description=truncate_description(description.strip()),
                     quantity=Decimal(quantities[i]) if quantities[i] else Decimal('1.00'),
                     unit_price=Decimal(unit_prices[i]) if unit_prices[i] else Decimal('0.00'),
                     vat_rate=Decimal(vat_rates[i]) if vat_rates[i] else Decimal('21.00'),
@@ -2599,7 +2615,7 @@ def _create_single_sales_invoice(company, result, pdf_file=None):
     for line_data in lines_data:
         line = InvoiceLine.objects.create(
             sales_invoice=invoice,
-            description=line_data.get("description") or "Sin descripción",
+            description=truncate_description(line_data.get("description") or "Sin descripción"),
             quantity=safe_decimal(line_data.get("quantity", "1")),
             unit_price=safe_decimal(line_data.get("unit_price", "0")),
             vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
@@ -3005,7 +3021,7 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
     for line_data in lines_data:
         line = InvoiceLine.objects.create(
             purchase_invoice=invoice,
-            description=line_data.get("description") or "Sin descripción",
+            description=truncate_description(line_data.get("description") or "Sin descripción"),
             quantity=safe_decimal(line_data.get("quantity", "1")),
             unit_price=safe_decimal(line_data.get("unit_price", "0")),
             vat_rate=safe_decimal(line_data.get("vat_rate", "0")),
@@ -5981,7 +5997,7 @@ def api_create_manual_delivery_note(request):
 
                 DeliveryNoteLine.objects.create(
                     sales_delivery_note=delivery_note,
-                    description=description.strip(),
+                    description=truncate_description(description.strip()),
                     quantity=Decimal(quantities[i]) if quantities[i] else Decimal('1.00'),
                     reference=references[i] if references[i] else '',
                     unit_price=unit_price,
@@ -6223,7 +6239,7 @@ def api_update_delivery_note(request, delivery_note_id):
             if line_data.get('description'):  # Solo crear líneas con descripción
                 DeliveryNoteLine.objects.create(
                     sales_delivery_note=delivery_note,
-                    description=line_data['description'].strip(),
+                    description=truncate_description(line_data['description'].strip()),
                     quantity=Decimal(line_data.get('quantity', '1.00')),
                     reference=line_data.get('reference', ''),
                     unit_price=Decimal(line_data.get('unit_price', '0')) if line_data.get('unit_price') else None,
@@ -6349,7 +6365,7 @@ def api_update_purchase_delivery_note(request, delivery_note_id):
             if line_data.get('description'):
                 DeliveryNoteLine.objects.create(
                     purchase_delivery_note=delivery_note,
-                    description=line_data['description'].strip(),
+                    description=truncate_description(line_data['description'].strip()),
                     quantity=Decimal(line_data.get('quantity', '1.00')),
                     reference=line_data.get('reference', ''),
                     unit_price=Decimal(line_data.get('unit_price', '0')) if line_data.get('unit_price') else None,
