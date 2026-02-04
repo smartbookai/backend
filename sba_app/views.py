@@ -3579,10 +3579,12 @@ def api_create_invoice_received(request):
                             status=400)
     except Exception as e:
         import traceback
-        print("🔥 ERROR en api_create_invoice_received:", traceback.format_exc())
+        import sys
+        error_trace = traceback.format_exc()
+        print("🔥 ERROR COMPLETO:", file=sys.stderr)
+        print(error_trace, file=sys.stderr)
         transaction.set_rollback(True)
-        return JsonResponse({"success": False, "message": str(e)}, status=500)
-
+        return JsonResponse({"success": False, "message": str(e), "trace": error_trace}, status=500)
 
 @login_required
 def api_show_table_employees(request):
