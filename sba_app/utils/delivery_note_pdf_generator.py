@@ -1,9 +1,10 @@
 import io
+import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
 from decimal import Decimal
 
@@ -91,10 +92,32 @@ def generate_delivery_note_pdf(delivery_note):
     # Contenido del PDF
     story = []
 
+    # Logo de la empresa (si existe)
+    logo_element = ""
+    if delivery_note.company.logo:
+        try:
+            logo_path = delivery_note.company.logo.path
+            if os.path.exists(logo_path):
+                logo_element = Image(logo_path, width=1.5*cm, height=1.5*cm)
+                logo_element.hAlign = 'LEFT'
+        except Exception:
+            pass  # Si hay error con el logo, continuar sin él
+
     # ===== ENCABEZADO =====
+    # Crear contenido del título con o sin logo
+    if logo_element:
+        title_content = Table([[logo_element, Paragraph("ALBARÁN DE ENTREGA", title_style)]], 
+                              colWidths=[2*cm, 8*cm])
+        title_content.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        title_content = Paragraph("ALBARÁN DE ENTREGA", title_style)
+
     header_data = [
         [
-            Paragraph("ALBARÁN DE ENTREGA", title_style),
+            title_content,
             Paragraph(f"<b>Nº {delivery_note.delivery_note_number}</b>",
                       ParagraphStyle('HeaderRight',
                                      parent=styles['Normal'],

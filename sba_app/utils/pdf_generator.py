@@ -1,10 +1,12 @@
 import io
+import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from decimal import Decimal
+from django.conf import settings
 
 
 def generate_invoice_pdf(invoice):
@@ -71,17 +73,29 @@ def generate_invoice_pdf(invoice):
 
     story = []
 
-    # Header: Título y datos de factura en paralelo
+    # Logo de la empresa (si existe)
+    logo_element = ""
+    if invoice.company.logo:
+        try:
+            logo_path = invoice.company.logo.path
+            if os.path.exists(logo_path):
+                logo_element = Image(logo_path, width=1.2*inch, height=1.2*inch)
+                logo_element.hAlign = 'RIGHT'
+        except Exception:
+            pass  # Si hay error con el logo, continuar sin él
+
+    # Header: Título y Logo en paralelo
     header_data = [
         [
             Paragraph("Factura", title_style),
-            ""
+            logo_element
         ]
     ]
 
-    header_table = Table(header_data, colWidths=[3.5 * inch, 3 * inch])
+    header_table = Table(header_data, colWidths=[4.5 * inch, 2 * inch])
     header_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
