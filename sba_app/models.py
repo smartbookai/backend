@@ -63,6 +63,7 @@ class Company(models.Model):
     phone = models.CharField(max_length=50, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     website = models.URLField(null=True, blank=True)
+    logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Logo de la empresa")
 
     def __str__(self):
         return self.name

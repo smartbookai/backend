@@ -9,6 +9,7 @@
         <div style="color:#6B7280;margin-bottom:20px;">De la compañía</div>
       </div>
       {% if request.user.company_user.role == 'admin' %}
+       <button type="button" class="btn-primary" onclick="openCompanyModal()" style="margin-right:8px;">Datos de Empresa</button>
        <button type="button" class="btn-primary" onclick="openWorkerDrawer()">Crear nuevo</button>
       {% endif %}
     </div>
@@ -119,14 +120,194 @@
   </aside>
 </section>
 
-
-
+<!-- Modal para editar datos de empresa -->
+<div id="companyModalOverlay" class="overlay-mask" style="display:none;z-index:1100;" onclick="closeCompanyModal()"></div>
+<div id="companyModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);z-index:1101;width:500px;max-width:90vw;max-height:90vh;overflow-y:auto;">
+  <div style="padding:20px 24px;border-bottom:1px solid #E5E7EB;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;font-size:18px;font-weight:600;">Datos de la Empresa</h3>
+      <button type="button" onclick="closeCompanyModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;">&times;</button>
+    </div>
+  </div>
+  <form id="companyForm" onsubmit="submitCompanyForm(event)" enctype="multipart/form-data" style="padding:24px;">
+    <!-- Logo preview -->
+    <div style="text-align:center;margin-bottom:20px;">
+      <div id="logoPreviewContainer" style="width:120px;height:120px;margin:0 auto;border:2px dashed #D1D5DB;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#F9FAFB;">
+        <img id="logoPreview" src="" alt="Logo" style="max-width:100%;max-height:100%;display:none;">
+        <span id="logoPlaceholder" style="color:#9CA3AF;font-size:13px;">Sin logo</span>
+      </div>
+      <div style="margin-top:10px;">
+        <label for="companyLogo" class="btn-secondary" style="cursor:pointer;display:inline-block;padding:6px 12px;font-size:13px;">
+          Cambiar logo
+        </label>
+        <input type="file" id="companyLogo" name="logo" accept="image/*" style="display:none;" onchange="previewLogo(this)">
+      </div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">PNG, JPG o SVG. Máx 2MB</div>
+    </div>
+    
+    <div class="form-field">
+      <label>Nombre de la empresa</label>
+      <input type="text" name="name" id="companyName" required>
+    </div>
+    <div class="form-field">
+      <label>Dirección</label>
+      <input type="text" name="address" id="companyAddress">
+    </div>
+    <div style="display:flex;gap:12px;">
+      <div class="form-field" style="flex:1;">
+        <label>Tipo documento</label>
+        <select name="document_type" id="companyDocType">
+          <option value="">Seleccionar</option>
+          <option value="CIF">CIF</option>
+          <option value="NIF">NIF</option>
+          <option value="NIE">NIE</option>
+        </select>
+      </div>
+      <div class="form-field" style="flex:1;">
+        <label>Número documento</label>
+        <input type="text" name="document_number" id="companyDocNumber">
+      </div>
+    </div>
+    <div class="form-field">
+      <label>CCC (Código Cuenta Cotización)</label>
+      <input type="text" name="ccc" id="companyCCC" maxlength="11" placeholder="11 dígitos">
+    </div>
+    <div style="display:flex;gap:12px;">
+      <div class="form-field" style="flex:1;">
+        <label>Teléfono</label>
+        <input type="text" name="phone" id="companyPhone">
+      </div>
+      <div class="form-field" style="flex:1;">
+        <label>Email</label>
+        <input type="email" name="email" id="companyEmail">
+      </div>
+    </div>
+    <div class="form-field">
+      <label>Sitio web</label>
+      <input type="url" name="website" id="companyWebsite" placeholder="https://...">
+    </div>
+    
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid #E5E7EB;">
+      <button type="button" class="btn-secondary" onclick="closeCompanyModal()">Cancelar</button>
+      <button type="submit" class="btn-primary" id="companySubmitBtn">Guardar cambios</button>
+    </div>
+  </form>
+</div>
 
 
 <script>
 let currentEditId = null;
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let WORKERS_DATA = [];
+
+// ========== FUNCIONES PARA MODAL DE EMPRESA ==========
+function openCompanyModal() {
+  document.getElementById('companyModalOverlay').style.display = 'block';
+  document.getElementById('companyModal').style.display = 'block';
+  loadCompanyData();
+}
+
+function closeCompanyModal() {
+  document.getElementById('companyModalOverlay').style.display = 'none';
+  document.getElementById('companyModal').style.display = 'none';
+  document.getElementById('companyForm').reset();
+  // Reset logo preview
+  document.getElementById('logoPreview').style.display = 'none';
+  document.getElementById('logoPlaceholder').style.display = 'block';
+}
+
+function previewLogo(input) {
+  const preview = document.getElementById('logoPreview');
+  const placeholder = document.getElementById('logoPlaceholder');
+  
+  if (input.files && input.files[0]) {
+    // Validar tamaño (2MB)
+    if (input.files[0].size > 2 * 1024 * 1024) {
+      alert('El logo no puede superar 2MB');
+      input.value = '';
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      placeholder.style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+async function loadCompanyData() {
+  try {
+    const res = await fetch('/api/company/', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error('Error al cargar datos de empresa');
+    
+    const data = await res.json();
+    const company = data.company;
+    
+    // Rellenar formulario
+    document.getElementById('companyName').value = company.name || '';
+    document.getElementById('companyAddress').value = company.address || '';
+    document.getElementById('companyDocType').value = company.document_type || '';
+    document.getElementById('companyDocNumber').value = company.document_number || '';
+    document.getElementById('companyCCC').value = company.ccc || '';
+    document.getElementById('companyPhone').value = company.phone || '';
+    document.getElementById('companyEmail').value = company.email || '';
+    document.getElementById('companyWebsite').value = company.website || '';
+    
+    // Mostrar logo si existe
+    const preview = document.getElementById('logoPreview');
+    const placeholder = document.getElementById('logoPlaceholder');
+    if (company.logo_url) {
+      preview.src = company.logo_url;
+      preview.style.display = 'block';
+      placeholder.style.display = 'none';
+    } else {
+      preview.style.display = 'none';
+      placeholder.style.display = 'block';
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error al cargar datos de la empresa');
+  }
+}
+
+async function submitCompanyForm(e) {
+  if (e) e.preventDefault();
+  
+  const form = document.getElementById('companyForm');
+  const btn = document.getElementById('companySubmitBtn');
+  
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  
+  try {
+    const formData = new FormData(form);
+    
+    const res = await fetch('/api/company/update/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: formData
+    });
+    
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al guardar');
+    }
+    
+    alert('✅ Datos de empresa actualizados correctamente');
+    closeCompanyModal();
+  } catch (err) {
+    alert(err.message || 'Error al guardar datos de empresa');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar cambios'; }
+  }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
   loadWorkers();

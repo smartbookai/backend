@@ -6412,3 +6412,66 @@ def api_upload_purchase_delivery_note(request):
             'success': False,
             'message': f'Error procesando el albarán recibido: {str(e)}'
         }, status=500)
+
+
+@login_required
+def api_get_company(request):
+    """Obtiene los datos de la empresa del usuario actual"""
+    company = get_current_company(request.user)
+
+    logo_url = None
+    if company.logo:
+        logo_url = company.logo.url
+
+    return JsonResponse({
+        'company': {
+            'id': company.id,
+            'name': company.name or '',
+            'address': company.address or '',
+            'document_type': company.document_type or '',
+            'document_number': company.document_number or '',
+            'ccc': company.ccc or '',
+            'phone': company.phone or '',
+            'email': company.email or '',
+            'website': company.website or '',
+            'logo_url': logo_url,
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_update_company(request):
+    """Actualiza los datos de la empresa del usuario actual"""
+    try:
+        company_user = CompanyUser.objects.get(user=request.user)
+
+        if company_user.role != 'admin':
+            return JsonResponse({'error': 'No tienes permisos para editar la empresa'}, status=403)
+
+        company = company_user.company
+
+        company.name = request.POST.get('name', company.name)
+        company.address = request.POST.get('address', company.address)
+        company.document_type = request.POST.get('document_type', company.document_type)
+        company.document_number = request.POST.get('document_number', company.document_number)
+        company.ccc = request.POST.get('ccc', company.ccc)
+        company.phone = request.POST.get('phone', company.phone)
+        company.email = request.POST.get('email', company.email)
+        company.website = request.POST.get('website', company.website)
+
+        if 'logo' in request.FILES:
+            logo_file = request.FILES['logo']
+            if logo_file.size > 2 * 1024 * 1024:
+                return JsonResponse({'error': 'El logo no puede superar 2MB'}, status=400)
+            if company.logo:
+                company.logo.delete(save=False)
+            company.logo = logo_file
+
+        company.save()
+        return JsonResponse({'success': True, 'message': 'Empresa actualizada correctamente'})
+
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({'error': 'Usuario no asociado a ninguna empresa'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
