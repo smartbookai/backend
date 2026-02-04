@@ -3412,30 +3412,50 @@ def consolidate_invoice_group(page_results, group_indices):
 @require_POST
 @transaction.atomic
 def api_create_invoice_received(request):
+    import sys
+    print("=" * 80, file=sys.stderr)
+    print("🚀 INICIO api_create_invoice_received", file=sys.stderr)
+
     try:
         company = get_current_company(request.user)
+        print(f"✅ Company: {company.name}", file=sys.stderr)
+
         file = request.FILES.get("pdf_file")
+        print(f"✅ File received: {file.name if file else 'None'}, Size: {file.size if file else 0} bytes",
+              file=sys.stderr)
 
         if not file:
+            print("❌ No file provided", file=sys.stderr)
             return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
 
         if file.size > 10 * 1024 * 1024:
+            print("❌ File too large", file=sys.stderr)
             return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
+
+        print("🤖 Calling extract_purchase_invoice_data...", file=sys.stderr)
 
         try:
             # Paso 1: Extraer datos con OpenAI
             result = extract_purchase_invoice_data(file)
+            print(f"✅ extract_purchase_invoice_data completed. Type: {type(result)}", file=sys.stderr)
+
         except Exception as e:
+            print(f"❌ ERROR in extract_purchase_invoice_data: {e}", file=sys.stderr)
+            import traceback
+            print(traceback.format_exc(), file=sys.stderr)
             return JsonResponse({
                 "success": False,
                 "message": "Error al extraer información de la factura: " + str(e)
             }, status=400)
 
         if not result:
+            print("❌ result is None or False", file=sys.stderr)
             return JsonResponse({
                 "success": False,
                 "message": "No se pudo extraer información de la factura."
             }, status=400)
+
+        print(f"🔍 Result type: {type(result)}", file=sys.stderr)
 
         # Detectar si es múltiples facturas (tupla con lista y bytes) o una sola (dict)
         if isinstance(result, tuple) and len(result) == 2:
