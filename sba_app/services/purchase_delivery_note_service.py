@@ -32,11 +32,11 @@ class PurchaseDeliveryNoteService:
             Dict con la información extraída y resultado del procesamiento
         """
         try:
-            # 1. Extraer texto del PDF
-            text_content = self._extract_text_from_pdf(file)
+            # 1. Convertir PDF a imágenes
+            images = self._extract_images_from_pdf(file)
 
             # 2. Analizar con OpenAI
-            analysis_result = self._analyze_delivery_note_with_openai(text_content)
+            analysis_result = self._analyze_delivery_note_with_openai(images)
 
             # 3. Procesar la información y guardar el PDF original
             result = self._process_delivery_note_data(analysis_result, file)
@@ -50,42 +50,62 @@ class PurchaseDeliveryNoteService:
                 'message': f'Error procesando el albarán: {str(e)}'
             }
 
-    def _extract_text_from_pdf(self, file: UploadedFile) -> str:
-        """Extrae texto de un archivo PDF (múltiples páginas)"""
+    def _extract_images_from_pdf(self, file: UploadedFile) -> List[Tuple[int, bytes]]:
+        """Convierte PDF a imágenes (múltiples páginas)"""
         try:
-            import PyPDF2
-
-            text_content = ""
-            pdf_reader = PyPDF2.PdfReader(file)
-
-            # Extraer texto de todas las páginas
-            for page_num in range(len(pdf_reader.pages)):
-                page = pdf_reader.pages[page_num]
-                text_content += page.extract_text() + "\n"
-
-            return text_content.strip()
-
+            import fitz  # PyMuPDF
+            
+            # Resetear puntero del archivo
+            file.seek(0)
+            pdf_bytes = file.read()
+            
+            images = []
+            
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                for page_num in range(len(doc)):
+                    # Convertir cada página a imagen
+                    mat = fitz.Matrix(2, 2)  # 2x zoom para mejor calidad
+                    pix = doc[page_num].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    images.append((page_num, image_bytes))
+            
+            return images
+            
         except ImportError:
-            raise Exception("PyPDF2 no está instalado. Ejecute: pip install PyPDF2")
+            raise Exception("PyMuPDF no está instalado. Ejecute: pip install PyMuPDF")
         except Exception as e:
-            raise Exception(f"Error extrayendo texto del PDF: {str(e)}")
+            raise Exception(f"Error convirtiendo PDF a imágenes: {str(e)}")
 
-    def _analyze_delivery_note_with_openai(self, text_content: str) -> Dict:
-        """Usa OpenAI para analizar el contenido del albarán recibido"""
+    def _analyze_delivery_note_with_openai(self, images: List[Tuple[int, bytes]]) -> Dict:
+        """Usa OpenAI Vision para analizar las imágenes del albarán recibido"""
 
-        print(f"\n🤖 DEBUG: Analizando albarán recibido con OpenAI...")
-        print(f"   - Longitud del texto: {len(text_content)} caracteres")
-        print(f"   - Primeras 200 chars: {text_content[:200]}...")
+        print(f"\n🤖 DEBUG: Analizando albarán recibido con OpenAI Vision...")
+        print(f"   - Número de imágenes: {len(images)}")
 
-        prompt = f"""
-Analiza el siguiente texto de un albarán de entrega RECIBIDO (de un proveedor) y extrae toda la información importante.
+        # Preparar el contenido de las imágenes para OpenAI
+        image_contents = []
+        for page_idx, image_bytes in images:
+            import base64
+            base64_image = base64.b64encode(image_bytes).decode('utf-8')
+            image_contents.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{base64_image}"
+                }
+            })
 
-TEXTO DEL ALBARÁN:
-{text_content}
+        # Construir el mensaje para OpenAI
+        user_content = [
+            {
+                "type": "text",
+                "text": """
+Analiza este albarán de entrega RECIBIDO (de un proveedor) y extrae toda la información importante.
+
+Este es un albarán RECIBIDO, por lo que el proveedor es quien ENVÍA/EMITE el albarán.
 
 Debes responder con un JSON con esta estructura EXACTA:
 
-{{
+{
   "delivery_note_number": "número del albarán",
   "issue_date": "fecha de emisión en formato DD/MM/YYYY",
   "delivery_date": "fecha de entrega en formato DD/MM/YYYY",
@@ -97,42 +117,50 @@ Debes responder con un JSON con esta estructura EXACTA:
   "supplier_phone": "teléfono del proveedor",
   "supplier_email": "email del proveedor",
   "lines": [
-    {{
+    {
       "reference": "referencia del producto",
       "description": "descripción del producto",
       "quantity": número cantidad sin texto,
       "unit_price": número precio unitario sin símbolo € (solo el número),
       "vat_rate": número porcentaje IVA sin símbolo % (solo el número, ej: 21)
-    }}
+    }
   ],
   "base_amount": número base imponible sin símbolo €,
   "tax_amount": número IVA sin símbolo €,
   "total_amount": número total sin símbolo €,
   "has_amounts": true o false
-}}
+}
 
 INSTRUCCIONES IMPORTANTES:
-1. Este es un albarán RECIBIDO, por lo que el proveedor es quien ENVÍA/EMITE el albarán
-2. Extrae TODAS las líneas de productos/servicios que encuentres
-3. Para los números (quantity, unit_price, vat_rate, amounts): usa SOLO números decimales, SIN símbolos € ni %
-4. Ejemplo: si ves "120.00 €", extrae solo "120.00"
-5. Ejemplo: si ves "21.00 %", extrae solo "21.00"
-6. Si el albarán tiene una tabla de productos con precios, IVA y totales, pon has_amounts: true
-7. Si no hay precios en el albarán, pon has_amounts: false y deja unit_price, vat_rate y amounts en null
-8. Responde ÚNICAMENTE con el JSON, sin explicaciones adicionales ni markdown
-
-Responde ahora con el JSON:
+1. Extrae TODAS las líneas de productos/servicios que encuentres
+2. Para los números (quantity, unit_price, vat_rate, amounts): usa SOLO números decimales, SIN símbolos € ni %
+3. Ejemplo: si ves "120.00 €", extrae solo "120.00"
+4. Ejemplo: si ves "21.00 %", extrae solo "21.00"
+5. Si el albarán tiene una tabla de productos con precios, IVA y totales, pon has_amounts: true
+6. Si no hay precios en el albarán, pon has_amounts: false y deja unit_price, vat_rate y amounts en null
+7. Responde ÚNICAMENTE con el JSON, sin explicaciones adicionales ni markdown
 """
+            }
+        ]
+        
+        # Agregar las imágenes al contenido
+        user_content.extend(image_contents)
 
         try:
-            print(f"📤 DEBUG: Enviando solicitud a OpenAI...")
+            print(f"📤 DEBUG: Enviando solicitud a OpenAI Vision...")
             response = openai_service.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model="gpt-4o",  # Usar gpt-4o que tiene vision capabilities
                 messages=[
-                    {"role": "system",
-                     "content": "Eres un experto en extracción de datos de documentos. Respondes SIEMPRE con JSON válido, sin markdown ni explicaciones."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "Eres un experto en extracción de datos de documentos. Respondes SIEMPRE con JSON válido, sin markdown ni explicaciones."
+                    },
+                    {
+                        "role": "user",
+                        "content": user_content
+                    }
                 ],
+                response_format={"type": "json_object"},
                 temperature=0.1,
                 max_tokens=4000
             )
@@ -141,11 +169,6 @@ Responde ahora con el JSON:
             print(f"📥 DEBUG: Respuesta recibida de OpenAI")
             print(f"   - Longitud: {len(content)} caracteres")
             print(f"   - Contenido completo:\n{content}")
-
-            # Limpiar el contenido para asegurar que es JSON válido
-            content = re.sub(r'```json\n?', '', content)
-            content = re.sub(r'```\n?', '', content)
-            content = content.strip()
 
             print(f"🔧 DEBUG: Parseando JSON...")
             analysis_data = json.loads(content)
