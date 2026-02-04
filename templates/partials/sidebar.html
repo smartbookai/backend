@@ -51,6 +51,27 @@
         </a>
       </div>
     </div>
+    <div class="sidebar-dropdown">
+      <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
+        <i class="bi bi-file-earmark-text"></i>
+        <span>Albaranes</span>
+        <i class="bi bi-chevron-down dropdown-arrow"></i>
+      </a>
+      <div class="dropdown-menu">
+        <a href="{% url 'albaranes_recibidos' %}" class="sidebar-link {% if request.resolver_match.url_name == 'albaranes_recibidos' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-inbox"></i>
+          <span>Albaranes recibidos</span>
+        </a>
+        <a href="{% url 'albaranes_enviados' %}" class="sidebar-link {% if request.resolver_match.url_name == 'albaranes_enviados' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-send"></i>
+          <span>Albaranes enviados</span>
+        </a>
+        <a href="{% url 'generar_albaran' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_albaran' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar albarán</span>
+        </a>
+      </div>
+    </div>
     <a href="{% url 'proveedores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'proveedores' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-building"></i>
       <span>Proveedores</span>
