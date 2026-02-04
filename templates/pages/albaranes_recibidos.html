@@ -60,16 +60,16 @@
     </div>
     <form id="purchaseDeliveryNoteForm" onsubmit="submitPurchaseDeliveryNote(event)" enctype="multipart/form-data">
       <div id="pdfDropzone" style="border:2px dashed #D1D5DB;border-radius:10px;padding:40px 24px;min-height:220px;text-align:center;cursor:pointer;margin-bottom:16px;background:#F9FAFB;">
-        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta el albarán aquí</div>
-        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivo</div>
+        <div style="color:#6B7280;font-size:16px;">Arrastrá y suelta los albaranes aquí</div>
+        <div style="margin-top:8px;color:#2563EB;font-weight:600;font-size:15px;">Seleccionar archivos</div>
         <div style="margin-top:8px;color:#9CA3AF;font-size:13px;">PDF hasta 10MB</div>
-        <input id="pdfInput" name="purchase_delivery_note_file" type="file" accept="application/pdf" style="display:none;" />
+        <input id="pdfInput" name="purchase_delivery_note_files" type="file" accept="application/pdf" multiple style="display:none;" />
         <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
-        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">OpenAI procesará la información automáticamente</div>
+        <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closePurchaseDeliveryNoteDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Procesar Albarán</button>
+        <button type="submit" class="btn-primary">Procesar Albaranes</button>
       </div>
     </form>
   </aside>
@@ -178,6 +178,17 @@
 <script>
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let DELIVERY_NOTES_DATA = [];
+const MAX_PURCHASE_DELIVERY_NOTE_FILES = 10;
+let selectedPurchaseDeliveryNoteFiles = []; // Acumulador de archivos
+
+function getStatusLabel(status) {
+  const labels = {
+    'pending': 'Pendiente facturar',
+    'invoiced': 'Facturado',
+    'cancelled': 'Cancelado'
+  };
+  return labels[status] || status || '-';
+}
 
 document.addEventListener('DOMContentLoaded', function() {
   loadDeliveryNotes();
@@ -236,7 +247,7 @@ function renderDeliveryNotesTable(rows) {
       <td class="table-cell" style="padding:14px 18px;">${dn.issue_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${dn.delivery_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${dn.total_amount || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${dn.status || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${getStatusLabel(dn.status)}</td>
       <td class="table-cell text-right" style="padding:14px 18px;">
         ${actions}
       </td>
@@ -246,37 +257,88 @@ function renderDeliveryNotesTable(rows) {
 }
 
 function setupPdfDropzone() {
-  const dropzone = document.getElementById('pdfDropzone');
+  const dz = document.getElementById('pdfDropzone');
   const input = document.getElementById('pdfInput');
-  const fileName = document.getElementById('pdfFileName');
+  const nameEl = document.getElementById('pdfFileName');
+  if (!dz || !input) return;
 
-  dropzone.addEventListener('click', () => input.click());
-  
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.style.background = '#F3F4F6';
-  });
-
-  dropzone.addEventListener('dragleave', () => {
-    dropzone.style.background = '#F9FAFB';
-  });
-
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.style.background = '#F9FAFB';
-    handleFiles(e.dataTransfer.files);
-  });
-
-  input.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
-  });
-
-  function handleFiles(files) {
-    if (files.length > 0) {
-      const fileNames = Array.from(files).map(f => f.name).join(', ');
-      fileName.textContent = `Archivos seleccionados: ${fileNames}`;
+  const updateDisplay = () => {
+    if (selectedPurchaseDeliveryNoteFiles.length === 0) {
+      nameEl.textContent = '';
+      return;
     }
-  }
+    let msg = selectedPurchaseDeliveryNoteFiles.length === 1 
+      ? selectedPurchaseDeliveryNoteFiles[0].name 
+      : `${selectedPurchaseDeliveryNoteFiles.length} archivos seleccionados`;
+    nameEl.innerHTML = msg;
+    nameEl.style.color = '#374151';
+  };
+
+  const addFiles = (files) => {
+    if (!files || files.length === 0) return;
+    
+    const errors = [];
+
+    for (const file of files) {
+      // Verificar si ya existe (por nombre y tamaño)
+      const exists = selectedPurchaseDeliveryNoteFiles.some(f => f.name === file.name && f.size === file.size);
+      if (exists) {
+        errors.push(`${file.name}: ya seleccionado`);
+        continue;
+      }
+
+      if (selectedPurchaseDeliveryNoteFiles.length >= MAX_PURCHASE_DELIVERY_NOTE_FILES) {
+        errors.push(`${file.name}: límite de ${MAX_PURCHASE_DELIVERY_NOTE_FILES} archivos alcanzado`);
+        continue;
+      }
+
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        errors.push(`${file.name}: formato inválido (solo PDF)`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`${file.name}: supera 10MB`);
+        continue;
+      }
+      
+      selectedPurchaseDeliveryNoteFiles.push(file);
+    }
+
+    updateDisplay();
+    
+    if (errors.length > 0) {
+      console.log('Errores al agregar archivos:', errors);
+    }
+  };
+
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => {
+    addFiles(e.target.files);
+    input.value = ''; // Limpiar para permitir re-seleccionar el mismo archivo
+  });
+  ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dz.style.background = '#EFF6FF';
+    dz.style.borderColor = '#60A5FA';
+  }));
+  ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dz.style.background = '#F9FAFB';
+    dz.style.borderColor = '#D1D5DB';
+  }));
+  dz.addEventListener('drop', (e) => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    addFiles(files);
+  });
+}
+
+function clearPurchaseDeliveryNoteFiles() {
+  selectedPurchaseDeliveryNoteFiles = [];
+  const nameEl = document.getElementById('pdfFileName');
+  if (nameEl) nameEl.textContent = '';
 }
 
 function setupDeliveryNoteSearch() {
@@ -336,53 +398,79 @@ function closePurchaseDeliveryNoteDrawer() {
   document.getElementById('purchaseDeliveryNoteDrawer').setAttribute('aria-hidden', 'true');
   document.getElementById('purchaseDeliveryNoteDrawer').style.right = '-440px';
   document.getElementById('purchaseDeliveryNoteForm').reset();
-  document.getElementById('pdfFileName').textContent = '';
+  clearPurchaseDeliveryNoteFiles();
 }
 
-function submitPurchaseDeliveryNote(event) {
+async function submitPurchaseDeliveryNote(event) {
   event.preventDefault();
   
-  const form = event.target;
-  const formData = new FormData(form);
-  
-  // Mostrar loading con la misma animación que facturas
-  document.getElementById('purchaseDeliveryNoteLoaderTitle').textContent = 'Procesando albarán recibido con OpenAI...';
-  document.getElementById('purchaseDeliveryNoteLoaderFile').textContent = formData.get('purchase_delivery_note_file').name;
+  if (selectedPurchaseDeliveryNoteFiles.length === 0) {
+    alert('Seleccioná al menos un archivo PDF.');
+    return;
+  }
+
+  const files = [...selectedPurchaseDeliveryNoteFiles];
+  if (files.length > MAX_PURCHASE_DELIVERY_NOTE_FILES) {
+    alert(`Máximo ${MAX_PURCHASE_DELIVERY_NOTE_FILES} archivos permitidos.`);
+    return;
+  }
+
+  const btn = (event && event.submitter) || document.querySelector('#purchaseDeliveryNoteForm button[type="submit"]');
+  if (btn) { btn.disabled = true; }
+
   showDrawerLoader('purchaseDeliveryNoteDrawer');
-  
-  fetch('/api/upload-purchase-delivery-note/', {
-    method: 'POST',
-    body: formData,
-    headers: {
-      'X-CSRFToken': getCookie('csrftoken')
+
+  let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
+
+  const loaderTitle = document.getElementById('purchaseDeliveryNoteLoaderTitle');
+  const loaderFile = document.getElementById('purchaseDeliveryNoteLoaderFile');
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (btn) btn.textContent = `Procesando ${i + 1} de ${files.length}...`;
+    if (loaderTitle) loaderTitle.textContent = `Procesando ${i + 1} de ${files.length}...`;
+    if (loaderFile) loaderFile.textContent = file.name;
+
+    try {
+      const fd = new FormData();
+      fd.append('purchase_delivery_note_file', file);
+
+      const res = await fetch('/api/upload-purchase-delivery-note/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: fd
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Error desconocido');
+      }
+      successCount++;
+    } catch (error) {
+      errorCount++;
+      errors.push(`${file.name}: ${error.message}`);
     }
-  })
-  .then(response => response.json())
-  .then(data => {
-    hideDrawerLoader('purchaseDeliveryNoteDrawer');
-    
-    if (data.success) {
-      closePurchaseDeliveryNoteDrawer();
-      loadDeliveryNotes(); // Recargar la tabla
-      
-      // Mostrar mensaje de éxito
-      alert(`Albarán ${data.delivery_note_number} procesado correctamente.\n\n` +
-            `Proveedor: ${data.supplier_name}\n` +
-            `Importes: ${data.has_amounts ? 'Sí' : 'No'}\n` +
-            (data.total_amount ? `Total: ${data.total_amount}€` : ''));
-      
-      // Limpiar formulario
-      form.reset();
-      document.getElementById('pdfFileName').textContent = '';
-    } else {
-      alert(data.message || 'Error al procesar el albarán recibido');
-    }
-  })
-  .catch(error => {
-    hideDrawerLoader('purchaseDeliveryNoteDrawer');
-    console.error('Error:', error);
-    alert('Error al procesar el albarán recibido. Por favor, inténtalo de nuevo.');
-  });
+  }
+
+  hideDrawerLoader('purchaseDeliveryNoteDrawer');
+  if (btn) { btn.disabled = false; btn.textContent = 'Procesar Albaranes'; }
+
+  // Mostrar resumen
+  if (errorCount === 0) {
+    alert(`✅ ${successCount} albarán(es) recibido(s) procesado(s) correctamente.`);
+    loadDeliveryNotes();
+    closePurchaseDeliveryNoteDrawer();
+    clearPurchaseDeliveryNoteFiles();
+  } else {
+    let msg = `Procesados: ${successCount} exitoso(s), ${errorCount} con error(es).\n\nErrores:\n`;
+    msg += errors.join('\n');
+    alert(msg);
+    loadDeliveryNotes();
+  }
 }
 
 function closeDeliveryNoteEditDrawer() {
