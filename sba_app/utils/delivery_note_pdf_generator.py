@@ -32,16 +32,16 @@ def generate_delivery_note_pdf(delivery_note):
     # Estilos
     styles = getSampleStyleSheet()
 
-    # Título principal
+    # Título principal (más pequeño)
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=28,
+        fontSize=18,
         textColor=primary_color,
-        spaceAfter=10,
+        spaceAfter=5,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold',
-        leading=32
+        leading=22
     )
 
     # Subtítulo
@@ -92,13 +92,13 @@ def generate_delivery_note_pdf(delivery_note):
     # Contenido del PDF
     story = []
 
-    # Logo de la empresa (si existe)
+    # Logo de la empresa (si existe) - más grande
     logo_element = ""
     if delivery_note.company.logo:
         try:
             logo_path = delivery_note.company.logo.path
             if os.path.exists(logo_path):
-                logo_element = Image(logo_path, width=1.5*cm, height=1.5*cm)
+                logo_element = Image(logo_path, width=3*cm, height=3*cm)
                 logo_element.hAlign = 'LEFT'
         except Exception:
             pass  # Si hay error con el logo, continuar sin él
@@ -107,7 +107,7 @@ def generate_delivery_note_pdf(delivery_note):
     # Crear contenido del título con o sin logo
     if logo_element:
         title_content = Table([[logo_element, Paragraph("ALBARÁN DE ENTREGA", title_style)]], 
-                              colWidths=[2*cm, 8*cm])
+                              colWidths=[3.5*cm, 6.5*cm])
         title_content.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -148,12 +148,21 @@ def generate_delivery_note_pdf(delivery_note):
     story.append(Spacer(1, 0.5 * cm))
 
     # ===== INFORMACIÓN PRINCIPAL =====
+    # Construir datos de la empresa con todos los campos disponibles
+    company_data = [Paragraph("<b>DATOS DE LA EMPRESA</b>", section_header_style)]
+    company_data.append(Paragraph(f"<b>{delivery_note.company.name}</b>", data_style))
+    if delivery_note.company.address:
+        company_data.append(Paragraph(delivery_note.company.address, data_style))
+    if delivery_note.company.document_number:
+        company_data.append(Paragraph(f"CIF: {delivery_note.company.document_number}", data_style))
+    if delivery_note.company.email:
+        company_data.append(Paragraph(delivery_note.company.email, data_style))
+    if delivery_note.company.phone:
+        company_data.append(Paragraph(delivery_note.company.phone, data_style))
+
     info_data = [
         [
-            [
-                Paragraph("<b>DATOS DE LA EMPRESA</b>", section_header_style),
-                Paragraph(f"<b>{delivery_note.company.name}</b>", data_style),
-            ],
+            company_data,
             [
                 Paragraph("<b>INFORMACIÓN DEL ALBARÁN</b>", section_header_style),
                 Paragraph(f"<b>Fecha de emisión:</b> {delivery_note.issue_date.strftime('%d/%m/%Y')}", data_style),
