@@ -434,6 +434,10 @@ def should_group_invoices(page_results):
 def consolidate_invoice_group(page_results, group_indices):
     """
     Consolida los datos de múltiples páginas que pertenecen a la misma factura.
+    
+    IMPORTANTE: Cuando las páginas son de la misma factura (mismo número),
+    NO se suman los totales. Se usa el total de la primera página que tenga
+    un valor válido, ya que las otras páginas son detalles de la misma factura.
     """
     if len(group_indices) == 1:
         return page_results[group_indices[0]]
@@ -450,35 +454,46 @@ def consolidate_invoice_group(page_results, group_indices):
         page_lines = page_result.get("lines", [])
         consolidated_lines.extend(page_lines)
     
-    # Sumar totales de todas las páginas
-    total_base = 0
-    total_tax = 0
-    total_amount = 0
-    total_discount = 0
+    # NO sumar totales - usar el de la primera página con valor válido
+    # Las otras páginas son detalles de la misma factura, no facturas separadas
+    final_base = 0
+    final_tax = 0
+    final_total = 0
+    final_discount = 0
     
     for idx in group_indices:
         page_invoice = page_results[idx].get("invoice", {})
         try:
-            total_base += float(page_invoice.get("base_amount", 0) or 0)
-            total_tax += float(page_invoice.get("tax_amount", 0) or 0)
-            total_amount += float(page_invoice.get("total_amount", 0) or 0)
-            total_discount += float(page_invoice.get("discount_amount", 0) or 0)
+            page_base = float(page_invoice.get("base_amount", 0) or 0)
+            page_tax = float(page_invoice.get("tax_amount", 0) or 0)
+            page_total = float(page_invoice.get("total_amount", 0) or 0)
+            page_discount = float(page_invoice.get("discount_amount", 0) or 0)
+            
+            # Usar el primer valor válido encontrado (no sumar)
+            if page_base > 0 and final_base == 0:
+                final_base = page_base
+            if page_tax > 0 and final_tax == 0:
+                final_tax = page_tax
+            if page_total > 0 and final_total == 0:
+                final_total = page_total
+            if page_discount > 0 and final_discount == 0:
+                final_discount = page_discount
         except (ValueError, TypeError):
             pass
     
-    # Actualizar datos consolidados
-    consolidated_invoice["base_amount"] = f"{total_base:.2f}"
-    consolidated_invoice["tax_amount"] = f"{total_tax:.2f}"
-    consolidated_invoice["total_amount"] = f"{total_amount:.2f}"
-    if total_discount > 0:
-        consolidated_invoice["discount_amount"] = f"{total_discount:.2f}"
+    # Actualizar datos consolidados con valores únicos (no sumados)
+    consolidated_invoice["base_amount"] = f"{final_base:.2f}"
+    consolidated_invoice["tax_amount"] = f"{final_tax:.2f}"
+    consolidated_invoice["total_amount"] = f"{final_total:.2f}"
+    if final_discount > 0:
+        consolidated_invoice["discount_amount"] = f"{final_discount:.2f}"
     
     # Construir resultado consolidado
     consolidated_result = {
         "invoice": consolidated_invoice,
         "supplier": consolidated_supplier,
         "lines": consolidated_lines,
-        "tokens": sum(page_results[idx].get("tokens", 0) for idx in group_indices),
+        "tokens": sum(page_results[idx].get("tokens", 0) or 0 for idx in group_indices),
         "page_group": group_indices,  # Para referencia
         "consolidated": True
     }
