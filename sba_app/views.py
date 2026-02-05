@@ -27,7 +27,7 @@ from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoic
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
-    process_invoice_header_only
+    process_invoice_header_only, extract_single_invoice_from_pdf, extract_single_purchase_invoice_from_pdf
 from sba_app.utils.payroll_pdf_generator import generate_payroll_pdf
 
 logger = logging.getLogger(__name__)
@@ -2100,6 +2100,9 @@ def consolidate_sales_invoice_group(page_results, group_indices):
 def api_create_invoice_sent(request):
     company = get_current_company(request.user)
     file = request.FILES.get("pdf_file")
+    
+    # Checkbox: si está marcado, el PDF contiene múltiples facturas (modo lento)
+    multiple_invoices = request.POST.get("multiple_invoices") == "true"
 
     if not file:
         return JsonResponse({"success": False, "message": "Falta el archivo"}, status=400)
@@ -2108,6 +2111,32 @@ def api_create_invoice_sent(request):
         return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
     try:
+        # MODO RÁPIDO (por defecto): 1 PDF = 1 factura
+        if not multiple_invoices:
+            print("⚡ MODO RÁPIDO: Procesando PDF como 1 sola factura...")
+            result = extract_single_invoice_from_pdf(file)
+            
+            if not result or result.get("error"):
+                return JsonResponse({
+                    "success": False,
+                    "message": result.get("error", "No se pudo extraer información de la factura.")
+                }, status=400)
+            
+            # Crear la factura directamente
+            inv_result = _create_single_sales_invoice(company, result, file)
+            
+            return JsonResponse({
+                "success": True,
+                "invoice_id": inv_result["invoice_id"],
+                "invoice_number": inv_result["invoice_number"],
+                "client_name": inv_result["client_name"],
+                "total_amount": inv_result["total_amount"],
+                "pages_processed": result.get("pages_processed", 1),
+                "mode": "fast"
+            })
+        
+        # MODO MÚLTIPLE: El PDF puede contener varias facturas (modo lento)
+        print("🐢 MODO MÚLTIPLE: Analizando cada página por separado...")
         result = extract_invoice_data(file)
 
         if not result:
@@ -3437,8 +3466,13 @@ def api_create_invoice_received(request):
         print(f"✅ Company: {company.name}", file=sys.stderr)
 
         file = request.FILES.get("pdf_file")
+        
+        # Checkbox: si está marcado, el PDF contiene múltiples facturas (modo lento)
+        multiple_invoices = request.POST.get("multiple_invoices") == "true"
+        
         print(f"✅ File received: {file.name if file else 'None'}, Size: {file.size if file else 0} bytes",
               file=sys.stderr)
+        print(f"✅ Multiple invoices mode: {multiple_invoices}", file=sys.stderr)
 
         if not file:
             print("❌ No file provided", file=sys.stderr)
@@ -3448,7 +3482,41 @@ def api_create_invoice_received(request):
             print("❌ File too large", file=sys.stderr)
             return JsonResponse({"success": False, "message": "El archivo supera 10MB"}, status=400)
 
-        print("🤖 Calling extract_purchase_invoice_data...", file=sys.stderr)
+        # MODO RÁPIDO (por defecto): 1 PDF = 1 factura
+        if not multiple_invoices:
+            print("⚡ MODO RÁPIDO: Procesando PDF como 1 sola factura...", file=sys.stderr)
+            try:
+                result = extract_single_purchase_invoice_from_pdf(file)
+                
+                if not result or result.get("error"):
+                    return JsonResponse({
+                        "success": False,
+                        "message": result.get("error", "No se pudo extraer información de la factura.")
+                    }, status=400)
+                
+                # Crear la factura directamente
+                inv_result = _create_single_purchase_invoice(company, result, file)
+                
+                return JsonResponse({
+                    "success": True,
+                    "invoice_id": inv_result["invoice_id"],
+                    "invoice_number": inv_result["invoice_number"],
+                    "supplier_name": inv_result["supplier_name"],
+                    "total_amount": inv_result["total_amount"],
+                    "pages_processed": result.get("pages_processed", 1),
+                    "mode": "fast"
+                })
+            except Exception as e:
+                print(f"❌ ERROR en modo rápido: {e}", file=sys.stderr)
+                import traceback
+                print(traceback.format_exc(), file=sys.stderr)
+                return JsonResponse({
+                    "success": False,
+                    "message": f"Error procesando factura: {str(e)}"
+                }, status=400)
+
+        # MODO MÚLTIPLE: El PDF puede contener varias facturas (modo lento)
+        print("🐢 MODO MÚLTIPLE: Analizando cada página por separado...", file=sys.stderr)
 
         try:
             # Paso 1: Extraer datos con OpenAI

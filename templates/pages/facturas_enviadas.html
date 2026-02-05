@@ -68,6 +68,12 @@
         <div id="pdfFileName" style="margin-top:10px;color:#374151;font-size:13px;"></div>
         <div style="margin-top:6px;color:#9CA3AF;font-size:12px;">Máximo 10 archivos por subida</div>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:#FEF3C7;border-radius:8px;">
+        <input type="checkbox" id="multipleInvoicesCheckbox" style="width:18px;height:18px;cursor:pointer;" />
+        <label for="multipleInvoicesCheckbox" style="font-size:13px;color:#92400E;cursor:pointer;">
+          <strong>Este PDF contiene múltiples facturas</strong> (más lento, analiza página por página)
+        </label>
+      </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button type="button" class="btn-secondary" onclick="closeInvoiceDrawer()">Cancelar</button>
         <button type="submit" class="btn-primary">Subir</button>
@@ -447,6 +453,12 @@ async function submitInvoice(e) {
     try {
       const fd = new FormData();
       fd.append('pdf_file', file);
+      
+      // Enviar checkbox de múltiples facturas
+      const multipleCheckbox = document.getElementById('multipleInvoicesCheckbox');
+      if (multipleCheckbox && multipleCheckbox.checked) {
+        fd.append('multiple_invoices', 'true');
+      }
 
       const res = await fetch('/api/invoices-sent/create/', {
         method: 'POST',

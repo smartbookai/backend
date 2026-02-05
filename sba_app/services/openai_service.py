@@ -372,6 +372,148 @@ def _extract_single_page_purchase_invoice(image_bytes, mime_type="image/png", ma
     return result
 
 
+def extract_single_invoice_from_pdf(file):
+    """
+    MODO OPTIMIZADO: Extrae datos de 1 factura de ventas desde un PDF multipágina.
+    Envía TODAS las páginas en UNA SOLA llamada a OpenAI.
+    """
+    import time
+    start_time = time.time()
+    content_type = file.content_type.lower()
+    
+    try:
+        if "pdf" in content_type:
+            pdf_bytes = file.read()
+            
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                num_pages = len(doc)
+                print(f"📄 MODO RÁPIDO: PDF con {num_pages} página(s) - procesando como 1 factura")
+                
+                image_contents = []
+                for page_idx in range(num_pages):
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[page_idx].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+                    image_contents.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                    })
+                    print(f"   📄 Página {page_idx + 1}: {pix.width}x{pix.height}")
+                
+                user_content = [{"type": "text", "text": f"Esta factura EMITIDA tiene {num_pages} página(s). Analizá TODAS las páginas como UN SOLO documento y extraé los datos completos. El client es quien RECIBE la factura."}]
+                user_content.extend(image_contents)
+                
+                print(f"🤖 Enviando {num_pages} páginas a OpenAI en UNA sola llamada...")
+                
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": BASE_PROMPT},
+                        {"role": "user", "content": user_content}
+                    ],
+                    response_format={"type": "json_object"},
+                    timeout=90,
+                )
+                
+                elapsed_time = time.time() - start_time
+                print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+                
+                usage = getattr(response, "usage", None)
+                tokens = getattr(usage, "total_tokens", None) if usage else None
+                content = response.choices[0].message.content
+                if content is None:
+                    raise ValueError("OpenAI no pudo procesar las imágenes")
+                
+                result = json.loads(content)
+                result["tokens"] = tokens
+                result["pages_processed"] = num_pages
+                return result
+        
+        elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
+            image_bytes = file.read()
+            mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
+            return _extract_single_page_sales_invoice(image_bytes, mime_type)
+        else:
+            raise ValueError("Formato de archivo no soportado")
+    except Exception as e:
+        print(f"⚠️ Error en extract_single_invoice_from_pdf: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"tokens": None, "error": str(e)}
+
+
+def extract_single_purchase_invoice_from_pdf(file):
+    """
+    MODO OPTIMIZADO: Extrae datos de 1 factura de compra desde un PDF multipágina.
+    Envía TODAS las páginas en UNA SOLA llamada a OpenAI.
+    """
+    import time
+    start_time = time.time()
+    content_type = file.content_type.lower()
+    
+    try:
+        if "pdf" in content_type:
+            pdf_bytes = file.read()
+            
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                num_pages = len(doc)
+                print(f"📄 MODO RÁPIDO: PDF con {num_pages} página(s) - procesando como 1 factura")
+                
+                image_contents = []
+                for page_idx in range(num_pages):
+                    mat = fitz.Matrix(2, 2)
+                    pix = doc[page_idx].get_pixmap(matrix=mat)
+                    image_bytes = pix.tobytes("png")
+                    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+                    image_contents.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                    })
+                    print(f"   📄 Página {page_idx + 1}: {pix.width}x{pix.height}")
+                
+                user_content = [{"type": "text", "text": f"Esta factura RECIBIDA tiene {num_pages} página(s). Analizá TODAS las páginas como UN SOLO documento y extraé los datos completos. El supplier es quien EMITE la factura."}]
+                user_content.extend(image_contents)
+                
+                print(f"🤖 Enviando {num_pages} páginas a OpenAI en UNA sola llamada...")
+                
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": PURCHASE_INVOICE_PROMPT},
+                        {"role": "user", "content": user_content}
+                    ],
+                    response_format={"type": "json_object"},
+                    timeout=90,
+                )
+                
+                elapsed_time = time.time() - start_time
+                print(f"✅ OpenAI respondió en {elapsed_time:.1f}s")
+                
+                usage = getattr(response, "usage", None)
+                tokens = getattr(usage, "total_tokens", None) if usage else None
+                content = response.choices[0].message.content
+                if content is None:
+                    raise ValueError("OpenAI no pudo procesar las imágenes")
+                
+                result = json.loads(content)
+                result["tokens"] = tokens
+                result["pages_processed"] = num_pages
+                return result
+        
+        elif any(fmt in content_type for fmt in ["jpeg", "jpg", "png"]):
+            image_bytes = file.read()
+            mime_type = "image/jpeg" if "jpeg" in content_type or "jpg" in content_type else "image/png"
+            return _extract_single_page_purchase_invoice(image_bytes, mime_type)
+        else:
+            raise ValueError("Formato de archivo no soportado")
+    except Exception as e:
+        print(f"⚠️ Error en extract_single_purchase_invoice_from_pdf: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"tokens": None, "error": str(e)}
+
+
 def _are_consecutive_numbers(num1, num2):
     """
     Detecta si dos números de factura son correlativos.
