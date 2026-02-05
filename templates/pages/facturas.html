@@ -213,15 +213,63 @@ function hideEntryLoader(){ const o=document.getElementById('entryGenerationOver
 const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let PURCHASES_DATA = [];
 
+// Variables globales para albaranes vinculados
+let LINKED_DELIVERY_NOTES = [];
+let LINKED_SUPPLIER_NAME = '';
+
 document.addEventListener('DOMContentLoaded', function() {
   loadPurchases();
   setupPurchaseDropzone();
   setupPurchaseSearch();
+  
   const params = new URLSearchParams(window.location.search);
-  if (params.get('openDrawer') === 'purchase') {
+  
+  // Detectar si venimos desde albaranes recibidos
+  const albaranesParam = params.get('albaranes');
+  const proveedorParam = params.get('proveedor');
+  const openDrawerParam = params.get('openDrawer');
+  
+  if (albaranesParam) {
+    LINKED_DELIVERY_NOTES = albaranesParam.split(',').map(id => parseInt(id));
+    LINKED_SUPPLIER_NAME = decodeURIComponent(proveedorParam || '');
+    
+    // Mostrar mensaje informativo
+    showLinkedDeliveryNotesInfo();
+  }
+  
+  if (openDrawerParam === 'true' || openDrawerParam === 'purchase') {
     openPurchaseDrawer();
   }
 });
+
+function showLinkedDeliveryNotesInfo() {
+  const drawer = document.getElementById('purchaseDrawer');
+  if (!drawer) return;
+  
+  // Crear o actualizar el mensaje informativo
+  let infoDiv = document.getElementById('linkedDeliveryNotesInfo');
+  if (!infoDiv) {
+    infoDiv = document.createElement('div');
+    infoDiv.id = 'linkedDeliveryNotesInfo';
+    infoDiv.style.cssText = 'background:#DBEAFE;border:1px solid #3B82F6;border-radius:8px;padding:12px;margin-bottom:16px;';
+    
+    const form = drawer.querySelector('form');
+    if (form) {
+      form.insertBefore(infoDiv, form.firstChild);
+    }
+  }
+  
+  infoDiv.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:20px;">📦</span>
+      <div>
+        <strong style="color:#1E40AF;">Vinculando ${LINKED_DELIVERY_NOTES.length} albarán${LINKED_DELIVERY_NOTES.length > 1 ? 'es' : ''}</strong>
+        <div style="font-size:13px;color:#1E40AF;">Proveedor: ${LINKED_SUPPLIER_NAME || 'No especificado'}</div>
+        <div style="font-size:12px;color:#3B82F6;margin-top:4px;">La factura se vinculará automáticamente y los albaranes cambiarán a "Facturado"</div>
+      </div>
+    </div>
+  `;
+}
 
 function renderPurchasesTable(rows) {
   const tbody = document.querySelector('.purchases-tbody');
@@ -434,6 +482,11 @@ async function submitPurchase(e) {
         fd.append('multiple_invoices', 'true');
       }
       
+      // Enviar albaranes vinculados si existen
+      if (LINKED_DELIVERY_NOTES && LINKED_DELIVERY_NOTES.length > 0) {
+        fd.append('linked_delivery_notes', LINKED_DELIVERY_NOTES.join(','));
+      }
+      
       const res = await fetch('/api/invoices-received/create/', {
         method: 'POST',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
@@ -455,7 +508,23 @@ async function submitPurchase(e) {
   
   // Mostrar resumen
   if (errorCount === 0) {
-    alert(`✅ ${successCount} factura(s) procesada(s) correctamente.`);
+    let msg = `✅ ${successCount} factura(s) procesada(s) correctamente.`;
+    if (LINKED_DELIVERY_NOTES.length > 0) {
+      msg += `\n📦 ${LINKED_DELIVERY_NOTES.length} albarán(es) vinculado(s) y marcado(s) como "Facturado".`;
+    }
+    alert(msg);
+    
+    // Limpiar albaranes vinculados y URL
+    LINKED_DELIVERY_NOTES = [];
+    LINKED_SUPPLIER_NAME = '';
+    const infoDiv = document.getElementById('linkedDeliveryNotesInfo');
+    if (infoDiv) infoDiv.remove();
+    
+    // Limpiar parámetros de la URL
+    if (window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
     await loadPurchases();
     closePurchaseDrawer();
     clearPurchaseFiles();

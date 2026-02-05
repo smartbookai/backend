@@ -27,6 +27,9 @@
         <table class="table" style="width:100%;border-collapse:collapse;">
           <thead>
             <tr>
+              <th class="table-header" style="padding:14px 18px;width:50px;">
+                <input type="checkbox" id="selectAllDeliveryNotes" onclick="toggleSelectAll(this)" title="Seleccionar todos los pendientes">
+              </th>
               <th class="table-header" style="padding:14px 18px;">Albarán</th>
               <th class="table-header" style="padding:14px 18px;">Proveedor</th>
               <th class="table-header" style="padding:14px 18px;">Fecha</th>
@@ -221,7 +224,7 @@ function renderDeliveryNotesTable(rows) {
   const dataToRender = rows || DELIVERY_NOTES_DATA;
 
   if (!dataToRender || dataToRender.length === 0) {
-    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay albaranes recibidos.</td></tr>';
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="color:#6B7280;padding:18px;">No hay albaranes recibidos.</td></tr>';
     return;
   }
 
@@ -235,8 +238,14 @@ function renderDeliveryNotesTable(rows) {
       `
       : `<span style="color:#9CA3AF;">-</span>`;
 
+    const isPending = dn.status === 'pending' || dn.status === 'Pendiente facturar';
+    const checkboxCell = isPending
+      ? `<input type="checkbox" class="dn-checkbox" data-id="${dn.id}" data-supplier-id="${dn.supplier_id}" data-supplier-name="${dn.supplier_name || ''}" onclick="updateSelectedDeliveryNotes()">`
+      : `<span style="color:#D1D5DB;">—</span>`;
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td class="table-cell" style="padding:14px 18px;">${checkboxCell}</td>
       <td class="table-cell" style="padding:14px 18px;">
         ${dn.pdf_url
           ? `<a href="${dn.pdf_url}" target="_blank" rel="noopener noreferrer">${dn.delivery_note_number || 'PDF'}</a>`
@@ -678,6 +687,98 @@ function openDeliveryNoteEditDrawer() {
 function generateInvoiceFromDeliveryNote(id) {
   // Implementar funcionalidad de generación de factura
   console.log('Generar factura desde albarán', id);
+}
+
+// ========== SELECCIÓN DE ALBARANES PARA FACTURAR ==========
+let selectedDeliveryNotes = [];
+
+function toggleSelectAll(checkbox) {
+  const allCheckboxes = document.querySelectorAll('.dn-checkbox');
+  allCheckboxes.forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  updateSelectedDeliveryNotes();
+}
+
+function updateSelectAllCheckbox() {
+  const allCheckboxes = document.querySelectorAll('.dn-checkbox');
+  const checkedCheckboxes = document.querySelectorAll('.dn-checkbox:checked');
+  const selectAllCheckbox = document.getElementById('selectAllDeliveryNotes');
+  
+  if (!selectAllCheckbox) return;
+  
+  const allChecked = allCheckboxes.length > 0 && allCheckboxes.length === checkedCheckboxes.length;
+  const someChecked = checkedCheckboxes.length > 0;
+  
+  selectAllCheckbox.checked = allChecked;
+  selectAllCheckbox.indeterminate = someChecked && !allChecked;
+}
+
+function updateSelectedDeliveryNotes() {
+  const checkboxes = document.querySelectorAll('.dn-checkbox:checked');
+  selectedDeliveryNotes = Array.from(checkboxes).map(cb => ({
+    id: parseInt(cb.dataset.id),
+    supplierId: cb.dataset.supplierId,
+    supplierName: cb.dataset.supplierName
+  }));
+  
+  updateSelectAllCheckbox();
+  updateUploadInvoiceButton();
+}
+
+function updateUploadInvoiceButton() {
+  let btn = document.getElementById('uploadInvoiceFromDNBtn');
+  
+  if (selectedDeliveryNotes.length === 0) {
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  
+  // Crear botón si no existe
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'uploadInvoiceFromDNBtn';
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:14px 24px;font-size:15px;font-weight:600;box-shadow:0 4px 14px rgba(98,50,138,0.35);z-index:1000;display:flex;align-items:center;gap:8px;';
+    btn.onclick = goToUploadInvoiceFromDeliveryNotes;
+    
+    document.body.appendChild(btn);
+  }
+  
+  btn.style.display = 'flex';
+  
+  // Verificar que todos sean del mismo proveedor
+  const supplierIds = [...new Set(selectedDeliveryNotes.map(dn => dn.supplierId))];
+  
+  if (supplierIds.length > 1) {
+    btn.innerHTML = `<span style="color:#FCA5A5;">⚠️ Proveedores distintos (${selectedDeliveryNotes.length})</span>`;
+    btn.disabled = true;
+    btn.style.background = '#9CA3AF';
+    btn.style.cursor = 'not-allowed';
+  } else {
+    const supplierName = selectedDeliveryNotes[0]?.supplierName || 'Proveedor';
+    btn.innerHTML = `📄 Subir Factura (${selectedDeliveryNotes.length} albarán${selectedDeliveryNotes.length > 1 ? 'es' : ''})`;
+    btn.disabled = false;
+    btn.style.background = '#62328A';
+    btn.style.cursor = 'pointer';
+  }
+}
+
+function goToUploadInvoiceFromDeliveryNotes() {
+  if (selectedDeliveryNotes.length === 0) return;
+  
+  // Verificar mismo proveedor
+  const supplierIds = [...new Set(selectedDeliveryNotes.map(dn => dn.supplierId))];
+  if (supplierIds.length > 1) {
+    alert('Solo puedes subir una factura con albaranes del mismo proveedor.');
+    return;
+  }
+  
+  const ids = selectedDeliveryNotes.map(dn => dn.id).join(',');
+  const supplierName = encodeURIComponent(selectedDeliveryNotes[0]?.supplierName || '');
+  
+  // Redirigir a facturas recibidas con parámetros para abrir drawer
+  window.location.href = `/facturas/?albaranes=${ids}&proveedor=${supplierName}&openDrawer=true`;
 }
 
 (async function(){

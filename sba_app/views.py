@@ -2777,15 +2777,36 @@ def _create_single_sales_invoice(company, result, pdf_file=None):
 #             "unit_price": str(line.unit_price),
 #             "vat_rate": str(line.vat_rate),
 #             "subtotal": str(line.subtotal()),
-#         })
 #
-#     return {
-#         "invoice_id": invoice.id,
-#         "invoice_number": invoice.invoice_number,
-#         "supplier_name": supplier.name,
-#         "total_amount": str(invoice.total_amount) if invoice.total_amount else "0.00",
-#         "lines": created_lines,
-#     }
+#
+def _link_delivery_notes_to_invoice(company, invoice_id, delivery_note_ids):
+    """
+    Vincula albaranes recibidos a una factura de compra y cambia su estado a 'invoiced'.
+    """
+    if not delivery_note_ids:
+        return 0
+    
+    try:
+        invoice = PurchaseInvoice.objects.get(id=invoice_id, company=company)
+        
+        linked_count = 0
+        for dn_id in delivery_note_ids:
+            try:
+                delivery_note = PurchaseDeliveryNote.objects.get(id=dn_id, company=company)
+                delivery_note.purchase_invoice = invoice
+                delivery_note.status = 'invoiced'
+                delivery_note.save()
+                linked_count += 1
+                print(f" Albarán {delivery_note.delivery_note_number} vinculado a factura {invoice.invoice_number}")
+            except PurchaseDeliveryNote.DoesNotExist:
+                print(f" Albarán con ID {dn_id} no encontrado")
+                continue
+        
+        return linked_count
+        
+    except PurchaseInvoice.DoesNotExist:
+        print(f" Factura con ID {invoice_id} no encontrada")
+        return 0
 
 
 def _create_single_purchase_invoice(company, result, pdf_file=None):
@@ -2793,7 +2814,6 @@ def _create_single_purchase_invoice(company, result, pdf_file=None):
     Crea una factura de compra con validación robusta de proveedor.
     Nunca asigna un proveedor existente que no aparezca en el documento.
     """
-
     tokens = result.get("tokens")
     invoice_data = result.get("invoice", {}) or {}
     supplier_data = result.get("supplier", {}) or {}
@@ -3470,9 +3490,16 @@ def api_create_invoice_received(request):
         # Checkbox: si está marcado, el PDF contiene múltiples facturas (modo lento)
         multiple_invoices = request.POST.get("multiple_invoices") == "true"
         
+        # Albaranes vinculados (desde albaranes recibidos)
+        linked_delivery_notes_str = request.POST.get("linked_delivery_notes", "")
+        linked_delivery_note_ids = []
+        if linked_delivery_notes_str:
+            linked_delivery_note_ids = [int(x) for x in linked_delivery_notes_str.split(',') if x.strip()]
+        
         print(f"✅ File received: {file.name if file else 'None'}, Size: {file.size if file else 0} bytes",
               file=sys.stderr)
         print(f"✅ Multiple invoices mode: {multiple_invoices}", file=sys.stderr)
+        print(f"✅ Linked delivery notes: {linked_delivery_note_ids}", file=sys.stderr)
 
         if not file:
             print("❌ No file provided", file=sys.stderr)
@@ -3497,6 +3524,14 @@ def api_create_invoice_received(request):
                 # Crear la factura directamente
                 inv_result = _create_single_purchase_invoice(company, result, file)
                 
+                # Vincular albaranes si existen
+                linked_count = 0
+                if linked_delivery_note_ids:
+                    linked_count = _link_delivery_notes_to_invoice(
+                        company, inv_result["invoice_id"], linked_delivery_note_ids
+                    )
+                    print(f"📦 Vinculados {linked_count} albaranes a la factura", file=sys.stderr)
+                
                 return JsonResponse({
                     "success": True,
                     "invoice_id": inv_result["invoice_id"],
@@ -3504,6 +3539,7 @@ def api_create_invoice_received(request):
                     "supplier_name": inv_result["supplier_name"],
                     "total_amount": inv_result["total_amount"],
                     "pages_processed": result.get("pages_processed", 1),
+                    "linked_delivery_notes": linked_count,
                     "mode": "fast"
                 })
             except Exception as e:
