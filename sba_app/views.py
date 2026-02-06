@@ -794,6 +794,13 @@ def generar_nomina(request):
         context = {
             'employees': employees,
             'company': company,
+            # Pasar valores de nóminas formateados para evitar problemas con None/Decimal
+            'payroll_config': {
+                'ss_contingencies_percent': float(company.ss_contingencies_percent) if company.ss_contingencies_percent else 4.70,
+                'ss_unemployment_percent_indefinite': float(company.ss_unemployment_percent_indefinite) if company.ss_unemployment_percent_indefinite else 1.55,
+                'ss_unemployment_percent_temporal': float(company.ss_unemployment_percent_temporal) if company.ss_unemployment_percent_temporal else 1.60,
+                'ss_training_percent': float(company.ss_training_percent) if company.ss_training_percent else 0.10,
+            }
         }
         return render(request, 'pages/generar_nomina.html', context)
         
@@ -6703,6 +6710,12 @@ def api_get_company(request):
             'email': company.email or '',
             'website': company.website or '',
             'logo_url': logo_url,
+            # Configuración de nóminas
+            'cnae_code': company.cnae_code or '',
+            'ss_contingencies_percent': str(company.ss_contingencies_percent) if company.ss_contingencies_percent else '',
+            'ss_unemployment_percent_indefinite': str(company.ss_unemployment_percent_indefinite) if company.ss_unemployment_percent_indefinite else '',
+            'ss_unemployment_percent_temporal': str(company.ss_unemployment_percent_temporal) if company.ss_unemployment_percent_temporal else '',
+            'ss_training_percent': str(company.ss_training_percent) if company.ss_training_percent else '',
         }
     })
 
@@ -6727,6 +6740,26 @@ def api_update_company(request):
         company.phone = request.POST.get('phone', company.phone)
         company.email = request.POST.get('email', company.email)
         company.website = request.POST.get('website', company.website)
+        
+        # Guardar configuración de nóminas
+        company.cnae_code = request.POST.get('cnae_code', company.cnae_code)
+        
+        # Guardar porcentajes de SS
+        ss_contingencies = request.POST.get('ss_contingencies_percent')
+        if ss_contingencies:
+            company.ss_contingencies_percent = Decimal(ss_contingencies)
+        
+        ss_unemp_indefinite = request.POST.get('ss_unemployment_percent_indefinite')
+        if ss_unemp_indefinite:
+            company.ss_unemployment_percent_indefinite = Decimal(ss_unemp_indefinite)
+            
+        ss_unemp_temporal = request.POST.get('ss_unemployment_percent_temporal')
+        if ss_unemp_temporal:
+            company.ss_unemployment_percent_temporal = Decimal(ss_unemp_temporal)
+            
+        ss_training = request.POST.get('ss_training_percent')
+        if ss_training:
+            company.ss_training_percent = Decimal(ss_training)
 
         if 'logo' in request.FILES:
             logo_file = request.FILES['logo']

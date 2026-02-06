@@ -64,6 +64,25 @@ class Company(models.Model):
     email = models.EmailField(null=True, blank=True)
     website = models.URLField(null=True, blank=True)
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Logo de la empresa")
+    
+    # 🆕 Configuración de nóminas
+    cnae_code = models.CharField(max_length=10, null=True, blank=True, 
+                                verbose_name="CNAE", 
+                                help_text="Código Nacional de Actividad Económica")
+    
+    # Porcentajes de Seguridad Social (valores por defecto actuales)
+    ss_contingencies_percent = models.DecimalField(max_digits=5, decimal_places=2, 
+                                                     null=True, blank=True,
+                                                     verbose_name="% SS Empleado Contingencias Comunes")
+    ss_unemployment_percent_indefinite = models.DecimalField(max_digits=5, decimal_places=2,
+                                                            null=True, blank=True,
+                                                            verbose_name="% SS Empleado Desempleo Indefinido")
+    ss_unemployment_percent_temporal = models.DecimalField(max_digits=5, decimal_places=2,
+                                                          null=True, blank=True,
+                                                          verbose_name="% SS Empleado Desempleo Temporal")
+    ss_training_percent = models.DecimalField(max_digits=5, decimal_places=2,
+                                             null=True, blank=True,
+                                             verbose_name="% SS Empleado Formación")
 
     def __str__(self):
         return self.name

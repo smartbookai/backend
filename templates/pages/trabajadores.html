@@ -172,6 +172,54 @@
       <label>CCC (Código Cuenta Cotización)</label>
       <input type="text" name="ccc" id="companyCCC" maxlength="11" placeholder="11 dígitos">
     </div>
+    
+    <!-- 🆕 Configuración de Nóminas -->
+    <div style="margin-top:24px;padding-top:20px;border-top:2px solid #E5E7EB;">
+      <h4 style="margin:0 0 16px 0;font-size:16px;font-weight:600;color:#111827;">Configuración de Nóminas</h4>
+      
+      <div class="form-field">
+        <label>CNAE (Código Nacional de Actividad Económica)</label>
+        <input type="text" name="cnae_code" id="companyCNAE" placeholder="Ej: 6201">
+        <div style="font-size:11px;color:#6B7280;margin-top:4px;">Código de 4 dígitos que identifica la actividad principal de la empresa</div>
+      </div>
+      
+      <div style="margin-top:16px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:#374151;">Porcentajes de Seguridad Social - Empleado</div>
+        
+        <div style="display:flex;gap:12px;">
+          <div class="form-field" style="flex:1;">
+            <label>Contingencias Comunes (%)</label>
+            <input type="number" name="ss_contingencies_percent" id="ssContingenciesPercent" 
+                   step="0.01" placeholder="4.70" min="0" max="100">
+          </div>
+          <div class="form-field" style="flex:1;">
+            <label>Desempleo Indefinido (%)</label>
+            <input type="number" name="ss_unemployment_percent_indefinite" id="ssUnemploymentIndefinite" 
+                   step="0.01" placeholder="1.55" min="0" max="100">
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:12px;margin-top:12px;">
+          <div class="form-field" style="flex:1;">
+            <label>Desempleo Temporal (%)</label>
+            <input type="number" name="ss_unemployment_percent_temporal" id="ssUnemploymentTemporal" 
+                   step="0.01" placeholder="1.60" min="0" max="100">
+          </div>
+          <div class="form-field" style="flex:1;">
+            <label>Formación Profesional (%)</label>
+            <input type="number" name="ss_training_percent" id="ssTrainingPercent" 
+                   step="0.01" placeholder="0.10" min="0" max="100">
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #F3F4F6;">
+        <div style="font-size:12px;color:#6B7280;background:#F9FAFB;padding:12px;border-radius:6px;">
+          <strong>💡 Info:</strong> Estos porcentajes se aplicarán automáticamente al generar nóminas según el tipo de contrato del empleado.
+        </div>
+      </div>
+    </div>
+    
     <div style="display:flex;gap:12px;">
       <div class="form-field" style="flex:1;">
         <label>Teléfono</label>
@@ -257,6 +305,13 @@ async function loadCompanyData() {
     document.getElementById('companyPhone').value = company.phone || '';
     document.getElementById('companyEmail').value = company.email || '';
     document.getElementById('companyWebsite').value = company.website || '';
+    
+    // 🆕 Cargar configuración de nóminas
+    document.getElementById('companyCNAE').value = company.cnae_code || '';
+    document.getElementById('ssContingenciesPercent').value = company.ss_contingencies_percent || '';
+    document.getElementById('ssUnemploymentIndefinite').value = company.ss_unemployment_percent_indefinite || '';
+    document.getElementById('ssUnemploymentTemporal').value = company.ss_unemployment_percent_temporal || '';
+    document.getElementById('ssTrainingPercent').value = company.ss_training_percent || '';
     
     // Mostrar logo si existe
     const preview = document.getElementById('logoPreview');

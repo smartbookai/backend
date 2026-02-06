@@ -563,6 +563,24 @@
 // Contador para IDs únicos de conceptos adicionales
 let additionalConceptCounter = 0;
 
+// 🆕 Datos de la empresa para nóminas (usando valores formateados desde la vista)
+let COMPANY_PAYROLL_CONFIG = {
+  cnae_code: "{{ company.cnae_code|default_if_none:'' }}",
+  ss_contingencies_percent: parseFloat("{{ payroll_config.ss_contingencies_percent|default_if_none:4.70 }}".replace(',', '.')),
+  ss_unemployment_percent_indefinite: parseFloat("{{ payroll_config.ss_unemployment_percent_indefinite|default_if_none:1.55 }}".replace(',', '.')),
+  ss_unemployment_percent_temporal: parseFloat("{{ payroll_config.ss_unemployment_percent_temporal|default_if_none:1.60 }}".replace(',', '.')),
+  ss_training_percent: parseFloat("{{ payroll_config.ss_training_percent|default_if_none:0.10 }}".replace(',', '.'))
+};
+
+// 🆕 Debug: Mostrar valores cargados
+console.log('Valores de la empresa cargados:', COMPANY_PAYROLL_CONFIG);
+console.log('Valores raw de Django:', {
+  ss_contingencies: "{{ company.ss_contingencies_percent }}",
+  ss_unemp_indef: "{{ company.ss_unemployment_percent_indefinite }}",
+  ss_unemp_temp: "{{ company.ss_unemployment_percent_temporal }}",
+  ss_training: "{{ company.ss_training_percent }}"
+});
+
 // Establecer fechas y valores por defecto
 document.addEventListener('DOMContentLoaded', function() {
   const today = new Date();
@@ -619,6 +637,30 @@ function removeAdditionalConcept(conceptId) {
   calculateTotals();
 }
 
+// 🆕 Aplicar porcentajes de la empresa según tipo de contrato
+function applyCompanyPercentages(contractType) {
+  // Aplicar porcentajes del empleado según tipo de contrato
+  const unemploymentPercent = contractType === 'indefinido' 
+    ? COMPANY_PAYROLL_CONFIG.ss_unemployment_percent_indefinite
+    : COMPANY_PAYROLL_CONFIG.ss_unemployment_percent_temporal;
+  
+  // Setear porcentajes del empleado con formato de 2 decimales
+  document.getElementById('ss_percent_common_employee').value = COMPANY_PAYROLL_CONFIG.ss_contingencies_percent.toFixed(2);
+  document.getElementById('ss_percent_unemployment_employee').value = unemploymentPercent.toFixed(2);
+  document.getElementById('ss_percent_training_employee').value = COMPANY_PAYROLL_CONFIG.ss_training_percent.toFixed(2);
+  
+  // Mostrar feedback visual
+  const contractDisplay = document.getElementById('employee_contract_type_display');
+  if (contractDisplay) {
+    contractDisplay.style.background = '#FEF3C7';
+    contractDisplay.style.border = '2px solid #F59E0B';
+    setTimeout(() => {
+      contractDisplay.style.background = '#F3F4F6';
+      contractDisplay.style.border = '1px solid #D1D5DB';
+    }, 1000);
+  }
+}
+
 // Cargar datos del empleado seleccionado
 function loadEmployeeData() {
   const select = document.getElementById('employee');
@@ -636,6 +678,9 @@ function loadEmployeeData() {
     
     // Datos bancarios
     document.getElementById('employee_iban').value = option.dataset.iban || '';
+    
+    // Aplicar porcentajes de SS según configuración de empresa y tipo de contrato
+    applyCompanyPercentages(option.dataset.contract || '');
     
     // Datos adicionales (si tienes campos para ellos)
     // document.getElementById('employee_phone').value = option.dataset.phone || '';
