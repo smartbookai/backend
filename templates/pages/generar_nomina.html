@@ -406,18 +406,24 @@
               <tr style="border-bottom:1px solid #E5E7EB;">
                 <td style="padding:8px;padding-left:24px;">Remuneración mensual</td>
                 <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-              <tr style="border-bottom:1px solid #E5E7EB;">
-                <td style="padding:8px;padding-left:24px;">Prorrata pagas extraordinarias</td>
-                <td></td>
                 <td style="text-align:right;padding:8px;">
                   <input type="number" id="ss_company_common_percent" value="23.60" step="0.01"
                          style="width:100%;text-align:right;font-size:11px;">
                 </td>
                 <td style="text-align:right;padding:8px;">
                   <input type="number" id="ss_company_common" name="ss_company_common" step="0.01" value="0.00"
+                         style="width:100%;text-align:right;font-weight:600;" onchange="calculateSocialSecurity()">
+                </td>
+              </tr>
+              <tr style="border-bottom:1px solid #E5E7EB;">
+                <td style="padding:8px;padding-left:24px;">Prorrata pagas extraordinarias</td>
+                <td></td>
+                <td style="text-align:right;padding:8px;">
+                  <input type="number" id="ss_company_extraordinary_percent" value="3.10" step="0.01"
+                         style="width:100%;text-align:right;font-size:11px;">
+                </td>
+                <td style="text-align:right;padding:8px;">
+                  <input type="number" id="ss_company_extraordinary" name="ss_company_extraordinary" step="0.01" value="0.00"
                          style="width:100%;text-align:right;font-weight:600;" onchange="calculateSocialSecurity()">
                 </td>
               </tr>
@@ -563,23 +569,19 @@
 // Contador para IDs únicos de conceptos adicionales
 let additionalConceptCounter = 0;
 
-// 🆕 Datos de la empresa para nóminas (usando valores formateados desde la vista)
 let COMPANY_PAYROLL_CONFIG = {
   cnae_code: "{{ company.cnae_code|default_if_none:'' }}",
-  ss_contingencies_percent: parseFloat("{{ payroll_config.ss_contingencies_percent|default_if_none:4.70 }}".replace(',', '.')),
-  ss_unemployment_percent_indefinite: parseFloat("{{ payroll_config.ss_unemployment_percent_indefinite|default_if_none:1.55 }}".replace(',', '.')),
-  ss_unemployment_percent_temporal: parseFloat("{{ payroll_config.ss_unemployment_percent_temporal|default_if_none:1.60 }}".replace(',', '.')),
-  ss_training_percent: parseFloat("{{ payroll_config.ss_training_percent|default_if_none:0.10 }}".replace(',', '.'))
+  // PORCENTAJES DE EMPRESA
+  ss_contingencies_percent: parseFloat("{{ company.ss_contingencies_percent|default_if_none:'' }}".replace(',', '.')) || 4.15,
+  ss_unemployment_percent_indefinite: parseFloat("{{ company.ss_unemployment_percent_indefinite|default_if_none:'' }}".replace(',', '.')) || 1.90,
+  ss_unemployment_percent_temporal: parseFloat("{{ company.ss_unemployment_percent_temporal|default_if_none:'' }}".replace(',', '.')) || 1.50,
+  ss_training_percent: parseFloat("{{ company.ss_training_percent|default_if_none:'' }}".replace(',', '.')) || 0.20,
+  ss_mei_percent: parseFloat("{{ company.ss_mei_percent|default_if_none:'' }}".replace(',', '.')) || 0.59,
+  ss_fogasa_percent: parseFloat("{{ company.ss_fogasa_percent|default_if_none:'' }}".replace(',', '.')) || 0.25,
+  ss_extraordinary_payments_percent: parseFloat("{{ company.ss_extraordinary_payments_percent|default_if_none:'' }}".replace(',', '.')) || 3.10
 };
 
-// 🆕 Debug: Mostrar valores cargados
-console.log('Valores de la empresa cargados:', COMPANY_PAYROLL_CONFIG);
-console.log('Valores raw de Django:', {
-  ss_contingencies: "{{ company.ss_contingencies_percent }}",
-  ss_unemp_indef: "{{ company.ss_unemployment_percent_indefinite }}",
-  ss_unemp_temp: "{{ company.ss_unemployment_percent_temporal }}",
-  ss_training: "{{ company.ss_training_percent }}"
-});
+console.log('✅ Configuración de empresa cargada:', COMPANY_PAYROLL_CONFIG);
 
 // Establecer fechas y valores por defecto
 document.addEventListener('DOMContentLoaded', function() {
@@ -639,25 +641,60 @@ function removeAdditionalConcept(conceptId) {
 
 // 🆕 Aplicar porcentajes de la empresa según tipo de contrato
 function applyCompanyPercentages(contractType) {
-  // Aplicar porcentajes del empleado según tipo de contrato
-  const unemploymentPercent = contractType === 'indefinido' 
+  console.log('📋 Aplicando porcentajes para contrato:', contractType);
+  
+  // Normalizar tipo de contrato y detectar si es indefinido
+  const contractTypeLower = (contractType || '').toLowerCase();
+  const isIndefinite = contractTypeLower.includes('indefinido') || 
+                       contractTypeLower.includes('fijo') || 
+                       contractTypeLower.includes('permanente');
+  
+  console.log('🔍 ¿Es indefinido?', isIndefinite);
+
+  // ✅ PORCENTAJES DEL EMPLEADO (FIJOS según normativa española)
+  const employeeCommonPercent = 4.70;
+  const employeeUnemploymentPercent = isIndefinite ? 1.55 : 1.60;
+  const employeeTrainingPercent = 0.10;
+
+  document.getElementById('ss_percent_common_employee').value = employeeCommonPercent.toFixed(2);
+  document.getElementById('ss_percent_unemployment_employee').value = employeeUnemploymentPercent.toFixed(2);
+  document.getElementById('ss_percent_training_employee').value = employeeTrainingPercent.toFixed(2);
+
+  // ✅ PORCENTAJES DE LA EMPRESA (desde configuración guardada)
+  const companyUnemploymentPercent = isIndefinite 
     ? COMPANY_PAYROLL_CONFIG.ss_unemployment_percent_indefinite
     : COMPANY_PAYROLL_CONFIG.ss_unemployment_percent_temporal;
+
+  document.getElementById('ss_company_common_percent').value = COMPANY_PAYROLL_CONFIG.ss_contingencies_percent.toFixed(2);
+  document.getElementById('ss_company_unemployment_percent').value = companyUnemploymentPercent.toFixed(2);
+  document.getElementById('ss_company_training_percent').value = COMPANY_PAYROLL_CONFIG.ss_training_percent.toFixed(2);
+  document.getElementById('ss_company_mei_percent').value = COMPANY_PAYROLL_CONFIG.ss_mei_percent.toFixed(2);
+  document.getElementById('ss_company_fogasa_percent').value = COMPANY_PAYROLL_CONFIG.ss_fogasa_percent.toFixed(2);
   
-  // Setear porcentajes del empleado con formato de 2 decimales
-  document.getElementById('ss_percent_common_employee').value = COMPANY_PAYROLL_CONFIG.ss_contingencies_percent.toFixed(2);
-  document.getElementById('ss_percent_unemployment_employee').value = unemploymentPercent.toFixed(2);
-  document.getElementById('ss_percent_training_employee').value = COMPANY_PAYROLL_CONFIG.ss_training_percent.toFixed(2);
+  console.log('✅ Porcentajes aplicados:', {
+    empleado: {
+      contingencias: employeeCommonPercent,
+      desempleo: employeeUnemploymentPercent,
+      formacion: employeeTrainingPercent
+    },
+    empresa: {
+      contingencias: COMPANY_PAYROLL_CONFIG.ss_contingencies_percent,
+      desempleo: companyUnemploymentPercent,
+      formacion: COMPANY_PAYROLL_CONFIG.ss_training_percent,
+      mei: COMPANY_PAYROLL_CONFIG.ss_mei_percent,
+      fogasa: COMPANY_PAYROLL_CONFIG.ss_fogasa_percent
+    }
+  });
   
-  // Mostrar feedback visual
+  // Feedback visual
   const contractDisplay = document.getElementById('employee_contract_type_display');
   if (contractDisplay) {
-    contractDisplay.style.background = '#FEF3C7';
-    contractDisplay.style.border = '2px solid #F59E0B';
+    contractDisplay.style.background = '#DCFCE7';
+    contractDisplay.style.border = '2px solid #10B981';
     setTimeout(() => {
       contractDisplay.style.background = '#F3F4F6';
       contractDisplay.style.border = '1px solid #D1D5DB';
-    }, 1000);
+    }, 1500);
   }
 }
 
@@ -704,6 +741,7 @@ function autoCalculateSocialSecurity() {
   const salarySupplements = parseFloat(document.getElementById('salary_supplements').value) || 0;
   const overtime = parseFloat(document.getElementById('overtime').value) || 0;
   const extraordinaryPayments = parseFloat(document.getElementById('extraordinary_payments').value) || 0;
+  const salaryInKind = parseFloat(document.getElementById('salary_in_kind').value) || 0;
 
   // Sumar conceptos adicionales
   const additionalInputs = document.querySelectorAll('.additional-concept-input');
@@ -712,9 +750,7 @@ function autoCalculateSocialSecurity() {
     additionalTotal += parseFloat(input.value) || 0;
   });
 
-  // Base de cotización (todos los conceptos salariales)
-  //const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal;
-  const salaryInKind = parseFloat(document.getElementById('salary_in_kind').value) || 0;
+  // Base de cotización
   const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal + salaryInKind;
 
   if (cotizationBase === 0) {
@@ -722,11 +758,11 @@ function autoCalculateSocialSecurity() {
     return;
   }
 
-  // Actualizar bases en la tabla
+  console.log('💰 Base de cotización:', cotizationBase);
+
+  // Actualizar bases
   document.getElementById('cotization_base_common').value = cotizationBase.toFixed(2);
   document.getElementById('cotization_base_professional').value = cotizationBase.toFixed(2);
-
-  // Actualizar bases para cálculo de porcentajes empleado
   document.getElementById('ss_base_common_employee').value = cotizationBase.toFixed(2);
   document.getElementById('ss_base_unemployment_employee').value = cotizationBase.toFixed(2);
   document.getElementById('ss_base_training_employee').value = cotizationBase.toFixed(2);
@@ -741,11 +777,11 @@ function autoCalculateSocialSecurity() {
   document.getElementById('ss_employee_training').value = (cotizationBase * percentTrainingEmp / 100).toFixed(2);
 
   // SS EMPRESA
-  const percentCommonComp = parseFloat(document.getElementById('ss_company_common_percent').value) || 23.60;
-  const percentUnemploymentComp = parseFloat(document.getElementById('ss_company_unemployment_percent').value) || 5.50;
-  const percentFogasaComp = parseFloat(document.getElementById('ss_company_fogasa_percent').value) || 0.20;
-  const percentTrainingComp = parseFloat(document.getElementById('ss_company_training_percent').value) || 0.60;
-  const percentMEI = parseFloat(document.getElementById('ss_company_mei_percent').value) || 0.58;
+  const percentCommonComp = parseFloat(document.getElementById('ss_company_common_percent').value);
+  const percentUnemploymentComp = parseFloat(document.getElementById('ss_company_unemployment_percent').value);
+  const percentFogasaComp = parseFloat(document.getElementById('ss_company_fogasa_percent').value);
+  const percentTrainingComp = parseFloat(document.getElementById('ss_company_training_percent').value);
+  const percentMEI = parseFloat(document.getElementById('ss_company_mei_percent').value);
 
   document.getElementById('ss_company_common').value = (cotizationBase * percentCommonComp / 100).toFixed(2);
   document.getElementById('ss_company_unemployment').value = (cotizationBase * percentUnemploymentComp / 100).toFixed(2);
@@ -759,8 +795,8 @@ function autoCalculateSocialSecurity() {
   const btn = event.target;
   const originalText = btn.innerHTML;
   const originalBg = btn.style.background;
-  btn.innerHTML = '✓ Calculado';
-  btn.style.background = '#059669';
+  btn.innerHTML = '✅ Calculado';
+  btn.style.background = '#10B981';
   setTimeout(() => {
     btn.innerHTML = originalText;
     btn.style.background = originalBg;

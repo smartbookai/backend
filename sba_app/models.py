@@ -73,16 +73,28 @@ class Company(models.Model):
     # Porcentajes de Seguridad Social (valores por defecto actuales)
     ss_contingencies_percent = models.DecimalField(max_digits=5, decimal_places=2, 
                                                      null=True, blank=True,
-                                                     verbose_name="% SS Empleado Contingencias Comunes")
+                                                     verbose_name="% SS Empresa Contingencias Comunes")
     ss_unemployment_percent_indefinite = models.DecimalField(max_digits=5, decimal_places=2,
                                                             null=True, blank=True,
-                                                            verbose_name="% SS Empleado Desempleo Indefinido")
+                                                            verbose_name="% SS Empresa Desempleo Indefinido")
     ss_unemployment_percent_temporal = models.DecimalField(max_digits=5, decimal_places=2,
                                                           null=True, blank=True,
-                                                          verbose_name="% SS Empleado Desempleo Temporal")
+                                                          verbose_name="% SS Empresa Desempleo Temporal")
     ss_training_percent = models.DecimalField(max_digits=5, decimal_places=2,
                                              null=True, blank=True,
-                                             verbose_name="% SS Empleado Formación")
+                                             verbose_name="% SS Empresa Formación Profesional")
+    
+    # 🆕 Campos adicionales de Seguridad Social para la empresa
+    ss_mei_percent = models.DecimalField(max_digits=5, decimal_places=2,
+                                       null=True, blank=True,
+                                       verbose_name="% SS Empresa MEI (Accidentes)")
+    ss_fogasa_percent = models.DecimalField(max_digits=5, decimal_places=2,
+                                           null=True, blank=True,
+                                           verbose_name="% SS Empresa FOGASA")
+    ss_extraordinary_payments_percent = models.DecimalField(max_digits=5, decimal_places=2,
+                                                         null=True, blank=True,
+                                                         verbose_name="% Prorrata Pagas Extraordinarias",
+                                                         help_text="Porcentaje de prorrata de pagas extraordinarias")
 
     def __str__(self):
         return self.name

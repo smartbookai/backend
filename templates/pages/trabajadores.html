@@ -211,6 +211,33 @@
                    step="0.01" placeholder="0.10" min="0" max="100">
           </div>
         </div>
+        
+        <div style="display:flex;gap:12px;margin-top:12px;">
+          <div class="form-field" style="flex:1;">
+            <label>MEI - Accidentes (%)</label>
+            <input type="number" name="ss_mei_percent" id="ssMEIPercent" 
+                   step="0.01" placeholder="0.58" min="0" max="100">
+            <div style="font-size:11px;color:#6B7280;margin-top:4px;">Mutualidad empresarial de accidentes</div>
+          </div>
+          <div class="form-field" style="flex:1;">
+            <label>FOGASA (%)</label>
+            <input type="number" name="ss_fogasa_percent" id="ssFOGASAPercent" 
+                   step="0.01" placeholder="0.20" min="0" max="100">
+            <div style="font-size:11px;color:#6B7280;margin-top:4px;">Fondo de Garantía Salarial</div>
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:12px;margin-top:12px;">
+          <div class="form-field" style="flex:1;">
+            <label>Prorrata Pagas Extraordinarias (%)</label>
+            <input type="number" name="ss_extraordinary_payments_percent" id="ssExtraordinaryPaymentsPercent" 
+                   step="0.01" placeholder="4.17" min="0" max="100">
+            <div style="font-size:11px;color:#6B7280;margin-top:4px;">Porcentaje de prorrata de pagas extraordinarias (ej: 4.17% para 2 pagas de 6.67%)</div>
+          </div>
+          <div class="form-field" style="flex:1;">
+            <!-- Espacio vacío para mantener el layout -->
+          </div>
+        </div>
       </div>
       
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #F3F4F6;">
@@ -312,6 +339,11 @@ async function loadCompanyData() {
     document.getElementById('ssUnemploymentIndefinite').value = company.ss_unemployment_percent_indefinite || '';
     document.getElementById('ssUnemploymentTemporal').value = company.ss_unemployment_percent_temporal || '';
     document.getElementById('ssTrainingPercent').value = company.ss_training_percent || '';
+    
+    // 🆕 Cargar nuevos campos de Seguridad Social
+    document.getElementById('ssMEIPercent').value = company.ss_mei_percent || '';
+    document.getElementById('ssFOGASAPercent').value = company.ss_fogasa_percent || '';
+    document.getElementById('ssExtraordinaryPaymentsPercent').value = company.ss_extraordinary_payments_percent || '';
     
     // Mostrar logo si existe
     const preview = document.getElementById('logoPreview');

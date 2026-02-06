@@ -6724,12 +6724,131 @@ def api_get_company(request):
             'ss_unemployment_percent_indefinite': str(company.ss_unemployment_percent_indefinite) if company.ss_unemployment_percent_indefinite else '',
             'ss_unemployment_percent_temporal': str(company.ss_unemployment_percent_temporal) if company.ss_unemployment_percent_temporal else '',
             'ss_training_percent': str(company.ss_training_percent) if company.ss_training_percent else '',
+            # Nuevos campos de SS
+            'ss_mei_percent': str(company.ss_mei_percent) if company.ss_mei_percent else '',
+            'ss_fogasa_percent': str(company.ss_fogasa_percent) if company.ss_fogasa_percent else '',
+            'ss_extraordinary_payments_percent': str(company.ss_extraordinary_payments_percent) if company.ss_extraordinary_payments_percent else '',
         }
     })
 
 
 @login_required
 @require_POST
+def api_upload_delivery_note(request):
+    """
+    API para subir y procesar un albarán con OpenAI
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+
+        # Verificar que se subió un archivo
+        if 'delivery_note_file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No se ha subido ningún archivo'
+            }, status=400)
+
+        file = request.FILES['delivery_note_file']
+
+        # Validar que sea un PDF
+        if not file.name.lower().endswith('.pdf'):
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo debe ser un PDF'
+            }, status=400)
+
+        # Validar tamaño del archivo (10MB máximo)
+        if file.size > 10 * 1024 * 1024:
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo no puede superar los 10MB'
+            }, status=400)
+
+        # Procesar el albarán con el servicio
+        from sba_app.services.delivery_note_service import DeliveryNoteService
+        delivery_note_service = DeliveryNoteService(company)
+
+        result = delivery_note_service.process_delivery_note_from_file(file)
+
+        if result['success']:
+            return JsonResponse(result)
+        else:
+            return JsonResponse(result, status=400)
+
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Usuario no asociado a ninguna empresa'
+        }, status=403)
+    except Exception as e:
+        logger.error(f"Error en api_upload_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error procesando el albarán: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_POST
+def api_upload_purchase_delivery_note(request):
+    """
+    API para subir y procesar un albarán recibido (de proveedor) con OpenAI
+    """
+    try:
+        # Obtener la empresa del usuario
+        company_user = CompanyUser.objects.get(user=request.user)
+        company = company_user.company
+
+        # Verificar que se subió un archivo
+        if 'purchase_delivery_note_file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No se ha subido ningún archivo'
+            }, status=400)
+
+        file = request.FILES['purchase_delivery_note_file']
+
+        # Validar que sea un PDF
+        if not file.name.lower().endswith('.pdf'):
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo debe ser un PDF'
+            }, status=400)
+
+        # Validar tamaño del archivo (10MB máximo)
+        if file.size > 10 * 1024 * 1024:
+            return JsonResponse({
+                'success': False,
+                'message': 'El archivo no puede superar los 10MB'
+            }, status=400)
+
+        # Procesar el albarán con el servicio
+        from sba_app.services.purchase_delivery_note_service import PurchaseDeliveryNoteService
+        purchase_delivery_note_service = PurchaseDeliveryNoteService(company)
+
+        result = purchase_delivery_note_service.process_delivery_note_from_file(file)
+
+        if result['success']:
+            return JsonResponse(result)
+        else:
+            return JsonResponse(result, status=400)
+
+    except CompanyUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Usuario no asociado a ninguna empresa'
+        }, status=403)
+    except Exception as e:
+        logger.error(f"Error en api_upload_purchase_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error procesando el albarán recibido: {str(e)}'
+        }, status=500)
+
+
+@login_required
 def api_update_company(request):
     """Actualiza los datos de la empresa del usuario actual"""
     try:
@@ -6768,6 +6887,20 @@ def api_update_company(request):
         ss_training = request.POST.get('ss_training_percent')
         if ss_training:
             company.ss_training_percent = Decimal(ss_training)
+        
+        # Guardar nuevos campos de SS
+        ss_mei = request.POST.get('ss_mei_percent')
+        if ss_mei:
+            company.ss_mei_percent = Decimal(ss_mei)
+            
+        ss_fogasa = request.POST.get('ss_fogasa_percent')
+        if ss_fogasa:
+            company.ss_fogasa_percent = Decimal(ss_fogasa)
+        
+        # Guardar porcentaje de prorrata
+        ss_extraordinary = request.POST.get('ss_extraordinary_payments_percent')
+        if ss_extraordinary:
+            company.ss_extraordinary_payments_percent = Decimal(ss_extraordinary)
 
         if 'logo' in request.FILES:
             logo_file = request.FILES['logo']
