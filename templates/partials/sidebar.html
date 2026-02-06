@@ -32,27 +32,6 @@
     </div>
     <div class="sidebar-dropdown">
       <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
-        <i class="bi bi-cash-stack"></i>
-        <span>Nominas</span>
-        <i class="bi bi-chevron-down dropdown-arrow"></i>
-      </a>
-      <div class="dropdown-menu">
-        <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'nominas' %}active{% endif %}" style="text-decoration:none;">
-          <i class="bi bi-list-ul"></i>
-          <span>Nominas</span>
-        </a>
-        <a href="{% url 'generar_nomina' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
-          <i class="bi bi-plus-circle"></i>
-          <span>Generar nomina</span>
-        </a>
-        <!--<a href="#" onclick="alert('Coming soon'); return false;" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
-          <i class="bi bi-plus-circle"></i>
-          <span>Generar nomina</span>
-        </a> -->
-      </div>
-    </div>
-    <div class="sidebar-dropdown">
-      <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
         <i class="bi bi-file-earmark-text"></i>
         <span>Albaranes</span>
         <i class="bi bi-chevron-down dropdown-arrow"></i>
@@ -72,26 +51,52 @@
         </a>
       </div>
     </div>
+    <div class="sidebar-dropdown">
+      <a href="#" class="sidebar-link dropdown-toggle" data-toggle="dropdown" style="text-decoration:none;">
+        <i class="bi bi-cash-stack"></i>
+        <span>Nominas</span>
+        <i class="bi bi-chevron-down dropdown-arrow"></i>
+      </a>
+      <div class="dropdown-menu">
+        <a href="{% url 'nominas' %}" class="sidebar-link {% if request.resolver_match.url_name == 'nominas' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-list-ul"></i>
+          <span>Nominas</span>
+        </a>
+        <a href="{% url 'generar_nomina' %}" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar nomina</span>
+        </a>
+        <!--<a href="#" onclick="alert('Coming soon'); return false;" class="sidebar-link {% if request.resolver_match.url_name == 'generar_nomina' %}active{% endif %}" style="text-decoration:none;">
+          <i class="bi bi-plus-circle"></i>
+          <span>Generar nomina</span>
+        </a> -->
+      </div>
+    </div>
+
     <a href="{% url 'proveedores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'proveedores' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-building"></i>
       <span>Proveedores</span>
-    </a>
-    <a href="{% url 'trabajadores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'trabajadores' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-people"></i>
-      <span>Usuarios</span>
     </a>
     <a href="{% url 'clientes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'clientes' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-person-lines-fill"></i>
       <span>Clientes</span>
     </a>
-    <a href="{% url 'empleados' %}" class="sidebar-link {% if request.resolver_match.url_name == 'empleados' %}active{% endif %}" style="text-decoration:none;">
-      <i class="bi bi-person-workspace"></i>
-      <span>Empleados</span>
-    </a>
     <a href="{% url 'accounting_entries' %}" class="sidebar-link {% if request.resolver_match.url_name == 'accounting_entries' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-journal-check"></i>
       <span>Asientos contables</span>
     </a>
+
+    <a href="{% url 'empleados' %}" class="sidebar-link {% if request.resolver_match.url_name == 'empleados' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-person-workspace"></i>
+      <span>Empleados</span>
+    </a>
+    <a href="{% url 'trabajadores' %}" class="sidebar-link {% if request.resolver_match.url_name == 'trabajadores' %}active{% endif %}" style="text-decoration:none;">
+      <i class="bi bi-people"></i>
+      <span>Usuarios</span>
+    </a>
+
+
+
     <a href="{% url 'condiciones' %}" class="sidebar-link {% if request.resolver_match.url_name == 'condiciones' %}active{% endif %}" style="text-decoration:none;">
       <i class="bi bi-bag"></i>
       <span>Condiciones de uso</span>
