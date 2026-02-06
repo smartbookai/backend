@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.core.files.base import ContentFile
 from django.db import transaction, IntegrityError
+from .utils.social_security_xml import generate_social_security_xml
 from django.db.models import Q, Sum
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
@@ -4050,6 +4051,7 @@ def api_show_table_payrolls(request):
             'payment_date': fmt_date(getattr(p, 'payment_date', None)) or '-',
             'net_salary': str(getattr(p, 'net_salary', '') or ''),
             'pdf_url': p.pdf_file.url if getattr(p, 'pdf_file', None) else '',
+            'xml_url': p.xml_file.url if getattr(p, 'xml_file', None) else '',
         })
 
     return JsonResponse({'payrolls': rows})
@@ -5995,13 +5997,19 @@ def api_create_manual_payroll(request):
 
             # Guardar PDF en el modelo
             filename = f"nomina_{employee.document_number}_{period_start.strftime('%Y%m')}.pdf"
-            payroll.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+            payroll.pdf_file.save(filename, ContentFile(pdf_content), save=False)
+
+            # Generar XML para Seguridad Social
+            xml_content = generate_social_security_xml(pdf_data)
+            filename_xml = f"ss_{employee.document_number}_{period_start.strftime('%Y%m')}.xml"
+            payroll.xml_file.save(filename_xml, ContentFile(xml_content), save=True)
 
         return JsonResponse({
             'success': True,
-            'message': 'Nómina generada correctamente',
+            'message': 'Nómina y XML generados correctamente',
             'payroll_id': payroll.id,
-            'pdf_url': payroll.pdf_file.url if payroll.pdf_file else None
+            'pdf_url': payroll.pdf_file.url if payroll.pdf_file else None,
+            'xml_url': payroll.xml_file.url if payroll.xml_file else None
         })
 
     except Employee.DoesNotExist:

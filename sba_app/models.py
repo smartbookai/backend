@@ -316,6 +316,7 @@ class Payroll(models.Model):
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='payrolls')
     employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='payrolls')
     pdf_file = models.FileField(upload_to='payrolls/pdfs/', null=True, blank=True)
+    xml_file = models.FileField(upload_to='payrolls/xml/', null=True, blank=True)
 
     # Período y fechas
     period_start = models.DateField(verbose_name="Inicio período")

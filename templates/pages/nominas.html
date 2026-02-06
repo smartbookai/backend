@@ -33,6 +33,7 @@
               <th class="table-header" style="padding:14px 18px;">Emisión</th>
               <th class="table-header" style="padding:14px 18px;">Pago</th>
               <th class="table-header" style="padding:14px 18px;">Líquido</th>
+              <th class="table-header" style="padding:14px 18px;">XML</th>
               <th class="table-header text-right" style="padding:14px 18px;">Acciones</th>
             </tr>
           </thead>
@@ -214,7 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadPayrolls() {
   const tbody = document.querySelector('.payrolls-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px; color:#6B7280;">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="padding:18px; color:#6B7280;">Cargando...</td></tr>';
   try {
     const res = await fetch('/api/show-table-payrolls/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     if (!res.ok) throw new Error('No se pudo cargar el listado de nóminas');
@@ -223,7 +224,7 @@ async function loadPayrolls() {
     renderPayrollsTable(PAYROLLS_DATA);
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px;">Error al cargar nóminas</td></tr>';
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="padding:18px;">Error al cargar nóminas</td></tr>';
   }
 }
 
@@ -232,7 +233,7 @@ function renderPayrollsTable(rows) {
   if (!tbody) return;
   tbody.innerHTML = '';
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay nóminas.</td></tr>';
+    tbody.innerHTML = '<tr><td class="table-cell" colspan="8" style="color:#6B7280;padding:18px;">No hay nóminas.</td></tr>';
     return;
   }
   rows.forEach(p => {
@@ -244,6 +245,7 @@ function renderPayrollsTable(rows) {
       <td class="table-cell" style="padding:14px 18px;">${p.issue_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${p.payment_date || '-'}</td>
       <td class="table-cell" style="padding:14px 18px;">${p.net_salary || '-'}</td>
+      <td class="table-cell" style="padding:14px 18px;">${p.xml_url ? `<a href="${p.xml_url}" target="_blank" rel="noopener noreferrer">XML</a>` : '-'}</td>
       <td class="table-cell text-right" style="padding:14px 18px;">
         <div style="display:flex; gap:8px; justify-content:center;">
           <button class="btn-secondary" style="padding:.35rem .6rem; font-size:12px;" onclick="editNomina(${p.id})">Editar</button>
