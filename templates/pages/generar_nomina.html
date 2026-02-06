@@ -95,6 +95,11 @@
                   <input type="text" id="employee_category" name="employee_category">
                 </div>
                 <div class="form-field">
+                  <label style="font-size:12px;font-weight:600;">Tipo de Contrato</label>
+                  <input type="text" id="employee_contract_type_display" name="employee_contract_type_display" 
+                         style="background:#F3F4F6;" readonly>
+                </div>
+                <div class="form-field">
                   <label style="font-size:12px;font-weight:600;">Cod.CT</label>
                   <input type="text" id="employee_contract_code" name="employee_contract_code">
                 </div>
@@ -626,6 +631,7 @@ function loadEmployeeData() {
     
     // Datos profesionales
     document.getElementById('employee_category').value = option.dataset.category || '';
+    document.getElementById('employee_contract_type_display').value = option.dataset.contract || '';
     document.getElementById('employee_seniority_date').value = option.dataset.hireDate || '';
     
     // Datos bancarios
@@ -641,6 +647,7 @@ function loadEmployeeData() {
     document.getElementById('employee_nif').value = '';
     document.getElementById('employee_ss_number').value = '';
     document.getElementById('employee_category').value = '';
+    document.getElementById('employee_contract_type_display').value = '';
     document.getElementById('employee_seniority_date').value = '';
     document.getElementById('employee_iban').value = '';
   }
