@@ -8,6 +8,19 @@ from io import BytesIO
 from decimal import Decimal
 
 
+# Diccionario de meses en español
+MESES_ES = {
+    1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',
+    5: 'MAYO', 6: 'JUNIO', 7: 'JULIO', 8: 'AGOSTO',
+    9: 'SEPTIEMBRE', 10: 'OCTUBRE', 11: 'NOVIEMBRE', 12: 'DICIEMBRE'
+}
+
+
+def mes_espanol(date):
+    """Retorna el nombre del mes en español en mayúsculas."""
+    return MESES_ES.get(date.month, date.strftime('%B').upper())
+
+
 def generate_payroll_pdf(data):
     """
     Genera PDF de nómina con formato oficial español en UNA SOLA PÁGINA.
@@ -85,7 +98,11 @@ def generate_payroll_pdf(data):
     # ============ PERÍODO DE LIQUIDACIÓN ============
     p.rect(margin, y - 12, page_width, 12)
     p.setFont("Helvetica", 7)
-    periodo_text = f"Período de liquidación:  MENS  del  {payroll.period_start.strftime('%d')}  de  {payroll.period_start.strftime('%B').upper()}  al  {payroll.period_end.strftime('%d')}  de  {payroll.period_end.strftime('%B').upper()}  de  {payroll.period_end.strftime('%Y')}"
+    periodo_text = (
+        f"Período de liquidación:  MENS  del  {payroll.period_start.strftime('%d')}  de  "
+        f"{mes_espanol(payroll.period_start)}  al  {payroll.period_end.strftime('%d')}  de  "
+        f"{mes_espanol(payroll.period_end)}  de  {payroll.period_end.strftime('%Y')}"
+    )
     p.drawString(margin + 2, y - 8, periodo_text)
 
     y -= 15
@@ -189,41 +206,41 @@ def generate_payroll_pdf(data):
     ss_unemployment = desglose_ss_empleado.get('unemployment', Decimal('0'))
     ss_training = desglose_ss_empleado.get('training', Decimal('0'))
 
-    # Contingencias comunes
+    # Contingencias comunes (columnas reubicadas para evitar superposición)
     p.drawString(margin + 4, y_ded, "Contingencias comunes")
-    p.drawRightString(margin + 85, y_ded, f"{base_common:.2f}")
-    p.drawRightString(margin + 110, y_ded, "4,70 %")
+    p.drawRightString(margin + 150, y_ded, f"{base_common:.2f}")
+    p.drawRightString(margin + 185, y_ded, "4,70 %")
     p.drawRightString(col_split - 3, y_ded, f"{ss_common:.2f}")
     y_ded -= 7
 
     # Desempleo
     p.drawString(margin + 4, y_ded, "Desempleo")
-    p.drawRightString(margin + 85, y_ded, f"{base_common:.2f}")
-    p.drawRightString(margin + 110, y_ded, "1,55 %")
+    p.drawRightString(margin + 150, y_ded, f"{base_common:.2f}")
+    p.drawRightString(margin + 185, y_ded, "1,55 %")
     p.drawRightString(col_split - 3, y_ded, f"{ss_unemployment:.2f}")
     y_ded -= 7
 
     # Formación Profesional
     p.drawString(margin + 4, y_ded, "Formación Profesional")
-    p.drawRightString(margin + 85, y_ded, f"{base_common:.2f}")
-    p.drawRightString(margin + 110, y_ded, "0,10 %")
+    p.drawRightString(margin + 150, y_ded, f"{base_common:.2f}")
+    p.drawRightString(margin + 185, y_ded, "0,10 %")
     p.drawRightString(col_split - 3, y_ded, f"{ss_training:.2f}")
     y_ded -= 8
 
     p.drawString(margin + 4, y_ded, "Horas extraordinarias:")
     y_ded -= 6
     p.drawString(margin + 6, y_ded, "Fuerza mayor")
-    p.drawRightString(margin + 110, y_ded, "%")
+    p.drawRightString(margin + 185, y_ded, "%")
     y_ded -= 6
     p.drawString(margin + 6, y_ded, "Resto horas extraordinarias")
-    p.drawRightString(margin + 110, y_ded, "%")
+    p.drawRightString(margin + 185, y_ded, "%")
     y_ded -= 8
 
     p.setFont("Helvetica-Bold", 6)
     p.drawString(margin + 4, y_ded, "TOTAL APORTACIONES" + "." * 50)
     p.drawRightString(col_split - 3, y_ded, f"{payroll.social_security_employee:.2f}")
 
-    # Columna derecha: IRPF y otras deducciones (CORREGIDO)
+    # Columna derecha: IRPF y otras deducciones
     y_ded_der = y - 20
     p.setFont("Helvetica-Bold", 6)
 
@@ -233,7 +250,7 @@ def generate_payroll_pdf(data):
     p.drawString(col_split + 4, y_ded_der, "las personas físicas")
     y_ded_der -= 7
 
-    # Línea 2: Base e IRPF (en NUEVA línea, sin superposición)
+    # Línea 2: Base e IRPF
     base_irpf = bases_cotizacion.get('irpf', Decimal('0'))
     irpf_percent = (payroll.irpf / base_irpf * 100) if base_irpf > 0 else Decimal('0')
 
@@ -274,7 +291,7 @@ def generate_payroll_pdf(data):
     p.setFont("Helvetica", 7)
     ciudad = datos_emision.get('city', 'madrid')
     dia = datos_emision.get('day', payroll.issue_date.day)
-    mes = datos_emision.get('month', payroll.issue_date.strftime('%B').upper())
+    mes = datos_emision.get('month', mes_espanol(payroll.issue_date))
     año = datos_emision.get('year', payroll.issue_date.year)
 
     p.drawCentredString(width / 2, y, f"{ciudad}          {dia} de {mes}          de          {año}")
@@ -290,7 +307,7 @@ def generate_payroll_pdf(data):
         p.drawString(margin + page_width / 2, y - 8, f"SWIFT/BIC: {datos_bancarios.get('swift', '')}")
         y -= 22
 
-    # ============ BASES DE COTIZACIÓN (CORREGIDO - sin superposición) ============
+    # ============ BASES DE COTIZACIÓN ============
     p.setFont("Helvetica-Bold", 5.5)
 
     # Dividir el texto largo en dos líneas para evitar superposición

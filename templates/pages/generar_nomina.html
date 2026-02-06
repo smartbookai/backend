@@ -713,7 +713,9 @@ function autoCalculateSocialSecurity() {
   });
 
   // Base de cotización (todos los conceptos salariales)
-  const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal;
+  //const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal;
+  const salaryInKind = parseFloat(document.getElementById('salary_in_kind').value) || 0;
+  const cotizationBase = baseSalary + salarySupplements + overtime + extraordinaryPayments + additionalTotal + salaryInKind;
 
   if (cotizationBase === 0) {
     alert('⚠️ Primero ingresa el salario base y otros devengos');
