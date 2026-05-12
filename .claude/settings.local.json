@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py showmigrations sba_app --list)",
+      "Bash(python3 manage.py showmigrations sba_app --list)",
+      "Bash(\"c:\\\\Users\\\\Migue\\\\Desktop\\\\SBA2\\\\venv\\\\Scripts\\\\python.exe\" manage.py showmigrations sba_app --list)",
+      "PowerShell(& \"c:\\\\Users\\\\Migue\\\\Desktop\\\\SBA2\\\\venv\\\\Scripts\\\\python.exe\" \"c:\\\\Users\\\\Migue\\\\Desktop\\\\SBA2\\\\SBA\\\\manage.py\" showmigrations sba_app --list 2>&1)",
+      "PowerShell($python = \"C:\\\\Users\\\\Migue\\\\Desktop\\\\SBA2\\\\venv\\\\Scripts\\\\python.exe\"; & $python \"C:\\\\Users\\\\Migue\\\\Desktop\\\\SBA2\\\\SBA\\\\manage.py\" showmigrations sba_app --list 2>&1 | Select-Object -Last 15)",
+      "Bash(\"C:\\\\Python314\\\\python.exe\" manage.py migrate)",
+      "Bash(C:\\\\Python314\\\\python.exe manage.py migrate)",
+      "Bash(\"/c/Python314/python.exe\" manage.py migrate)",
+      "Bash(\"/c/Python314/python.exe\" -)"
+    ]
+  }
+}

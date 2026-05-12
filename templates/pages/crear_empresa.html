@@ -1,0 +1,225 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+{% block title %}Nueva Empresa | SBA{% endblock %}
+{% block content %}
+
+<style>
+  .ce-wrap { max-width:780px; margin:32px auto; padding:0 16px 48px; }
+  .ce-header { margin-bottom:32px; }
+  .ce-header h1 { font-size:28px; font-weight:700; margin:0 0 6px; }
+  .ce-header p  { color:#6B7280; margin:0; }
+  .ce-card {
+    background:#fff; border:1px solid #E5E7EB; border-radius:14px;
+    padding:28px; margin-bottom:20px;
+    box-shadow:0 1px 4px rgba(0,0,0,.04);
+  }
+  .ce-card h2 { font-size:16px; font-weight:700; color:#111827; margin:0 0 20px; display:flex; align-items:center; gap:8px; }
+  .ce-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; }
+  .ce-field { display:flex; flex-direction:column; gap:6px; }
+  .ce-field label { font-size:13px; font-weight:600; color:#374151; }
+  .ce-field input, .ce-field select {
+    padding:9px 12px; border:1.5px solid #D1D5DB; border-radius:8px;
+    font-size:14px; color:#111827; background:#fff; transition:border-color .15s;
+    outline:none;
+  }
+  .ce-field input:focus, .ce-field select:focus { border-color:#9d4edd; box-shadow:0 0 0 3px rgba(157,78,221,.1); }
+  .ce-field .ce-hint { font-size:11px; color:#9CA3AF; margin-top:2px; }
+  .ce-logo-area {
+    border:2px dashed #E5E7EB; border-radius:10px; padding:20px;
+    display:flex; align-items:center; gap:16px; cursor:pointer;
+    transition:border-color .15s;
+  }
+  .ce-logo-area:hover { border-color:#9d4edd; }
+  .ce-logo-preview {
+    width:64px; height:64px; border-radius:10px; object-fit:cover;
+    border:1px solid #E5E7EB; display:none;
+  }
+  .ce-logo-placeholder {
+    width:64px; height:64px; border-radius:10px;
+    background:#F5F0FF; display:flex; align-items:center; justify-content:center;
+    color:#9d4edd; font-size:28px;
+  }
+  .ce-logo-text h4 { font-size:14px; font-weight:600; color:#111827; margin:0 0 2px; }
+  .ce-logo-text p  { font-size:12px; color:#6B7280; margin:0; }
+  .ce-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:8px; }
+  .ce-btn-cancel {
+    padding:10px 22px; border:1.5px solid #D1D5DB; border-radius:8px;
+    background:#fff; color:#374151; font-size:14px; font-weight:600; cursor:pointer;
+    transition:all .15s; text-decoration:none; display:inline-flex; align-items:center;
+  }
+  .ce-btn-cancel:hover { background:#F9FAFB; border-color:#9CA3AF; color:#111827; }
+  .ce-btn-submit {
+    padding:10px 28px; border:none; border-radius:8px;
+    background:linear-gradient(135deg,#9d4edd,#4a0e78);
+    color:#fff; font-size:14px; font-weight:600; cursor:pointer;
+    transition:opacity .15s, transform .15s; display:inline-flex; align-items:center; gap:8px;
+  }
+  .ce-btn-submit:hover { opacity:.9; transform:translateY(-1px); }
+  .ce-error {
+    background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px;
+    padding:12px 16px; color:#DC2626; font-size:14px; margin-bottom:20px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .ce-section-toggle {
+    display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;
+  }
+  .ce-section-toggle i { font-size:14px; color:#6B7280; transition:transform .2s; }
+  .ce-section-toggle.open i { transform:rotate(180deg); }
+  .ce-collapsible { display:none; margin-top:18px; }
+  .ce-collapsible.open { display:block; }
+</style>
+
+<div class="ce-wrap">
+  <div class="ce-header">
+    {% if onboarding %}
+      <h1>Configura tu empresa</h1>
+      <p>Un último paso — rellena los datos de tu empresa para empezar a usar SBA.</p>
+    {% else %}
+      <h1>Nueva empresa</h1>
+      <p>Crea una empresa y empieza a gestionar facturas, nóminas y más.</p>
+    {% endif %}
+  </div>
+
+  {% if error %}
+    <div class="ce-error"><i class="bi bi-exclamation-circle"></i> {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <!-- Datos básicos -->
+    <div class="ce-card">
+      <h2><i class="bi bi-building" style="color:#9d4edd;"></i> Datos de la empresa</h2>
+      <div class="ce-grid">
+        <div class="ce-field" style="grid-column:1/-1;">
+          <label for="name">Nombre de la empresa *</label>
+          <input type="text" id="name" name="name" required placeholder="Ej: Mi Empresa S.L." value="{{ request.POST.name|default:'' }}">
+        </div>
+        <div class="ce-field">
+          <label for="document_type">Tipo de documento</label>
+          <select id="document_type" name="document_type">
+            <option value="">— Seleccionar —</option>
+            <option value="NIF" {% if request.POST.document_type == 'NIF' %}selected{% endif %}>NIF</option>
+            <option value="CIF" {% if request.POST.document_type == 'CIF' %}selected{% endif %}>CIF</option>
+            <option value="NIE" {% if request.POST.document_type == 'NIE' %}selected{% endif %}>NIE</option>
+          </select>
+        </div>
+        <div class="ce-field">
+          <label for="document_number">Número de documento</label>
+          <input type="text" id="document_number" name="document_number" placeholder="Ej: B12345678" value="{{ request.POST.document_number|default:'' }}">
+        </div>
+        <div class="ce-field" style="grid-column:1/-1;">
+          <label for="address">Dirección</label>
+          <input type="text" id="address" name="address" placeholder="Calle, número, ciudad, CP" value="{{ request.POST.address|default:'' }}">
+        </div>
+        <div class="ce-field">
+          <label for="phone">Teléfono</label>
+          <input type="tel" id="phone" name="phone" placeholder="Ej: +34 600 000 000" value="{{ request.POST.phone|default:'' }}">
+        </div>
+        <div class="ce-field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="empresa@ejemplo.com" value="{{ request.POST.email|default:'' }}">
+        </div>
+        <div class="ce-field">
+          <label for="website">Sitio web</label>
+          <input type="url" id="website" name="website" placeholder="https://miempresa.com" value="{{ request.POST.website|default:'' }}">
+        </div>
+        <div class="ce-field">
+          <label for="ccc">Código Cuenta Cotización (SS)</label>
+          <input type="text" id="ccc" name="ccc" maxlength="11" placeholder="11 dígitos" value="{{ request.POST.ccc|default:'' }}">
+          <span class="ce-hint">Código de la Seguridad Social (11 dígitos)</span>
+        </div>
+      </div>
+
+      <!-- Logo -->
+      <div style="margin-top:20px;">
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Logo de la empresa</label>
+        <div class="ce-logo-area" onclick="document.getElementById('logo').click()">
+          <img id="logoPreview" src="" alt="Logo" class="ce-logo-preview">
+          <div class="ce-logo-placeholder" id="logoPlaceholder"><i class="bi bi-image"></i></div>
+          <div class="ce-logo-text">
+            <h4>Subir logo</h4>
+            <p>PNG, JPG hasta 2MB. Recomendado: cuadrado.</p>
+          </div>
+        </div>
+        <input type="file" id="logo" name="logo" accept="image/*" style="display:none;" onchange="previewLogo(this)">
+      </div>
+    </div>
+
+    <!-- Configuración de nóminas (colapsable) -->
+    <div class="ce-card">
+      <div class="ce-section-toggle" id="ssToggle" onclick="toggleSS()">
+        <h2 style="margin:0;"><i class="bi bi-shield-check" style="color:#9d4edd;"></i> Configuración de Seguridad Social</h2>
+        <i class="bi bi-chevron-down"></i>
+      </div>
+      <p style="color:#6B7280;font-size:13px;margin:8px 0 0;">Opcional — puedes completarlo después desde ajustes de empresa.</p>
+      <div class="ce-collapsible" id="ssSection">
+        <div class="ce-grid" style="margin-top:4px;">
+          <div class="ce-field">
+            <label for="cnae_code">CNAE</label>
+            <input type="text" id="cnae_code" name="cnae_code" maxlength="10" placeholder="Ej: 6201" value="{{ request.POST.cnae_code|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_contingencies_percent">% SS Contingencias Comunes</label>
+            <input type="number" id="ss_contingencies_percent" name="ss_contingencies_percent" step="0.01" min="0" max="100" placeholder="23.60" value="{{ request.POST.ss_contingencies_percent|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_unemployment_percent_indefinite">% SS Desempleo Indefinido</label>
+            <input type="number" id="ss_unemployment_percent_indefinite" name="ss_unemployment_percent_indefinite" step="0.01" min="0" max="100" placeholder="5.50" value="{{ request.POST.ss_unemployment_percent_indefinite|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_unemployment_percent_temporal">% SS Desempleo Temporal</label>
+            <input type="number" id="ss_unemployment_percent_temporal" name="ss_unemployment_percent_temporal" step="0.01" min="0" max="100" placeholder="6.70" value="{{ request.POST.ss_unemployment_percent_temporal|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_training_percent">% SS Formación Profesional</label>
+            <input type="number" id="ss_training_percent" name="ss_training_percent" step="0.01" min="0" max="100" placeholder="0.60" value="{{ request.POST.ss_training_percent|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_mei_percent">% SS MEI (Accidentes)</label>
+            <input type="number" id="ss_mei_percent" name="ss_mei_percent" step="0.01" min="0" max="100" placeholder="0.10" value="{{ request.POST.ss_mei_percent|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_fogasa_percent">% FOGASA</label>
+            <input type="number" id="ss_fogasa_percent" name="ss_fogasa_percent" step="0.01" min="0" max="100" placeholder="0.20" value="{{ request.POST.ss_fogasa_percent|default:'' }}">
+          </div>
+          <div class="ce-field">
+            <label for="ss_extraordinary_payments_percent">% Prorrata Pagas Extra</label>
+            <input type="number" id="ss_extraordinary_payments_percent" name="ss_extraordinary_payments_percent" step="0.01" min="0" max="100" placeholder="0.00" value="{{ request.POST.ss_extraordinary_payments_percent|default:'' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ce-actions">
+      {% if not onboarding %}
+        <a href="{% url 'index' %}" class="ce-btn-cancel">Cancelar</a>
+      {% endif %}
+      <button type="submit" class="ce-btn-submit">
+        <i class="bi bi-building-add"></i>
+        {% if onboarding %}Empezar{% else %}Crear empresa{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function previewLogo(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('logoPreview').src = e.target.result;
+    document.getElementById('logoPreview').style.display = 'block';
+    document.getElementById('logoPlaceholder').style.display = 'none';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function toggleSS() {
+  const toggle = document.getElementById('ssToggle');
+  const section = document.getElementById('ssSection');
+  toggle.classList.toggle('open');
+  section.classList.toggle('open');
+}
+</script>
+{% endblock %}

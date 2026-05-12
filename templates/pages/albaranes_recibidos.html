@@ -179,7 +179,7 @@
 </section>
 
 <script>
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = '{% if user_role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let DELIVERY_NOTES_DATA = [];
 const MAX_PURCHASE_DELIVERY_NOTE_FILES = 10;
 let selectedPurchaseDeliveryNoteFiles = []; // Acumulador de archivos

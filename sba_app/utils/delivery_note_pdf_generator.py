@@ -6,13 +6,166 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from decimal import Decimal
 
 
-def generate_delivery_note_pdf(delivery_note):
-    """
-    Genera un PDF con diseño moderno para un albarán de ventas
-    """
+# ── Token mapper ────────────────────────────────────────────────────────────
+
+def get_delivery_note_data(dn):
+    client  = getattr(dn, 'client', None)
+    company = getattr(dn, 'company', None)
+    fmt_date  = lambda d: d.strftime('%d/%m/%Y') if d else ''
+    fmt_money = lambda v: f"{v:.2f} €" if v is not None else ''
+
+    STATUS_LABELS = {'pending': 'Pendiente', 'invoiced': 'Facturado', 'cancelled': 'Cancelado'}
+
+    return {
+        'NUMERO_ALBARAN':  getattr(dn, 'delivery_note_number', ''),
+        'NUMERO':          getattr(dn, 'delivery_note_number', ''),
+        'FECHA_EMISION':   fmt_date(getattr(dn, 'issue_date', None)),
+        'FECHA_ENTREGA':   fmt_date(getattr(dn, 'delivery_date', None)),
+        'METODO_ENTREGA':  getattr(dn, 'delivery_method', '') or '',
+        'ESTADO':          STATUS_LABELS.get(getattr(dn, 'status', ''), ''),
+        'NOTAS':           getattr(dn, 'notes', '') or '',
+        'OBSERVACIONES':   getattr(dn, 'notes', '') or '',
+        'BASE_IMPONIBLE':  fmt_money(getattr(dn, 'base_amount', None)),
+        'SUBTOTAL':        fmt_money(getattr(dn, 'base_amount', None)),
+        'IVA':             fmt_money(getattr(dn, 'tax_amount', None)),
+        'TOTAL':           fmt_money(getattr(dn, 'total_amount', None)),
+        'TOTAL_DOC':       fmt_money(getattr(dn, 'total_amount', None)),
+        # Empresa
+        'EMPRESA_NOMBRE':    getattr(company, 'name', '')            if company else '',
+        'EMPRESA_CIF':       getattr(company, 'document_number', '') if company else '',
+        'EMPRESA_DIR':       getattr(company, 'address', '')         if company else '',
+        'EMPRESA_EMAIL':     getattr(company, 'email', '')           if company else '',
+        'EMPRESA_TEL':       getattr(company, 'phone', '')           if company else '',
+        'EMPRESA_WEB':       getattr(company, 'website', '')         if company else '',
+        # Cliente
+        'CLIENTE_NOMBRE':    getattr(client, 'name', '')             if client else '',
+        'CLIENTE_CIF':       getattr(client, 'document_number', '')  if client else '',
+        'CLIENTE_DIR':       getattr(client, 'address', '')          if client else '',
+        'CLIENTE_EMAIL':     getattr(client, 'email', '')            if client else '',
+        'CLIENTE_TEL':       getattr(client, 'phone', '')            if client else '',
+        'CLIENTE_CONTACTO':  getattr(client, 'contact_person', '')   if client else '',
+        # Cuentas contables
+        'CUENTA_INGRESOS':   getattr(dn, 'account_income', '')       or '',
+        'CUENTA_CLIENTE':    getattr(dn, 'account_customer', '')     or '',
+        'CUENTA_IVA':        getattr(dn, 'account_vat_output', '')   or '',
+    }
+
+
+# ── Helpers compartidos con pdf_generator ───────────────────────────────────
+
+from sba_app.utils.pdf_generator import get_reportlab_font as _rl_font, _load_template_design
+
+
+# ── Generador basado en plantilla JSON ──────────────────────────────────────
+
+def _render_from_template(delivery_note, design_data):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    dn_data = get_delivery_note_data(delivery_note)
+
+    # 1. Shapes
+    for item in design_data:
+        if item.get('type') == 'shape':
+            x, y_web = item.get('x', 0), item.get('y', 0)
+            w, h = item.get('width', 100), item.get('height', 50)
+            c.setFillColor(colors.HexColor(item.get('bg_color', '#CCCCCC')))
+            c.rect(x, height - y_web - h, w, h, stroke=0, fill=1)
+
+    # 2. Textos, logo y tabla
+    for item in design_data:
+        x, y_web = item.get('x', 0), item.get('y', 0)
+        token = item.get('token', '')
+
+        if token == 'LOGO_EMPRESA' and delivery_note.company.logo:
+            try:
+                img = ImageReader(delivery_note.company.logo.path)
+                box_w = item.get('logo_width', 120)
+                box_h = box_w * 0.8  # same bounding box the builder placeholder uses
+                iw, ih = img.getSize()
+                aspect = ih / float(iw)
+                if aspect <= 0.8:
+                    dw, dh = box_w, box_w * aspect
+                else:
+                    dh, dw = box_h, box_h / aspect
+                c.drawImage(img, x, height - y_web - dh, width=dw, height=dh, mask='auto')
+            except Exception:
+                pass
+
+        elif token == 'TABLA_LINEAS':
+            _draw_lines_table(c, delivery_note, x, height - y_web, width - x - 50)
+
+        elif item.get('type') in ['label', 'value']:
+            size = item.get('size', 10)
+            c.setFillColor(colors.HexColor(item.get('color', '#000000')))
+            c.setFont(_rl_font(item.get('font', 'Helvetica'), item.get('bold', False), item.get('italic', False)), size)
+            texto = item.get('text', '') if item.get('type') == 'label' else str(dn_data.get(token, ''))
+            if texto and texto != 'None':
+                c.drawString(x, height - y_web - size, texto)
+
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def _draw_lines_table(c, delivery_note, x, y_top, max_width):
+    """Dibuja la tabla de líneas del albarán con canvas directo."""
+    ROW_H = 16
+    headers = ['Descripción', 'Ref.', 'Cant.', 'Precio', 'IVA', 'Total']
+    col_w   = [max_width * 0.40, max_width * 0.10, max_width * 0.08,
+               max_width * 0.14, max_width * 0.10, max_width * 0.18]
+
+    y = y_top
+
+    # Cabecera
+    c.setFillColor(colors.HexColor('#1e293b'))
+    c.rect(x, y - ROW_H, max_width, ROW_H, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont('Helvetica-Bold', 8)
+    cx = x
+    for i, h in enumerate(headers):
+        c.drawString(cx + 3, y - ROW_H + 4, h)
+        cx += col_w[i]
+    y -= ROW_H
+
+    # Filas
+    c.setFont('Helvetica', 8)
+    for idx, line in enumerate(delivery_note.lines.all()):
+        bg = '#f8fafc' if idx % 2 == 0 else '#ffffff'
+        c.setFillColor(colors.HexColor(bg))
+        c.rect(x, y - ROW_H, max_width, ROW_H, stroke=0, fill=1)
+        c.setFillColor(colors.HexColor('#1e293b'))
+        total_line = line.quantity * line.unit_price if line.unit_price else Decimal('0.00')
+        row = [
+            line.description[:45],
+            line.reference or '-',
+            str(line.quantity),
+            f"{line.unit_price:.2f} €" if line.unit_price else '-',
+            f"{line.vat_rate}%" if line.vat_rate else '-',
+            f"{total_line:.2f} €" if line.unit_price else '-',
+        ]
+        cx = x
+        for i, cell in enumerate(row):
+            c.drawString(cx + 3, y - ROW_H + 4, str(cell))
+            cx += col_w[i]
+        y -= ROW_H
+
+
+# ── Punto de entrada principal ───────────────────────────────────────────────
+
+def generate_delivery_note_pdf(delivery_note, template_id=None):
+    """Genera PDF del albarán usando plantilla JSON si existe, o diseño por defecto."""
+    design_data = _load_template_design(template_id, 'delivery_note')
+
+    if design_data:
+        return _render_from_template(delivery_note, design_data)
+
+    # ── Fallback: diseño hardcoded original ─────────────────────────────────
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,

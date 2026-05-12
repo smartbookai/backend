@@ -8,7 +8,7 @@
         <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Usuarios</h1>
         <div style="color:#6B7280;margin-bottom:20px;">De la compañía</div>
       </div>
-      {% if request.user.company_user.role == 'admin' %}
+      {% if user_role == 'admin' %}
        <button type="button" class="btn-primary" onclick="openCompanyModal()" style="margin-right:8px;">Datos de Empresa</button>
        <button type="button" class="btn-primary" onclick="openWorkerDrawer()">Crear nuevo</button>
       {% endif %}
@@ -272,7 +272,7 @@
 
 <script>
 let currentEditId = null;
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = '{% if user_role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let WORKERS_DATA = [];
 
 // ========== FUNCIONES PARA MODAL DE EMPRESA ==========

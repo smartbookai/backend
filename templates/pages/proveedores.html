@@ -1,381 +1,522 @@
 {% extends 'layouts/base.html' %}
 {% block title %}Proveedores | SBA{% endblock %}
-{% block extra_head %}
-
-{% endblock %}
 {% block content %}
-<section>
-  <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
-    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
-      <div>
-        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Proveedores</h1>
-        <div style="color:#6B7280;margin-bottom:20px;">De la compañía</div>
-      </div>
-      {% if request.user.company_user.role == 'admin' %}
-      <button type="button" class="btn-primary" onclick="openSupplierDrawer()">Crear nuevo</button>
-      {% endif %}
+
+<style>
+  /* ── Page layout ─────────────────────────────── */
+  .suppliers-page { max-width: 100%; padding: 28px 24px 40px; }
+
+  /* ── Search bar ──────────────────────────────── */
+  .suppliers-search-wrap {
+    position: relative;
+    max-width: 480px;
+  }
+  .suppliers-search-wrap .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9CA3AF;
+    font-size: 15px;
+    pointer-events: none;
+  }
+  .suppliers-search-wrap input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    font-size: 14px;
+    background: #fff;
+    outline: none;
+    transition: border-color .2s;
+    box-sizing: border-box;
+  }
+  .suppliers-search-wrap input:focus { border-color: #7b3fa8; }
+
+  /* ── Section labels ──────────────────────────── */
+  .section-heading {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #9CA3AF;
+    margin: 0 0 14px;
+  }
+
+  /* ── Featured suppliers row ──────────────────── */
+  .featured-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+  }
+  .featured-card {
+    flex: 1 1 200px;
+    max-width: 260px;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border-radius: 18px;
+    padding: 20px 20px 16px;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 4px 18px rgba(29,78,216,.22);
+    transition: transform .18s ease, box-shadow .18s ease;
+    cursor: default;
+  }
+  .featured-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(29,78,216,.32);
+  }
+  .featured-card .fc-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .featured-card .fc-name {
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .featured-card .fc-meta {
+    font-size: 12px;
+    opacity: .8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .featured-card .fc-stats {
+    display: flex;
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .featured-card .fc-stat { display: flex; flex-direction: column; gap: 1px; }
+  .featured-card .fc-stat-val { font-size: 16px; font-weight: 700; }
+  .featured-card .fc-stat-lbl {
+    font-size: 10px;
+    opacity: .72;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .featured-empty { color: #9CA3AF; font-size: 14px; padding: 10px 0; }
+
+  /* ── Supplier cards grid ─────────────────────── */
+  .suppliers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .supplier-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #F3F4F6;
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+  .supplier-card:hover {
+    border-color: #bfdbfe;
+    box-shadow: 0 4px 18px rgba(29,78,216,.10);
+    transform: translateY(-2px);
+  }
+  .supplier-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .supplier-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .supplier-info { flex: 1; min-width: 0; }
+  .supplier-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1F2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .supplier-doc { font-size: 12px; color: #9CA3AF; }
+  .invoice-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 20px;
+    padding: 2px 9px;
+    flex-shrink: 0;
+  }
+  .supplier-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #6B7280;
+  }
+  .supplier-details .detail-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .supplier-details .detail-row i { font-size: 12px; color: #9CA3AF; flex-shrink: 0; }
+  .supplier-card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid #F3F4F6;
+  }
+  .btn-card-edit {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid #bfdbfe;
+    background: #fff;
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .btn-card-edit:hover { background: #eff6ff; border-color: #1d4ed8; }
+  .btn-card-del {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid #fee2e2;
+    background: #fff;
+    color: #DC2626;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .btn-card-del:hover { background: #fef2f2; border-color: #DC2626; }
+
+  /* ── Empty state ─────────────────────────────── */
+  .suppliers-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 0;
+    color: #9CA3AF;
+    font-size: 15px;
+  }
+</style>
+
+<section class="suppliers-page">
+
+  <!-- Header row -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h1 style="font-size:26px;font-weight:700;margin:0 0 4px;">Proveedores</h1>
+      <p style="margin:0;color:#6B7280;font-size:14px;">Gestiona los proveedores de tu empresa</p>
     </div>
+    {% if user_role == 'admin' %}
+    <button type="button" class="btn-primary" onclick="openSupplierDrawer()">
+      <i class="bi bi-plus-lg me-1"></i> Nuevo proveedor
+    </button>
+    {% endif %}
+  </div>
 
-    <div class="card table-card" style="padding:0;margin-top:12px;">
-      <div class="table-header-bar" style="display:flex;align-items:center;padding:16px 20px;gap:12px;background:#62328A;color:#ffffff;border-radius:0.5rem 0.5rem 0 0;">
-        <div class="table-header-title" style="flex:1;min-width:0;">
-          <h2 style="font-size:16px;margin:0;color:#ffffff;">Listado</h2>
-        </div>
-        <div class="table-header-search" style="flex:0 0 auto;display:flex;justify-content:center;min-width:0;">
-          <input id="suppliersSearch" type="text" placeholder="Buscar..." aria-label="Buscar proveedores" style="width:320px;max-width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;">
-        </div>
-        <div class="table-header-spacer" style="flex:1;min-width:0;"></div>
-      </div>
-
-      <div class="table-container">
-        <table class="table" style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th class="table-header" style="padding:14px 18px;">Proveedor</th>
-              <th class="table-header" style="padding:14px 18px;">Contacto</th>
-              <th class="table-header" style="padding:14px 18px;">Teléfono</th>
-              <th class="table-header" style="padding:14px 18px;">Email</th>
-              <th class="table-header" style="padding:14px 18px;">Documento</th>
-              <th class="table-header" style="padding:14px 18px;">Dirección</th>
-              <th class="table-header" style="padding:14px 18px;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="suppliers-tbody">
-            <!--<tr>
-              <td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">Cargando...</td>
-            </tr> -->
-          </tbody>
-        </table>
-      </div>
+  <!-- Search bar -->
+  <div style="margin-bottom:30px;">
+    <div class="suppliers-search-wrap">
+      <i class="bi bi-search search-icon"></i>
+      <input id="suppliersSearch" type="text" placeholder="Buscar por nombre, email, teléfono...">
     </div>
   </div>
 
-  <!-- Overlay and Drawer -->
-  <div id="supplierOverlay" class="overlay-mask" onclick="closeSupplierDrawer()"></div>
-  <aside id="supplierDrawer" class="drawer" aria-hidden="true">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="margin:0;font-size:18px;">Crear proveedor</h3>
-      <button class="btn-secondary" onclick="closeSupplierDrawer()">Cerrar</button>
+  <!-- Most frequent suppliers -->
+  <div id="featured-section" style="margin-bottom:36px;">
+    <p class="section-heading"><i class="bi bi-star-fill" style="color:#f59e0b;margin-right:6px;"></i>Proveedores más habituales</p>
+    <div class="featured-row" id="featured-row">
+      <p class="featured-empty">Cargando...</p>
     </div>
-    <form id="supplierForm" onsubmit="createNewSupplier(event)">
-      <div class="form-field">
-        <label>Nombre</label>
-        <input type="text" name="name" required>
-      </div>
-      <div class="form-field">
-        <label>Persona de contacto</label>
-        <input type="text" name="contact_person">
-      </div>
-      <div class="form-field">
-        <label>Teléfono</label>
-        <input type="text" name="phone">
-      </div>
-      <div class="form-field">
-        <label>Email</label>
-        <input type="email" name="email">
-      </div>
-      <div class="form-field">
-        <label>Tipo de documento</label>
-        <input type="text" name="document_type">
-      </div>
-      <div class="form-field">
-        <label>Número de documento</label>
-        <input type="text" name="document_number">
-      </div>
-      <div class="form-field">
-        <label>Dirección</label>
-        <input type="text" name="address">
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
-        <button type="button" class="btn-secondary" onclick="closeSupplierDrawer()">Cancelar</button>
-        <button type="submit" class="btn-primary">Guardar</button>
-      </div>
-    </form>
-  </aside>
+  </div>
+
+  <!-- All suppliers grid -->
+  <div>
+    <p class="section-heading"><i class="bi bi-building" style="margin-right:6px;"></i>Todos los proveedores</p>
+    <div class="suppliers-grid" id="suppliers-grid">
+      <div class="suppliers-empty">Cargando...</div>
+    </div>
+  </div>
 
 </section>
 
-<script>
-// Base drawer handlers (kept minimal). Later we extend behavior where needed.
-function openSupplierDrawer() {
-  const ov = document.getElementById('supplierOverlay');
-  const dr = document.getElementById('supplierDrawer');
-  if (ov) ov.style.display = 'block';
-  if (dr) dr.classList.add('active');
-}
-function closeSupplierDrawer() {
-  const ov = document.getElementById('supplierOverlay');
-  const dr = document.getElementById('supplierDrawer');
-  if (ov) ov.style.display = 'none';
-  if (dr) dr.classList.remove('active');
-}
-</script>
+<!-- Overlay and Drawer -->
+<div id="supplierOverlay" class="overlay-mask" onclick="closeSupplierDrawer()"></div>
+<aside id="supplierDrawer" class="drawer" aria-hidden="true">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 id="drawerTitle" style="margin:0;font-size:18px;">Crear proveedor</h3>
+    <button class="btn-secondary" onclick="closeSupplierDrawer()">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <form id="supplierForm" onsubmit="submitSupplier(event)">
+    <div class="form-field">
+      <label>Nombre <span style="color:#DC2626;">*</span></label>
+      <input type="text" name="name" required>
+    </div>
+    <div class="form-field">
+      <label>Persona de contacto</label>
+      <input type="text" name="contact_person">
+    </div>
+    <div class="form-field">
+      <label>Teléfono</label>
+      <input type="text" name="phone">
+    </div>
+    <div class="form-field">
+      <label>Email</label>
+      <input type="email" name="email">
+    </div>
+    <div class="form-field">
+      <label>Tipo de documento</label>
+      <input type="text" name="document_type">
+    </div>
+    <div class="form-field">
+      <label>Número de documento</label>
+      <input type="text" name="document_number">
+    </div>
+    <div class="form-field">
+      <label>Dirección</label>
+      <input type="text" name="address">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button type="button" class="btn-secondary" onclick="closeSupplierDrawer()">Cancelar</button>
+      <button type="submit" class="btn-primary">Guardar</button>
+    </div>
+  </form>
+</aside>
 
 <script>
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = '{% if user_role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+let currentEditId = null;
 let SUPPLIERS_DATA = [];
-</script>
-<script>
+
 document.addEventListener('DOMContentLoaded', function() {
-    loadSuppliers();
-    setupSuppliersSearch();
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('openDrawer') === 'supplier') {
-      openSupplierDrawer();
-    }
+  loadSuppliers();
+  document.getElementById('suppliersSearch').addEventListener('input', function() {
+    const term = this.value.trim().toLowerCase();
+    renderGrid(filterSuppliers(term));
+  });
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('openDrawer') === 'supplier') openSupplierDrawer();
 });
-</script>
 
-<script>
+/* ── helpers ─────────────────────────────────────────── */
+function initial(name) {
+  return (name || '?').trim()[0].toUpperCase();
+}
+function fmtMoney(val) {
+  if (!val && val !== 0) return '—';
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+}
+function filterSuppliers(term) {
+  if (!term) return SUPPLIERS_DATA;
+  return SUPPLIERS_DATA.filter(s =>
+    [s.name, s.contact_person, s.phone, s.email, s.document, s.address]
+      .some(v => (v || '').toLowerCase().includes(term))
+  );
+}
 
-function renderSuppliersTable(rows) {
-  const tbody = document.querySelector('.suppliers-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
+/* ── featured strip ──────────────────────────────────── */
+function renderFeatured(all) {
+  const top = [...all]
+    .filter(s => s.invoice_count > 0)
+    .sort((a, b) => b.invoice_count - a.invoice_count)
+    .slice(0, 4);
 
+  const row = document.getElementById('featured-row');
+  const section = document.getElementById('featured-section');
+
+  if (!top.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  row.innerHTML = top.map(s => `
+    <div class="featured-card">
+      <div class="fc-avatar">${initial(s.name)}</div>
+      <div>
+        <div class="fc-name" title="${s.name}">${s.name}</div>
+        <div class="fc-meta">${s.email || s.phone || '—'}</div>
+      </div>
+      <div class="fc-stats">
+        <div class="fc-stat">
+          <span class="fc-stat-val">${s.invoice_count}</span>
+          <span class="fc-stat-lbl">Facturas</span>
+        </div>
+        <div class="fc-stat">
+          <span class="fc-stat-val">${fmtMoney(s.total_invoiced)}</span>
+          <span class="fc-stat-lbl">Facturado</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── supplier cards grid ─────────────────────────────── */
+function renderGrid(rows) {
+  const grid = document.getElementById('suppliers-grid');
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="color:#6B7280;padding:18px;">No hay proveedores registrados.</td></tr>';
+    grid.innerHTML = '<div class="suppliers-empty"><i class="bi bi-building-x" style="font-size:32px;display:block;margin-bottom:10px;"></i>No hay proveedores que coincidan.</div>';
     return;
   }
 
-  rows.forEach(s => {
-    const actions = IS_ADMIN
-      ? `
-        <div style="display:flex; gap:8px; justify-content:center;">
-          <button class="btn-secondary"
-                  style="padding:.35rem .6rem; font-size:12px;"
-                  onclick="editSupplier(${s.id})">
-            Editar
-          </button>
-          <button class="btn-primary"
-                  style="background:#DC2626; padding:.35rem .6rem; font-size:12px;"
-                  onclick="deleteSupplier(${s.id})">
-            Eliminar
-          </button>
+  grid.innerHTML = rows.map(s => {
+    const actions = IS_ADMIN ? `
+      <div class="supplier-card-actions">
+        <button class="btn-card-edit" onclick="editSupplier(${s.id})">
+          <i class="bi bi-pencil"></i> Editar
+        </button>
+        <button class="btn-card-del" onclick="deleteSupplier(${s.id})">
+          <i class="bi bi-trash"></i> Eliminar
+        </button>
+      </div>` : '';
+
+    const details = [
+      s.contact_person ? `<div class="detail-row"><i class="bi bi-person"></i><span style="overflow:hidden;text-overflow:ellipsis;">${s.contact_person}</span></div>` : '',
+      s.phone          ? `<div class="detail-row"><i class="bi bi-telephone"></i><span>${s.phone}</span></div>` : '',
+      s.email          ? `<div class="detail-row"><i class="bi bi-envelope"></i><span style="overflow:hidden;text-overflow:ellipsis;">${s.email}</span></div>` : '',
+      s.address        ? `<div class="detail-row"><i class="bi bi-geo-alt"></i><span style="overflow:hidden;text-overflow:ellipsis;">${s.address}</span></div>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="supplier-card" data-id="${s.id}">
+        <div class="supplier-card-top">
+          <div class="supplier-avatar">${initial(s.name)}</div>
+          <div class="supplier-info">
+            <div class="supplier-name" title="${s.name}">${s.name}</div>
+            <div class="supplier-doc">${s.document || '—'}</div>
+          </div>
+          <span class="invoice-badge"><i class="bi bi-receipt"></i> ${s.invoice_count}</span>
         </div>
-      `
-      : `<span style="color:#9CA3AF;">-</span>`;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="table-cell" style="padding:14px 18px;">${s.name || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${s.contact_person || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${s.phone || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${s.email || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${s.document || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${s.address || '-'}</td>
-      <td class="table-cell" style="padding:14px 18px;">${actions}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+        ${details ? `<div class="supplier-details">${details}</div>` : ''}
+        ${actions}
+      </div>`;
+  }).join('');
 }
 
-function setupSuppliersSearch() {
-  const input = document.getElementById('suppliersSearch');
-  if (!input) return;
-  input.addEventListener('input', (e) => {
-    const term = (e.target.value || '').trim().toLowerCase();
-    const rows = filterSuppliers(term);
-    renderSuppliersTable(rows);
-  });
-}
-
-function filterSuppliers(term) {
-  if (!term) return SUPPLIERS_DATA;
-  return SUPPLIERS_DATA.filter(s => {
-    const fields = [
-      s.name,
-      s.contact_person,
-      s.phone,
-      s.email,
-      s.document,
-      s.address,
-    ];
-    return fields.some(v => (v || '').toString().toLowerCase().includes(term));
-  });
-}
-
+/* ── load data ───────────────────────────────────────── */
 function loadSuppliers() {
-  fetch('/api/show-table-suppliers/', {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  })
-  .then(r => r.json())
-  .then(data => {
-    SUPPLIERS_DATA = (data.suppliers || []);
-    const input = document.getElementById('suppliersSearch');
-    const term = input ? (input.value || '').trim().toLowerCase() : '';
-    const rows = term ? filterSuppliers(term) : SUPPLIERS_DATA;
-    renderSuppliersTable(rows);
-  })
-  .catch(err => {
-    console.error(err);
-    const tbody = document.querySelector('.suppliers-tbody');
-    if (tbody) tbody.innerHTML = '<tr><td class="table-cell" colspan="7" style="padding:18px;">Error al cargar proveedores</td></tr>';
-  });
-}
-function submitSupplier(e) {
-  e.preventDefault();
-  // Aquí luego puedes hacer fetch POST al endpoint de creación
-  // Por ahora solo cerramos y recargamos la tabla
-  closeSupplierDrawer();
-  loadSuppliers();
-}
-</script>
-
-<script>
-
-
-async function createNewSupplier(evt) {
-  if (evt) evt.preventDefault();
-
-  const form = document.getElementById('supplierForm');
-  const formData = new FormData(form);
-  const payload = Object.fromEntries(formData.entries());
-
-  try {
-    const res = await fetch('/api/suppliers/create/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: JSON.stringify(payload),
+  fetch('/api/show-table-suppliers/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    .then(r => r.json())
+    .then(data => {
+      SUPPLIERS_DATA = data.suppliers || [];
+      renderFeatured(SUPPLIERS_DATA);
+      const term = document.getElementById('suppliersSearch').value.trim().toLowerCase();
+      renderGrid(term ? filterSuppliers(term) : SUPPLIERS_DATA);
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('suppliers-grid').innerHTML =
+        '<div class="suppliers-empty">Error al cargar proveedores.</div>';
     });
-
-    if (!res.ok) {
-      let msg = 'Error al crear el proveedor.';
-      try {
-        const data = await res.json();
-        if (data.error) msg = data.error;
-      } catch (e) {}
-      throw new Error(msg);
-    }
-
-    // Éxito
-    form.reset();
-    closeSupplierDrawer();
-    loadSuppliers();
-  } catch (err) {
-    alert(err.message || 'Error al guardar.');
-  }
-}
-</script>
-<script>
-// 1) Estado global
-let currentEditId = null;
-
-// 2) Editar: abrir drawer, traer detalle y completar form
-async function editSupplier(id) {
-  currentEditId = id;
-
-  const title = document.querySelector('#supplierDrawer h3');
-  if (title) title.textContent = 'Editar proveedor';
-
-  openSupplierDrawer();
-
-  try {
-    const res = await fetch(`/api/suppliers/${id}/`, {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    if (!res.ok) throw new Error('No se pudo cargar el proveedor');
-
-    const data = await res.json();
-    const s = data.supplier;
-
-    const form = document.getElementById('supplierForm');
-    form.elements['name'].value = s.name || '';
-    form.elements['contact_person'].value = s.contact_person || '';
-    form.elements['phone'].value = s.phone || '';
-    form.elements['email'].value = s.email || '';
-    form.elements['document_type'].value = s.document_type || '';
-    form.elements['document_number'].value = s.document_number || '';
-    form.elements['address'].value = s.address || '';
-  } catch (err) {
-    alert(err.message || 'Error al cargar proveedor');
-  }
 }
 
-// 3) Submit: crear o actualizar según currentEditId
-async function createNewSupplier(evt) {
-  evt.preventDefault();
-
-  const form = document.getElementById('supplierForm');
-  const formData = new FormData(form);
-  const payload = Object.fromEntries(formData.entries());
-
-  const isEdit = !!currentEditId;
-  const url = isEdit ? `/api/suppliers/${currentEditId}/update/` : '/api/suppliers/create/';
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = 'Error al guardar.';
-      try {
-        const data = await res.json();
-        if (data.error) msg = data.error;
-      } catch (_) {}
-      throw new Error(msg);
-    }
-
-    currentEditId = null;
-    form.reset();
-    const title = document.querySelector('#supplierDrawer h3');
-    if (title) title.textContent = 'Crear proveedor';
-
-    closeSupplierDrawer();
-    loadSuppliers();
-  } catch (err) {
-    alert(err.message || 'Error al guardar.');
-  }
+/* ── drawer ──────────────────────────────────────────── */
+function openSupplierDrawer() {
+  document.getElementById('supplierOverlay').style.display = 'block';
+  document.getElementById('supplierDrawer').classList.add('active');
 }
-
-// 4) Al cerrar el drawer, limpiar estado de edición y título
-const _origClose = closeSupplierDrawer;
-closeSupplierDrawer = function() {
+function closeSupplierDrawer() {
   document.getElementById('supplierOverlay').style.display = 'none';
   document.getElementById('supplierDrawer').classList.remove('active');
   currentEditId = null;
-  const title = document.querySelector('#supplierDrawer h3');
-  if (title) title.textContent = 'Crear proveedor';
+  document.getElementById('drawerTitle').textContent = 'Crear proveedor';
+  document.getElementById('supplierForm').reset();
+}
+
+/* ── CRUD ────────────────────────────────────────────── */
+async function submitSupplier(evt) {
+  evt.preventDefault();
+  const form = document.getElementById('supplierForm');
+  const payload = Object.fromEntries(new FormData(form).entries());
+  const isEdit = !!currentEditId;
+  const url = isEdit ? `/api/suppliers/${currentEditId}/update/` : '/api/suppliers/create/';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = 'Error al guardar.';
+      try { const d = await res.json(); if (d.error) msg = d.error; } catch(_){}
+      throw new Error(msg);
+    }
+    closeSupplierDrawer();
+    loadSuppliers();
+  } catch (err) { alert(err.message || 'Error al guardar.'); }
+}
+
+async function editSupplier(id) {
+  currentEditId = id;
+  document.getElementById('drawerTitle').textContent = 'Editar proveedor';
+  openSupplierDrawer();
+  try {
+    const res = await fetch(`/api/suppliers/${id}/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('No se pudo cargar el proveedor');
+    const { supplier: s } = await res.json();
+    const f = document.getElementById('supplierForm');
+    f.elements['name'].value           = s.name || '';
+    f.elements['contact_person'].value = s.contact_person || '';
+    f.elements['phone'].value          = s.phone || '';
+    f.elements['email'].value          = s.email || '';
+    f.elements['document_type'].value  = s.document_type || '';
+    f.elements['document_number'].value = s.document_number || '';
+    f.elements['address'].value        = s.address || '';
+  } catch (err) { alert(err.message || 'Error al cargar proveedor'); }
 }
 
 async function deleteSupplier(id) {
   if (!confirm('¿Seguro que deseas eliminar este proveedor?')) return;
-
   try {
     const res = await fetch(`/api/suppliers/${id}/delete/`, {
       method: 'POST',
-      headers: {
-        'X-CSRFToken': getCookie('csrftoken'),
-        'X-Requested-With': 'XMLHttpRequest',
-      },
+      headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
     });
-
     if (!res.ok) {
       let msg = 'Error al eliminar.';
-      try {
-        const data = await res.json();
-        if (data.error) msg = data.error;
-      } catch (_) {}
+      try { const d = await res.json(); if (d.error) msg = d.error; } catch(_){}
       throw new Error(msg);
     }
-
-    // Recargar listado
     loadSuppliers();
-  } catch (err) {
-    alert(err.message || 'Error al eliminar.');
-  }
+  } catch (err) { alert(err.message || 'Error al eliminar.'); }
 }
 </script>
-
-{% endblock content %}
+{% endblock %}

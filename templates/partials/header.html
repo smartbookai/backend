@@ -1,19 +1,130 @@
 <header class="header">
-  <!--<div style="color:#111827;font-weight:600;margin-right:auto;">
-    <h1>{{ request.user.company_user.company.name }}</h1>
-  </div> -->
   <button id="sidebarToggle" class="sidebar-toggle-btn" style="background:#111827;color:#fff;border:none;border-radius:8px;padding:.5rem .75rem;margin-left:12px;">
     <i class="bi bi-list"></i>
   </button>
-  <div style="display:flex;align-items:center;gap:.5rem;">
-    {% if request.user.profile.profile_picture %}
-      <img src="{{ request.user.profile.profile_picture.url }}"
-           alt="Avatar"
-           style="width:32px;height:32px;border-radius:999px;object-fit:cover;border:1px solid #E5E7EB;">
-    {% else %}
-      <i class="bi bi-person-circle" style="font-size:1.25rem;color:#6B7280"></i>
-    {% endif %}
-    <span style="font-weight:500;">{{ request.user.get_username }}</span>
-    <a href="{% url 'logout' %}" class="link-blue" style="margin-left:.5rem;">Logout</a>
+
+  <style>
+    .cs-wrap { position:relative; margin-left:auto; }
+    .cs-trigger {
+      display:flex; align-items:center; gap:8px;
+      padding:6px 12px; border-radius:10px; border:1.5px solid #E5E7EB;
+      background:#fff; cursor:pointer; transition:border-color .15s, box-shadow .15s;
+      font-size:14px; color:#111827;
+    }
+    .cs-trigger:hover { border-color:#9d4edd; box-shadow:0 0 0 3px rgba(157,78,221,.1); }
+    .cs-avatar {
+      width:32px; height:32px; border-radius:50%; object-fit:cover;
+      border:1.5px solid #E5E7EB; flex-shrink:0;
+    }
+    .cs-avatar-icon { font-size:1.35rem; color:#6B7280; flex-shrink:0; }
+    .cs-company-badge {
+      display:inline-flex; align-items:center; gap:4px;
+      background:#F5F0FF; color:#7c3aed; border-radius:6px;
+      padding:2px 8px; font-size:12px; font-weight:600; max-width:140px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .cs-dropdown {
+      display:none; position:absolute; top:calc(100% + 8px); right:0;
+      background:#fff; border:1.5px solid #E5E7EB; border-radius:14px;
+      box-shadow:0 12px 32px rgba(0,0,0,.12); z-index:9999;
+      min-width:240px; overflow:hidden;
+    }
+    .cs-dropdown.open { display:block; }
+    .cs-section-label {
+      padding:10px 16px 4px; font-size:11px; font-weight:700;
+      color:#9CA3AF; text-transform:uppercase; letter-spacing:.8px;
+    }
+    .cs-company-btn {
+      display:flex; align-items:center; gap:10px; width:100%;
+      padding:10px 16px; background:none; border:none; cursor:pointer;
+      font-size:14px; color:#111827; text-align:left; transition:background .12s;
+    }
+    .cs-company-btn:hover { background:#F5F0FF; color:#7c3aed; }
+    .cs-company-btn.active { background:#F5F0FF; color:#7c3aed; font-weight:600; }
+    .cs-company-logo {
+      width:28px; height:28px; border-radius:6px; object-fit:cover;
+      border:1px solid #E5E7EB; flex-shrink:0;
+    }
+    .cs-company-initials {
+      width:28px; height:28px; border-radius:6px; flex-shrink:0;
+      background:linear-gradient(135deg,#9d4edd,#4a0e78);
+      color:#fff; font-size:13px; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .cs-check { margin-left:auto; color:#9d4edd; font-size:15px; }
+    .cs-divider { height:1px; background:#F3F4F6; margin:4px 0; }
+    .cs-action-btn {
+      display:flex; align-items:center; gap:10px; width:100%;
+      padding:10px 16px; background:none; border:none; cursor:pointer;
+      font-size:14px; color:#374151; text-align:left; text-decoration:none;
+      transition:background .12s;
+    }
+    .cs-action-btn:hover { background:#F9FAFB; color:#111827; }
+    .cs-action-btn.danger:hover { background:#FEF2F2; color:#DC2626; }
+  </style>
+
+  <div class="cs-wrap" id="cswrap">
+    <button class="cs-trigger" onclick="toggleCS(event)">
+      {% if user_profile and user_profile.profile_picture %}
+        <img src="{{ user_profile.profile_picture.url }}" alt="Avatar" class="cs-avatar">
+      {% else %}
+        <i class="bi bi-person-circle cs-avatar-icon"></i>
+      {% endif %}
+      <span style="font-weight:500;">{{ request.user.get_username }}</span>
+      {% if active_company %}
+        <span class="cs-company-badge">
+          <i class="bi bi-building" style="font-size:10px;"></i>
+          {{ active_company.name }}
+        </span>
+      {% endif %}
+      <i class="bi bi-chevron-down" style="font-size:11px;color:#6B7280;"></i>
+    </button>
+
+    <div class="cs-dropdown" id="csdropdown">
+      {% if user_companies %}
+        <div class="cs-section-label">Mis empresas</div>
+        {% for company in user_companies %}
+          <form method="POST" action="{% url 'switch_company' %}" style="margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="company_id" value="{{ company.id }}">
+            <button type="submit" class="cs-company-btn {% if company == active_company %}active{% endif %}">
+              {% if company.logo %}
+                <img src="{{ company.logo.url }}" alt="" class="cs-company-logo">
+              {% else %}
+                <div class="cs-company-initials">{{ company.name|slice:":1"|upper }}</div>
+              {% endif %}
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ company.name }}</span>
+              {% if company == active_company %}<i class="bi bi-check-lg cs-check"></i>{% endif %}
+            </button>
+          </form>
+        {% endfor %}
+      {% endif %}
+
+      <div class="cs-divider"></div>
+      <a href="{% url 'crear_empresa' %}" class="cs-action-btn">
+        <i class="bi bi-plus-circle" style="color:#9d4edd;"></i>
+        Añadir empresa
+      </a>
+      <a href="{% url 'mi_plan' %}" target="_blank" class="cs-action-btn">
+        <i class="bi bi-lightning-charge" style="color:#9d4edd;"></i>
+        Mi plan
+      </a>
+      <div class="cs-divider"></div>
+      <a href="{% url 'logout' %}" class="cs-action-btn danger">
+        <i class="bi bi-box-arrow-right"></i>
+        Cerrar sesión
+      </a>
+    </div>
   </div>
 </header>
+
+<script>
+function toggleCS(e) {
+  e.stopPropagation();
+  document.getElementById('csdropdown').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('cswrap').contains(e.target))
+    document.getElementById('csdropdown').classList.remove('open');
+});
+</script>

@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import UserProfile, Company, CompanyUser, Supplier, SalesInvoice, PurchaseInvoice, InvoiceLine, Client, \
-    AccountingEntry, Payroll, Employee, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine
+    AccountingEntry, Payroll, Employee, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine, UserTemplate
 
 
 class UserProfileAdmin(admin.ModelAdmin):
@@ -102,6 +102,20 @@ class EmployeeAdmin(admin.ModelAdmin):
         return f"{obj.first_name} {obj.last_name}"
 
     full_name.short_description = 'Nombre Completo'
+
+@admin.register(UserTemplate)
+class UserTemplateAdmin(admin.ModelAdmin):
+    # Columnas que verás en la lista principal
+    list_display = ('style_name', 'document_type', 'user', 'is_system_default', 'created_at')
+    
+    # Filtros laterales para encontrar rápido las plantillas
+    list_filter = ('is_system_default', 'document_type', 'created_at')
+    
+    # Buscador por nombre de estilo o email del usuario
+    search_fields = ('style_name', 'user__email')
+    
+    # Ordenar por fecha de creación
+    ordering = ('-created_at',)
 
 
 @admin.register(Payroll)

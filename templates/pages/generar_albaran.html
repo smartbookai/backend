@@ -2,16 +2,85 @@
 {% load static %}
 {% block title %}Generar Albarán | SBA{% endblock %}
 {% block content %}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    .templates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .template-card {
+        background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;
+        padding: 20px; transition: all 0.3s ease; text-align: center;
+        display: flex; flex-direction: column; justify-content: space-between;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .template-card:hover {
+        transform: translateY(-4px); border-color: #9d4edd;
+        box-shadow: 0 10px 20px rgba(157, 78, 221, 0.15);
+    }
+    .template-card--selected {
+        border-color: #9d4edd !important;
+        background: #faf5ff !important;
+        box-shadow: 0 0 0 3px rgba(157, 78, 221, 0.25) !important;
+        position: relative;
+    }
+    .template-card--selected::after {
+        content: '✓';
+        position: absolute; top: -10px; right: -10px;
+        background: #9d4edd; color: white;
+        width: 24px; height: 24px; border-radius: 50%;
+        font-size: 13px; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .template-icon { font-size: 36px; margin-bottom: 12px; }
+    .btn-card-main {
+        background: linear-gradient(135deg, #9d4edd, #4a0e78);
+        color: white; border: none; border-radius: 8px;
+        padding: 10px; font-weight: 600; font-size: 14px;
+        width: 100%; margin-bottom: 10px; cursor: pointer;
+        transition: opacity 0.2s, transform 0.2s;
+        display: flex; justify-content: center; align-items: center; gap: 8px;
+        text-decoration: none;
+    }
+    .btn-card-main:hover { opacity: 0.9; transform: scale(1.02); color: white; }
+    .action-row { display: flex; gap: 8px; }
+    .btn-card-sec {
+        background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+        border-radius: 8px; padding: 8px; font-size: 13px; font-weight: 600;
+        flex-grow: 1; text-decoration: none; transition: all 0.2s; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-card-sec:hover { background: #e2e8f0; color: #1e293b; border-color: #94a3b8; }
+    .btn-card-del {
+        background: #e62222; color: #ffffff; border: 1px solid #cc0000;
+        border-radius: 8px; padding: 8px 14px; font-size: 13px; transition: all 0.2s; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-card-del:hover { background: #cc0000; border-color: #990000; }
+</style>
+
 <section>
   <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
-    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
       <div>
         <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Generar Albarán</h1>
         <div style="color:#6B7280;margin-bottom:20px;">Crear nuevo albarán de entrega</div>
       </div>
+      <button type="button" onclick="clearFormData()" title="Vaciar todos los campos"
+              style="display:flex;align-items:center;gap:6px;padding:8px 16px;border:1.5px solid #E5E7EB;border-radius:8px;background:#fff;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;"
+              onmouseover="this.style.borderColor='#DC2626';this.style.color='#DC2626';this.style.background='#fef2f2';"
+              onmouseout="this.style.borderColor='#E5E7EB';this.style.color='#6B7280';this.style.background='#fff';">
+        <i class="bi bi-trash"></i> Limpiar datos
+      </button>
     </div>
 
+
     <form id="deliveryNoteForm" style="margin-top:24px;">
+      <input type="hidden" name="template_id" id="selected_template_id" value="">
       <!-- Tipo de albarán y destinatario -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
         <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Datos del Cliente</h2>
@@ -20,7 +89,7 @@
           <!-- Cliente -->
           <div class="form-field">
             <label for="client">Cliente *</label>
-            <select id="client" name="client" required>
+            <select id="client" name="client" required onchange="saveFormData()">
               <option value="">Seleccionar cliente...</option>
               {% for client in clients %}
                 <option value="{{ client.id }}">{{ client.name }}</option>
@@ -38,25 +107,25 @@
           <!-- Número de albarán -->
           <div class="form-field">
             <label for="delivery_note_number">Número de Albarán *</label>
-            <input type="text" id="delivery_note_number" name="delivery_note_number" required placeholder="Ej: ALB-E-2024-001">
+            <input type="text" id="delivery_note_number" name="delivery_note_number" required placeholder="Ej: ALB-E-2024-001" oninput="saveFormData()">
           </div>
 
           <!-- Fecha de emisión -->
           <div class="form-field">
             <label for="issue_date">Fecha de Emisión *</label>
-            <input type="date" id="issue_date" name="issue_date" required>
+            <input type="date" id="issue_date" name="issue_date" required onchange="saveFormData()">
           </div>
 
           <!-- Fecha de entrega -->
           <div class="form-field">
             <label for="delivery_date">Fecha de Entrega</label>
-            <input type="date" id="delivery_date" name="delivery_date">
+            <input type="date" id="delivery_date" name="delivery_date" onchange="saveFormData()">
           </div>
 
           <!-- Método de entrega -->
           <div class="form-field">
             <label for="delivery_method">Método de Entrega</label>
-            <input type="text" id="delivery_method" name="delivery_method" placeholder="Ej: Transporte propio, Mensajería">
+            <input type="text" id="delivery_method" name="delivery_method" placeholder="Ej: Transporte propio, Mensajería" oninput="saveFormData()">
           </div>
         </div>
       </div>
@@ -99,7 +168,7 @@
 
         <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="hasAmounts" onchange="togglePriceFields()" style="margin:0;">
+            <input type="checkbox" id="hasAmounts" onchange="togglePriceFields();saveFormData();" style="margin:0;">
             <span style="font-size:14px;">Este albarán incluye importes (precios e IVA)</span>
           </label>
         </div>
@@ -132,15 +201,15 @@
         <div id="sentAccounts" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
           <div class="form-field">
             <label for="account_income">Cuenta Ingresos</label>
-            <input type="text" id="account_income" name="account_income" placeholder="Ej: 700000">
+            <input type="text" id="account_income" name="account_income" placeholder="Ej: 700000" oninput="saveFormData()">
           </div>
           <div class="form-field">
             <label for="account_customer">Cuenta Cliente</label>
-            <input type="text" id="account_customer" name="account_customer" placeholder="Ej: 430000">
+            <input type="text" id="account_customer" name="account_customer" placeholder="Ej: 430000" oninput="saveFormData()">
           </div>
           <div class="form-field">
             <label for="account_vat_output">Cuenta IVA Repercutido</label>
-            <input type="text" id="account_vat_output" name="account_vat_output" placeholder="Ej: 477000">
+            <input type="text" id="account_vat_output" name="account_vat_output" placeholder="Ej: 477000" oninput="saveFormData()">
           </div>
         </div>
       </div>
@@ -149,7 +218,7 @@
       <div class="card" style="padding:24px;margin-bottom:24px;">
         <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Notas Adicionales</h2>
         <div class="form-field">
-          <textarea id="notes" name="notes" rows="4" placeholder="Observaciones o notas adicionales sobre la entrega..."></textarea>
+          <textarea id="notes" name="notes" rows="4" placeholder="Observaciones o notas adicionales sobre la entrega..." oninput="saveFormData()"></textarea>
         </div>
       </div>
 
@@ -160,16 +229,221 @@
       </div>
     </form>
   </div>
+
+  <!-- Modal de plantillas -->
+  <div class="modal fade" id="templateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="border:none;border-radius:16px;overflow:hidden;">
+        <div class="modal-header" style="background:white;border-bottom:1px solid #e2e8f0;padding:20px 25px;">
+          <h5 class="modal-title fw-bold" style="color:#1e293b;">Mis Diseños de Albarán</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="background:#f8fafc;padding:25px;">
+
+          <h6 class="fw-bold mb-3 text-muted small text-uppercase" style="letter-spacing:1px;">Modelos Oficiales SBA</h6>
+          <div class="templates-grid">
+            {% for plantilla in templates_sistema %}
+            <div class="template-card" id="tcard-{{ plantilla.id }}">
+              <div>
+                <div class="template-icon">💎</div>
+                <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:16px;">{{ plantilla.style_name }}</div>
+              </div>
+              <div>
+                <button type="button" class="btn-card-main" id="tbtn-{{ plantilla.id }}" onclick="seleccionarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}')">
+                  <i class="fas fa-check-circle"></i> Usar este modelo
+                </button>
+                <div class="action-row">
+                  <a href="{% url 'template_builder_edit' plantilla.id %}" class="btn-card-sec">
+                    <i class="fas fa-eye"></i> Ver diseño
+                  </a>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <h6 class="fw-bold mb-3 mt-4 text-muted small text-uppercase" style="letter-spacing:1px;">Mis Diseños Personalizados</h6>
+          <div class="templates-grid">
+            {% for plantilla in templates_usuario %}
+            <div class="template-card" id="tcard-{{ plantilla.id }}">
+              <div>
+                {% if plantilla.screenshot %}
+                <img src="{{ plantilla.screenshot.url }}" alt="{{ plantilla.style_name }}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:12px;border:1px solid #e2e8f0;">
+                {% else %}
+                <div class="template-icon">🎨</div>
+                {% endif %}
+                <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:16px;">{{ plantilla.style_name }}</div>
+              </div>
+              <div>
+                <button type="button" class="btn-card-main" id="tbtn-{{ plantilla.id }}" onclick="seleccionarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}')">
+                  <i class="fas fa-check-circle"></i> Usar mi diseño
+                </button>
+                <div class="action-row">
+                  <a href="{% url 'template_builder_edit' plantilla.id %}" class="btn-card-sec">
+                    <i class="fas fa-pen"></i> Editar
+                  </a>
+                  <button type="button" class="btn-card-del" title="Borrar diseño" onclick="eliminarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}', this)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% empty %}
+            <div class="template-card" style="grid-column:1/-1;border:2px dashed #cbd5e1;background:transparent;box-shadow:none;">
+              <p class="text-muted small m-0 py-3">No tienes diseños personalizados aún.</p>
+            </div>
+            {% endfor %}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <script>
+  function openTemplateModal() {
+    var myModal = new bootstrap.Modal(document.getElementById('templateModal'));
+    myModal.show();
+  }
+
+  function seleccionarPlantilla(id, nombre) {
+    document.querySelectorAll('.template-card--selected').forEach(function(card) {
+      card.classList.remove('template-card--selected');
+    });
+    document.querySelectorAll('.btn-card-main').forEach(function(btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      var icon = '<i class="fas fa-check-circle"></i> ';
+      btn.innerHTML = icon + (btn.dataset.original || 'Usar este modelo');
+    });
+
+    var card = document.getElementById('tcard-' + id);
+    var btn  = document.getElementById('tbtn-' + id);
+    if (card) card.classList.add('template-card--selected');
+    if (btn) {
+      if (!btn.dataset.original) btn.dataset.original = btn.innerText.trim();
+      btn.innerHTML = '<i class="fas fa-check-circle"></i> ✓ Seleccionada';
+      btn.disabled = true;
+      btn.style.opacity = '0.85';
+    }
+
+    document.getElementById('selected_template_id').value = id;
+    document.getElementById('template_display_name').innerText = nombre;
+
+    setTimeout(function() {
+      var myModalEl = document.getElementById('templateModal');
+      var modal = bootstrap.Modal.getInstance(myModalEl);
+      if (modal) modal.hide();
+    }, 400);
+  }
+
+  function eliminarPlantilla(id, nombre, btn) {
+    if (!confirm('¿Eliminar el diseño "' + nombre + '"? Esta acción no se puede deshacer.')) return;
+    btn.disabled = true;
+    fetch('/templates/builder/' + id + '/delete/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        btn.closest('.template-card').remove();
+      } else {
+        btn.disabled = false;
+        alert('Error al eliminar el diseño.');
+      }
+    })
+    .catch(() => { btn.disabled = false; alert('Error de red.'); });
+  }
+</script>
+
+<script>
+/* ── sessionStorage ──────────────────────────────── */
+const ALBARAN_KEY = 'sba_albaran_draft';
+
+function saveFormData() {
+  const lines = [];
+  document.querySelectorAll('.delivery-note-line').forEach(line => {
+    lines.push({
+      desc:  (line.querySelector('[name="line_description[]"]') || {}).value || '',
+      qty:   (line.querySelector('[name="line_quantity[]"]') || {}).value || '',
+      ref:   (line.querySelector('[name="line_reference[]"]') || {}).value || '',
+      price: (line.querySelector('[name="line_unit_price[]"]') || {}).value || '',
+      vat:   (line.querySelector('[name="line_vat_rate[]"]') || {}).value || '',
+    });
+  });
+  sessionStorage.setItem(ALBARAN_KEY, JSON.stringify({
+    client:                document.getElementById('client')?.value || '',
+    delivery_note_number:  document.getElementById('delivery_note_number').value,
+    issue_date:            document.getElementById('issue_date').value,
+    delivery_date:         document.getElementById('delivery_date').value,
+    delivery_method:       document.getElementById('delivery_method').value,
+    hasAmounts:            document.getElementById('hasAmounts').checked,
+    account_income:        document.getElementById('account_income').value,
+    account_customer:      document.getElementById('account_customer').value,
+    account_vat_output:    document.getElementById('account_vat_output').value,
+    notes:                 document.getElementById('notes').value,
+    lines,
+  }));
+}
+
+function restoreFormData() {
+  const raw = sessionStorage.getItem(ALBARAN_KEY);
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    if (d.client) document.getElementById('client').value = d.client;
+    document.getElementById('delivery_note_number').value = d.delivery_note_number || '';
+    if (d.issue_date) document.getElementById('issue_date').value = d.issue_date;
+    document.getElementById('delivery_date').value   = d.delivery_date || '';
+    document.getElementById('delivery_method').value = d.delivery_method || '';
+    document.getElementById('account_income').value   = d.account_income || '';
+    document.getElementById('account_customer').value = d.account_customer || '';
+    document.getElementById('account_vat_output').value = d.account_vat_output || '';
+    document.getElementById('notes').value = d.notes || '';
+    if (d.hasAmounts) {
+      document.getElementById('hasAmounts').checked = true;
+      togglePriceFields();
+    }
+    if (d.lines && d.lines.length) {
+      const container = document.getElementById('deliveryNoteLines');
+      container.innerHTML = '';
+      d.lines.forEach(l => {
+        addDeliveryNoteLine();
+        const el = container.lastElementChild;
+        el.querySelector('[name="line_description[]"]').value = l.desc;
+        el.querySelector('[name="line_quantity[]"]').value    = l.qty;
+        el.querySelector('[name="line_reference[]"]').value   = l.ref;
+        const priceEl = el.querySelector('[name="line_unit_price[]"]');
+        const vatEl   = el.querySelector('[name="line_vat_rate[]"]');
+        if (priceEl) priceEl.value = l.price;
+        if (vatEl)   vatEl.value   = l.vat;
+      });
+    }
+    calculateTotals();
+  } catch(e) { console.warn('Error restoring albaran form', e); }
+}
+
+function clearFormData() {
+  if (!confirm('¿Seguro que quieres vaciar todos los datos del formulario?')) return;
+  sessionStorage.removeItem(ALBARAN_KEY);
+  location.reload();
+}
+
 // Establecer fecha actual por defecto
 document.addEventListener('DOMContentLoaded', function() {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('issue_date').value = today;
-  
+
+  // Auto-seleccionar plantilla predeterminada del usuario
+  var _defaultTplId   = '{{ default_template_id|default:"" }}';
+  var _defaultTplName = '{{ default_template_name|default:""|escapejs }}';
+  if (_defaultTplId) seleccionarPlantilla(parseInt(_defaultTplId, 10), _defaultTplName);
+
   // Ocultar campos de precios por defecto
   togglePriceFields();
+  restoreFormData();
 });
 
 // Toggle campos de precios
@@ -444,8 +718,8 @@ document.getElementById('deliveryNoteForm').addEventListener('submit', function(
   .then(response => response.json())
   .then(data => {
     if (data.success) {
+      sessionStorage.removeItem(ALBARAN_KEY);
       alert('Albarán generado correctamente: ' + data.delivery_note_number);
-      // Redirigir a albaranes enviados
       window.location.href = '/albaranes-enviados/';
     } else {
       alert('Error al generar el albarán: ' + data.message);

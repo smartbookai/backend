@@ -8,7 +8,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('login/', views.login, name="login"),
+    # path('login/', views.login, name="login"),  # login handled by landing page
+    path('bienvenido/', views.bienvenido, name='bienvenido'),
     path('', views.index, name="index"),
     path('logout/', views.logout_view, name='logout'),
     path('facturas/', views.facturas, name='facturas'),
@@ -60,9 +61,12 @@ urlpatterns = [
     path('api/workers/<int:worker_id>/update/', views.api_update_worker, name='api_update_worker'),
     path('api/workers/<int:worker_id>/delete/', views.api_delete_worker, name='api_delete_worker'),
 
+
     #company API endpoints
     path('api/company/', views.api_get_company, name='api_get_company'),
     path('api/company/update/', views.api_update_company, name='api_update_company'),
+    path('api/company/switch/', views.switch_company, name='switch_company'),
+    path('crear-empresa/', views.crear_empresa, name='crear_empresa'),
 
     #sales invoices API endpoints
     path('api/show-table-invoices-sent/', views.api_show_table_invoices_sent, name='api_show_table_invoices_sent'),
@@ -71,6 +75,12 @@ urlpatterns = [
     path('api/invoices-sent/<int:invoice_id>/delete/', views.api_delete_invoice_sent, name='api_delete_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/', views.api_get_invoice_sent, name='api_get_invoice_sent'),
     path('api/invoices-sent/<int:invoice_id>/update/', views.api_update_invoice_sent, name='api_update_invoice_sent'),
+    path('templates/builder/', views.template_builder, name='template_builder_new'),
+    path('templates/builder/<int:template_id>/', views.template_builder, name='template_builder_edit'),
+    path('templates/builder/<int:template_id>/delete/', views.delete_user_template, name='delete_user_template'),
+    path('api/user/set-default-payroll-template/', views.set_default_payroll_template, name='set_default_payroll_template'),
+    path('api/user/set-default-delivery-note-template/', views.set_default_delivery_note_template, name='set_default_delivery_note_template'),
+    
 
     #purchase invoices API endpoints
     path('api/show-table-invoices-received/', views.api_show_table_invoices_received, name='api_show_table_invoices_received'),
@@ -117,10 +127,20 @@ urlpatterns = [
     
     #precontractual acceptance API endpoint
     path('api/precontractual-acceptance/', views.api_precontractual_acceptance, name='api_precontractual_acceptance'),
+
+    #api stripe crear pago
+    path('api/crear-pago/', views.crear_pago_stripe, name='crear_pago'),
+    path('api/stripe/webhook/', views.stripe_webhook, name='stripe_webhook'),
+
+    path('api/login/', views.api_login, name='api_login'),
+    path('api/register/', views.api_register, name='api_register'),
+    path('api/resend-confirmation/', views.api_resend_confirmation, name='api_resend_confirmation'),
+    path('api/auth/google/', views.api_google_auth, name='api_google_auth'),
+    path('confirmar-email/<uuid:token>/', views.confirmar_email, name='confirmar_email'),
+    path('mi-plan/', views.mi_plan, name='mi_plan'),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

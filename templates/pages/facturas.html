@@ -210,7 +210,7 @@ function hideEntryLoader(){ const o=document.getElementById('entryGenerationOver
 </script>
 
 <script>
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = '{% if user_role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let PURCHASES_DATA = [];
 
 // Variables globales para albaranes vinculados

@@ -1,8 +1,10 @@
+import uuid as _uuid
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 User = get_user_model()
@@ -19,6 +21,12 @@ class UserProfile(models.Model):
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
     terms_accepted = models.BooleanField(default=False, verbose_name="Términos aceptados")
     terms_accepted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de aceptación")
+    default_payroll_template = models.ForeignKey('UserTemplate', on_delete=models.SET_NULL, null=True, blank=True, related_name='default_for_payroll_users', verbose_name="Plantilla de nómina predeterminada")
+    default_invoice_template = models.ForeignKey('UserTemplate', on_delete=models.SET_NULL, null=True, blank=True, related_name='default_for_invoice_users', verbose_name="Plantilla de factura predeterminada")
+    default_delivery_note_template = models.ForeignKey('UserTemplate', on_delete=models.SET_NULL, null=True, blank=True, related_name='default_for_delivery_note_users', verbose_name="Plantilla de albarán predeterminada")
+    active_company = models.ForeignKey('Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_for_users', verbose_name="Empresa activa")
+    tokens = models.PositiveIntegerField(default=0, verbose_name="Tokens disponibles")
+    stripe_email = models.EmailField(null=True, blank=True, verbose_name="Email de Stripe")
 
     def __str__(self):
         return str(self.user.email)
@@ -65,7 +73,7 @@ class Company(models.Model):
     website = models.URLField(null=True, blank=True)
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True, verbose_name="Logo de la empresa")
     
-    # 🆕 Configuración de nóminas
+    # Configuración de nóminas
     cnae_code = models.CharField(max_length=10, null=True, blank=True, 
                                 verbose_name="CNAE", 
                                 help_text="Código Nacional de Actividad Económica")
@@ -84,7 +92,7 @@ class Company(models.Model):
                                              null=True, blank=True,
                                              verbose_name="% SS Empresa Formación Profesional")
     
-    # 🆕 Campos adicionales de Seguridad Social para la empresa
+    # Campos adicionales de Seguridad Social
     ss_mei_percent = models.DecimalField(max_digits=5, decimal_places=2,
                                        null=True, blank=True,
                                        verbose_name="% SS Empresa MEI (Accidentes)")
@@ -104,7 +112,7 @@ class Company(models.Model):
 
 
 class CompanyUser(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company_user')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='company_memberships')
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='users')
     role = models.CharField(max_length=50, choices=[('admin', 'Admin'), ('staff', 'Staff')], default='staff')
 
@@ -113,6 +121,7 @@ class CompanyUser(models.Model):
 
     class Meta:
         verbose_name_plural = "Usuarios de Empresa"
+        unique_together = ('user', 'company')
 
 
 class Supplier(models.Model):
@@ -160,6 +169,8 @@ class BaseInvoice(models.Model):
     due_date = models.DateField(null=True, blank=True)             # Fecha de vencimiento
     payment_method = models.CharField(max_length=100, null=True, blank=True)  # Forma de pago
 
+    template_style = models.CharField(max_length=50, default='classic', blank=True, null=True, verbose_name="Estilo de plantilla")
+
     base_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))  # Base imponible
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Descuento aplicado (monto)
     discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Descuento aplicado (porcentaje)
@@ -184,11 +195,34 @@ class BaseInvoice(models.Model):
     def __str__(self):
         return f"{self.invoice_number} ({self.company.name})"
 
+class SavedTemplate(models.Model):
+    name = models.CharField(max_length=200, help_text="Nombre de la copia de la plantilla")
+    
+    # Campo JSON para el diseño visual
+    design_data = models.JSONField(help_text="Datos JSON con las coordenadas y estilos")
+    
+    # NUEVO CAMPO: Guardar la captura de pantalla (opcional)
+    screenshot = models.ImageField(upload_to='template_screenshots/', null=True, blank=True, help_text="Captura de pantalla del folio")
+    
+    # Metadatos (Corregido auto_now_add y auto_now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_system = models.BooleanField(default=False, help_text="Si es una plantilla de SBA (True) o del usuario (False)")
+
+    class Meta:
+        verbose_name = "Diseño de Factura"
+        verbose_name_plural = "Diseños de Factura"
+
+    def __str__(self):
+        type_prefix = "[SISTEMA]" if self.is_system else "[USUARIO]"
+        return f"{type_prefix} {self.name}"
 
 # Facturas emitidas (ventas)
 class SalesInvoice(BaseInvoice):
     client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='sales_invoices')
-    tokens = models.PositiveIntegerField(null=True,blank=True,default=None)
+    tokens = models.PositiveIntegerField(null=True, blank=True, default=None)
+    irpf_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="% IRPF")
+    irpf_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Importe IRPF")
 
     class Meta:
         verbose_name = "Factura enviada"
@@ -329,6 +363,7 @@ class Payroll(models.Model):
     employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='payrolls')
     pdf_file = models.FileField(upload_to='payrolls/pdfs/', null=True, blank=True)
     xml_file = models.FileField(upload_to='payrolls/xml/', null=True, blank=True)
+    template_style = models.CharField(max_length=50, default='classic', blank=True, null=True, verbose_name="Estilo de plantilla")
 
     # Período y fechas
     period_start = models.DateField(verbose_name="Inicio período")
@@ -396,6 +431,8 @@ class BaseDeliveryNote(models.Model):
     issue_date = models.DateField(default=timezone.now)  # Fecha de emisión
     delivery_date = models.DateField(null=True, blank=True)  # Fecha de entrega/realización
     delivery_method = models.CharField(max_length=100, null=True, blank=True)  # Forma de entrega
+
+    template_style = models.CharField(max_length=50, default='classic', blank=True, null=True, verbose_name="Estilo de plantilla")
 
     # Campos opcionales para albaranes con importe
     base_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Base imponible
@@ -491,3 +528,57 @@ class DeliveryNoteLine(models.Model):
             return f"{self.description} ({self.purchase_delivery_note.delivery_note_number})"
         return f"{self.description} (Sin albarán asociado)"
 
+class UserTemplate(models.Model):
+    DOCUMENT_TYPES = [
+        ('invoice', 'Factura'),
+        ('delivery_note', 'Albarán'),
+        ('payroll', 'Nómina'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_templates', null=True, blank=True)
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES, default='invoice', verbose_name="Tipo de Documento")
+    style_name = models.CharField(max_length=100, verbose_name="Nombre del Diseño")
+    base_style = models.CharField(max_length=50, default='classic')
+    custom_html = models.TextField()
+    screenshot = models.ImageField(upload_to='template_screenshots/', null=True, blank=True, verbose_name="Miniatura")
+    is_system_default = models.BooleanField(default=False, verbose_name="Plantilla maestra del sistema")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        # Comprobamos de forma segura si tiene usuario o es del sistema
+        if self.is_system_default or not self.user:
+            propietario = "SISTEMA"
+        else:
+            # Si tiene usuario, sacamos el email o el username dependiendo de tu modelo de usuario
+            propietario = getattr(self.user, 'email', self.user.username)
+            
+        return f"[{propietario}] {self.style_name}"
+
+    class Meta:
+        verbose_name = "Plantilla de Usuario"
+        verbose_name_plural = "Plantillas de Usuarios"
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
+
+
+class PendingRegistration(models.Model):
+    token = models.UUIDField(default=_uuid.uuid4, unique=True, editable=False)
+    nombre = models.CharField(max_length=255)
+    telefono = models.CharField(max_length=50, blank=True)
+    email = models.EmailField()
+    password_hash = models.CharField(max_length=255)
+    price_id = models.CharField(max_length=255)
+    confirmed = models.BooleanField(default=False)
+    link_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_email_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Registro pendiente"
+        verbose_name_plural = "Registros pendientes"
+
+    def __str__(self):
+        return f"{self.email} ({'confirmado' if self.confirmed else 'pendiente'})"

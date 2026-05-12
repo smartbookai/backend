@@ -1,31 +1,31 @@
 from decimal import Decimal, InvalidOperation
-
+from sba_app.models import UserTemplate
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.core.files.base import ContentFile
 from django.db import transaction, IntegrityError
 from .utils.social_security_xml import generate_social_security_xml
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count
 from django.http import JsonResponse, HttpResponseForbidden, Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as auth_login, logout
 from django.contrib import messages
 from django.views.decorators.http import require_POST, require_http_methods
-import json
-import logging
-from datetime import datetime
+from django.views.decorators.csrf import csrf_exempt
+import json, logging, os, csv, stripe, re, base64
+from datetime import datetime, timedelta
 from django.utils import timezone
-import os
-import csv
 from django.conf import settings
 from django.core.files.storage import default_storage
-import re
 from difflib import SequenceMatcher
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
+from django.views.decorators.csrf import csrf_exempt
 
-from sba_app.models import CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, \
-    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine
+from sba_app.models import Company, CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, UserTemplate, \
+    Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine, \
+    PendingRegistration
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
     process_invoice_header_only, extract_single_invoice_from_pdf, extract_single_purchase_invoice_from_pdf
@@ -271,7 +271,10 @@ def index(request):
         show_modal = False
     
     # Dashboard con KPIs sencillos por empresa actual
-    company = get_current_company(request.user)
+    try:
+        company = get_current_company(request.user)
+    except CompanyUser.DoesNotExist:
+        return redirect('crear_empresa')
 
     today = timezone.now().date()
     year = today.year
@@ -457,7 +460,7 @@ def logout_view(request):
     """Logs out the user and redirects to the login page."""
     logout(request)
     messages.success(request, "Ha cerrado sesion correctamente.")
-    return redirect('login')
+    return redirect('http://127.0.0.1:5500/login.html')
 
 
 @login_required
@@ -472,9 +475,10 @@ def invoices_sent(request):
 @login_required
 def generar_factura(request):
     try:
-        # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
+
+        templates_sistema = UserTemplate.objects.filter(is_system_default=True, document_type='invoice')
+        templates_usuario = UserTemplate.objects.filter(user=request.user, is_system_default=False, document_type='invoice')
         
         # Obtener clientes disponibles
         clients = Client.objects.filter(company=company).order_by('name')
@@ -525,10 +529,24 @@ def generar_factura(request):
             except (ValueError, TypeError):
                 pass  # Si hay error parseando, ignorar y mostrar formulario vacío
         
+        default_template_id = None
+        default_template_name = None
+        try:
+            profile = request.user.profile
+            if profile.default_invoice_template:
+                default_template_id = profile.default_invoice_template.id
+                default_template_name = profile.default_invoice_template.style_name
+        except Exception:
+            pass
+
         context = {
             'clients': clients,
             'company': company,
             'preloaded_data': preloaded_data,
+            'templates_sistema': templates_sistema,
+            'templates_usuario': templates_usuario,
+            'default_template_id': default_template_id,
+            'default_template_name': default_template_name,
         }
         return render(request, 'pages/generar_factura.html', context)
         
@@ -558,7 +576,14 @@ def api_create_manual_invoice(request):
         discount_percentage = request.POST.get('discount_percentage')
         tax_amount = request.POST.get('tax_amount')
         total_amount = request.POST.get('total_amount')
+        irpf_rate = request.POST.get('irpf_rate')
+        irpf_amount = request.POST.get('irpf_amount')
         notes = request.POST.get('notes')
+        
+        # --- AJUSTE 1: Capturamos y limpiamos el ID de la plantilla ---
+        template_id = request.POST.get('template_id')
+        if not template_id or str(template_id).strip() == "":
+            template_id = None
         
         # Convertir fechas
         from datetime import datetime
@@ -599,6 +624,8 @@ def api_create_manual_invoice(request):
                 "message": "El cliente seleccionado no es válido"
             }, status=400)
         
+        from decimal import Decimal
+        
         # Crear factura
         invoice = SalesInvoice.objects.create(
             company=company,
@@ -612,6 +639,8 @@ def api_create_manual_invoice(request):
             discount_percentage=Decimal(discount_percentage) if discount_percentage else None,
             tax_amount=Decimal(tax_amount) if tax_amount else Decimal('0.00'),
             total_amount=Decimal(total_amount) if total_amount else Decimal('0.00'),
+            irpf_rate=Decimal(irpf_rate) if irpf_rate else None,
+            irpf_amount=Decimal(irpf_amount) if irpf_amount else None,
             notes=notes if notes else None,
             account_income=account_income if account_income else None,
             account_customer=account_customer if account_customer else None,
@@ -649,24 +678,45 @@ def api_create_manual_invoice(request):
                         linked_delivery_notes.append(dn.delivery_note_number)
             except (ValueError, TypeError):
                 pass  # Si hay error, continuar sin vincular
-        
-        # Generar PDF
+                
+        # --- AJUSTE 2: Generar PDF usando el motor de plantillas ---
         try:
             from sba_app.utils.pdf_generator import generate_invoice_pdf
             from django.core.files.base import ContentFile
+            from django.utils import timezone
+
+            # Pasamos el template_id a la función
+            pdf_content = generate_invoice_pdf(invoice, template_id=template_id)
             
-            pdf_content = generate_invoice_pdf(invoice)
-            pdf_filename = f"FACTURA_{invoice.invoice_number.replace('/', '_').replace(' ', '_')}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            # --- AJUSTE 3: Corrección del nombre del archivo ---
+            safe_number = invoice.invoice_number.replace('/', '_').replace(' ', '_')
+            pdf_filename = f"FACTURA_{safe_number}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            
             invoice.pdf_file.save(pdf_filename, ContentFile(pdf_content))
+            
         except Exception as pdf_error:
             print(f"⚠️ Error generando PDF: {pdf_error}")
+            import traceback
+            print(traceback.format_exc())
             # La factura se crea igual, pero sin PDF
         
+        # Guardar plantilla usada como predeterminada del usuario
+        if template_id:
+            try:
+                tpl_obj = UserTemplate.objects.get(id=template_id)
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                profile.default_invoice_template = tpl_obj
+                profile.save(update_fields=['default_invoice_template'])
+            except UserTemplate.DoesNotExist:
+                pass
+
+        # Añadimos pdf_url para que la web pueda descargar/abrir la factura directamente
         return JsonResponse({
             "success": True,
             "message": "Factura creada correctamente",
             "invoice_id": invoice.id,
-            "invoice_number": invoice.invoice_number
+            "invoice_number": invoice.invoice_number,
+            "pdf_url": invoice.pdf_file.url if invoice.pdf_file else None
         })
         
     except Exception as e:
@@ -715,7 +765,7 @@ def aceptaciones(request):
     acceptances = (
         PrecontractualAcceptance.objects
         .select_related('user')
-        .filter(user__company_user__company=company)
+        .filter(user__company_memberships__company=company)
         .order_by('-completed_at')
     )
     
@@ -749,9 +799,7 @@ def albaranes_recibidos(request):
 @login_required
 def albaranes_enviados(request):
     try:
-        # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener albaranes enviados de la empresa
         delivery_notes = SalesDeliveryNote.objects.filter(company=company).order_by('-issue_date')
@@ -767,15 +815,29 @@ def albaranes_enviados(request):
 @login_required
 def generar_albaran(request):
     try:
-        # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
-        
-        # Obtener clientes de la empresa
+        company = get_current_company(request.user)
+
+        templates_sistema = UserTemplate.objects.filter(is_system_default=True, document_type='delivery_note')
+        templates_usuario = UserTemplate.objects.filter(user=request.user, is_system_default=False, document_type='delivery_note')
         clients = Client.objects.filter(company=company).order_by('name')
-        
+
+        default_template_id = None
+        default_template_name = None
+        try:
+            profile = request.user.profile
+            if profile.default_delivery_note_template:
+                default_template_id = profile.default_delivery_note_template.id
+                default_template_name = profile.default_delivery_note_template.style_name
+        except Exception:
+            pass
+
         context = {
             'clients': clients,
+            'company': company,
+            'templates_sistema': templates_sistema,
+            'templates_usuario': templates_usuario,
+            'default_template_id': default_template_id,
+            'default_template_name': default_template_name,
         }
         return render(request, 'pages/generar_albaran.html', context)
     except CompanyUser.DoesNotExist:
@@ -785,17 +847,29 @@ def generar_albaran(request):
 @login_required
 def generar_nomina(request):
     try:
-        # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
+
+        templates = UserTemplate.objects.filter(user=request.user, document_type='payroll')
         
         # Obtener empleados disponibles (solo activos)
         employees = Employee.objects.filter(company=company, is_active=True).order_by('first_name', 'last_name')
         
+        default_template_id = None
+        default_template_name = None
+        try:
+            profile = request.user.profile
+            if profile.default_payroll_template:
+                default_template_id = profile.default_payroll_template.id
+                default_template_name = profile.default_payroll_template.style_name
+        except Exception:
+            pass
+
         context = {
             'employees': employees,
             'company': company,
-            # Pasar valores de nóminas formateados para evitar problemas con None/Decimal
+            'templates': templates,
+            'default_template_id': default_template_id,
+            'default_template_name': default_template_name,
             'payroll_config': {
                 'ss_contingencies_percent': float(company.ss_contingencies_percent) if company.ss_contingencies_percent else 4.70,
                 'ss_unemployment_percent_indefinite': float(company.ss_unemployment_percent_indefinite) if company.ss_unemployment_percent_indefinite else 1.55,
@@ -840,7 +914,36 @@ def accounting_entry_detail(request, entry_id):
 
 
 def get_current_company(user):
-    return CompanyUser.objects.select_related('company').get(user=user).company
+    try:
+        profile = user.profile
+        if profile.active_company_id:
+            if CompanyUser.objects.filter(user=user, company_id=profile.active_company_id).exists():
+                return profile.active_company
+    except Exception:
+        pass
+    cu = CompanyUser.objects.select_related('company').filter(user=user).first()
+    if not cu:
+        raise CompanyUser.DoesNotExist(f"User {user} has no company")
+    try:
+        user.profile.active_company = cu.company
+        user.profile.save(update_fields=['active_company'])
+    except Exception:
+        pass
+    return cu.company
+
+
+def require_company(view_func):
+    """Decorator that injects `company` into the view kwargs or returns 403."""
+    from functools import wraps
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        try:
+            kwargs['company'] = get_current_company(request.user)
+        except CompanyUser.DoesNotExist:
+            return JsonResponse({'error': 'No tienes una empresa activa.'}, status=403)
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
 
 def filter_entries_by_document_date(queryset, start_date=None, end_date=None):
     """
@@ -1159,7 +1262,10 @@ def accounting_entries_download(request):
 @login_required
 def api_show_table_suppliers(request):
     company = get_current_company(request.user)
-    qs = Supplier.objects.filter(company=company).order_by('name')
+    qs = Supplier.objects.filter(company=company).annotate(
+        invoice_count=Count('purchase_invoices', distinct=True),
+        total_invoiced=Sum('purchase_invoices__total_amount'),
+    ).order_by('name')
     data = [
         {
             'id': s.id,
@@ -1169,6 +1275,8 @@ def api_show_table_suppliers(request):
             'email': s.email or '',
             'document': f"{(s.document_type or '')} {('· ' if s.document_type and s.document_number else '')}{(s.document_number or '')}".strip(),
             'address': s.address or '',
+            'invoice_count': s.invoice_count or 0,
+            'total_invoiced': float(s.total_invoiced or 0),
         }
         for s in qs
     ]
@@ -1213,7 +1321,11 @@ def api_create_supplier(request):
 
 
 def ensure_admin(user):
-    return getattr(user.company_user, 'role', None) == 'admin'
+    try:
+        company = get_current_company(user)
+        return CompanyUser.objects.filter(user=user, company=company, role='admin').exists()
+    except CompanyUser.DoesNotExist:
+        return False
 
 
 def get_company_scoped_supplier_or_404(user, supplier_id):
@@ -1295,7 +1407,10 @@ def api_delete_supplier(request, supplier_id):
 @login_required
 def api_show_table_clients(request):
     company = get_current_company(request.user)
-    qs = Client.objects.filter(company=company).order_by('name')
+    qs = Client.objects.filter(company=company).annotate(
+        invoice_count=Count('sales_invoices', distinct=True),
+        total_invoiced=Sum('sales_invoices__total_amount'),
+    ).order_by('name')
     data = [
         {
             'id': c.id,
@@ -1305,6 +1420,8 @@ def api_show_table_clients(request):
             'email': c.email or '',
             'document': f"{(c.document_type or '')} {('· ' if c.document_type and c.document_number else '')}{(c.document_number or '')}".strip(),
             'address': c.address or '',
+            'invoice_count': c.invoice_count or 0,
+            'total_invoiced': float(c.total_invoiced or 0),
         }
         for c in qs
     ]
@@ -6034,8 +6151,7 @@ def api_create_manual_delivery_note(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener datos del formulario
         client_id = request.POST.get('client')
@@ -6045,6 +6161,7 @@ def api_create_manual_delivery_note(request):
         delivery_method = request.POST.get('delivery_method')
         base_amount = request.POST.get('base_amount')
         tax_amount = request.POST.get('tax_amount')
+        template_id = request.POST.get('template_id') or None
         total_amount = request.POST.get('total_amount')
         notes = request.POST.get('notes')
         
@@ -6126,7 +6243,7 @@ def api_create_manual_delivery_note(request):
         # Generar PDF del albarán
         try:
             from sba_app.utils.delivery_note_pdf_generator import generate_delivery_note_pdf
-            pdf_content = generate_delivery_note_pdf(delivery_note)
+            pdf_content = generate_delivery_note_pdf(delivery_note, template_id=template_id)
 
             # Guardar el PDF en el campo pdf_file del albarán
             from django.core.files.base import ContentFile
@@ -6138,19 +6255,30 @@ def api_create_manual_delivery_note(request):
             # No fallar la creación del albarán si hay error en el PDF
             print(f"Error generando PDF del albarán {delivery_note.delivery_note_number}: {str(pdf_error)}")
 
+        # Guardar plantilla usada como predeterminada
+        if template_id:
+            try:
+                tpl_obj = UserTemplate.objects.get(id=template_id)
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                profile.default_delivery_note_template = tpl_obj
+                profile.save(update_fields=['default_delivery_note_template'])
+            except UserTemplate.DoesNotExist:
+                pass
+
         return JsonResponse({
             "success": True,
             "message": "Albarán creado correctamente",
             "delivery_note_id": delivery_note.id,
-            "delivery_note_number": delivery_note.delivery_note_number
+            "delivery_note_number": delivery_note.delivery_note_number,
+            "pdf_url": delivery_note.pdf_file.url if delivery_note.pdf_file else None,
         })
-        
+
     except CompanyUser.DoesNotExist:
         return JsonResponse({
             'success': False,
             'message': 'No tienes una empresa asociada'
         }, status=403)
-        
+
     except Exception as e:
         import traceback
         print(" ERROR en api_create_manual_delivery_note:", traceback.format_exc())
@@ -6167,8 +6295,7 @@ def api_show_table_delivery_notes_sent(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
 
         # Obtener albaranes enviados con sus líneas
         delivery_notes = SalesDeliveryNote.objects.filter(company=company).prefetch_related('lines').order_by(
@@ -6237,8 +6364,7 @@ def api_show_table_delivery_notes_received(request):
         
         # Obtener la empresa del usuario
         print("🔍 DEBUG: Obteniendo CompanyUser...")
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         print(f"🔍 DEBUG: Empresa encontrada: {company.name}")
 
         # Obtener albaranes recibidos con sus líneas
@@ -6313,8 +6439,7 @@ def api_update_delivery_note(request, delivery_note_id):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener el albarán
         try:
@@ -6398,8 +6523,7 @@ def api_delete_delivery_note(request, delivery_note_id):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener y eliminar el albarán
         try:
@@ -6439,8 +6563,7 @@ def api_update_purchase_delivery_note(request, delivery_note_id):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener el albarán
         try:
@@ -6524,8 +6647,7 @@ def api_delete_purchase_delivery_note(request, delivery_note_id):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
         
         # Obtener y eliminar el albarán
         try:
@@ -6589,8 +6711,7 @@ def api_upload_delivery_note(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
 
         # Verificar que se subió un archivo
         if 'delivery_note_file' not in request.FILES:
@@ -6647,8 +6768,7 @@ def api_upload_purchase_delivery_note(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
 
         # Verificar que se subió un archivo
         if 'purchase_delivery_note_file' not in request.FILES:
@@ -6740,8 +6860,7 @@ def api_upload_delivery_note(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
 
         # Verificar que se subió un archivo
         if 'delivery_note_file' not in request.FILES:
@@ -6798,8 +6917,7 @@ def api_upload_purchase_delivery_note(request):
     """
     try:
         # Obtener la empresa del usuario
-        company_user = CompanyUser.objects.get(user=request.user)
-        company = company_user.company
+        company = get_current_company(request.user)
 
         # Verificar que se subió un archivo
         if 'purchase_delivery_note_file' not in request.FILES:
@@ -6852,12 +6970,10 @@ def api_upload_purchase_delivery_note(request):
 def api_update_company(request):
     """Actualiza los datos de la empresa del usuario actual"""
     try:
-        company_user = CompanyUser.objects.get(user=request.user)
-
-        if company_user.role != 'admin':
+        if not ensure_admin(request.user):
             return JsonResponse({'error': 'No tienes permisos para editar la empresa'}, status=403)
 
-        company = company_user.company
+        company = get_current_company(request.user)
 
         company.name = request.POST.get('name', company.name)
         company.address = request.POST.get('address', company.address)
@@ -6917,3 +7033,663 @@ def api_update_company(request):
         return JsonResponse({'error': 'Usuario no asociado a ninguna empresa'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def switch_company(request):
+    """Cambia la empresa activa del usuario y redirige al dashboard."""
+    company_id = request.POST.get('company_id')
+    try:
+        cu = CompanyUser.objects.select_related('company').get(user=request.user, company_id=company_id)
+        request.user.profile.active_company = cu.company
+        request.user.profile.save(update_fields=['active_company'])
+    except CompanyUser.DoesNotExist:
+        pass
+    return redirect('index')
+
+
+@login_required
+def crear_empresa(request):
+    """Formulario para crear una nueva empresa y asociarla al usuario."""
+    onboarding = not CompanyUser.objects.filter(user=request.user).exists()
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if not name:
+            return render(request, 'pages/crear_empresa.html', {'error': 'El nombre de la empresa es obligatorio.'})
+
+        def _dec(val):
+            try:
+                return Decimal(val) if val else None
+            except Exception:
+                return None
+
+        company = Company.objects.create(
+            name=name,
+            address=request.POST.get('address') or None,
+            document_type=request.POST.get('document_type') or None,
+            document_number=request.POST.get('document_number') or None,
+            ccc=request.POST.get('ccc') or None,
+            phone=request.POST.get('phone') or None,
+            email=request.POST.get('email') or None,
+            website=request.POST.get('website') or None,
+            cnae_code=request.POST.get('cnae_code') or None,
+            ss_contingencies_percent=_dec(request.POST.get('ss_contingencies_percent')),
+            ss_unemployment_percent_indefinite=_dec(request.POST.get('ss_unemployment_percent_indefinite')),
+            ss_unemployment_percent_temporal=_dec(request.POST.get('ss_unemployment_percent_temporal')),
+            ss_training_percent=_dec(request.POST.get('ss_training_percent')),
+            ss_mei_percent=_dec(request.POST.get('ss_mei_percent')),
+            ss_fogasa_percent=_dec(request.POST.get('ss_fogasa_percent')),
+            ss_extraordinary_payments_percent=_dec(request.POST.get('ss_extraordinary_payments_percent')),
+        )
+        if 'logo' in request.FILES:
+            logo_file = request.FILES['logo']
+            if logo_file.size <= 2 * 1024 * 1024:
+                company.logo = logo_file
+                company.save()
+
+        CompanyUser.objects.create(user=request.user, company=company, role='admin')
+        request.user.profile.active_company = company
+        request.user.profile.save(update_fields=['active_company'])
+        return redirect('index')
+
+    return render(request, 'pages/crear_empresa.html', {'onboarding': onboarding})
+
+
+@login_required
+def template_builder(request, template_id=None):
+    template_obj = None
+    saved_json = "{}"
+
+    # Determinar document_type: del template existente, o del parámetro GET, o invoice por defecto
+    if template_id:
+        template_obj = get_object_or_404(UserTemplate, id=template_id)
+        saved_json = template_obj.custom_html if template_obj.custom_html else "{}"
+        doc_type = template_obj.document_type
+    else:
+        doc_type = request.GET.get('doc_type', 'invoice')
+
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            design_json = json.dumps(data.get('design', []))
+            template_name = data.get('name', 'Mi Nuevo Diseño')
+            overwrite_confirmed = data.get('overwrite', False)
+            post_doc_type = data.get('doc_type', doc_type)
+
+            existing_template = UserTemplate.objects.filter(
+                user=request.user,
+                style_name=template_name,
+                document_type=post_doc_type
+            ).first()
+
+            if existing_template and (not template_obj or template_obj.id != existing_template.id):
+                if not overwrite_confirmed:
+                    return JsonResponse({
+                        "success": False,
+                        "requires_overwrite": True,
+                        "message": f"Ya tienes un diseño llamado '{template_name}'. ¿Quieres sobreescribirlo?"
+                    })
+                else:
+                    template_obj = existing_template
+
+            if template_obj and template_obj.is_system_default:
+                template_obj = None
+
+            screenshot_file = None
+            screenshot_b64 = data.get('screenshot', '')
+            if screenshot_b64 and ';base64,' in screenshot_b64:
+                header, imgstr = screenshot_b64.split(';base64,', 1)
+                ext = header.split('/')[-1]
+                safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', template_name)
+                screenshot_file = ContentFile(base64.b64decode(imgstr), name=f'{safe_name}.{ext}')
+
+            if template_obj:
+                template_obj.style_name = template_name
+                template_obj.custom_html = design_json
+                if screenshot_file:
+                    template_obj.screenshot = screenshot_file
+                template_obj.save()
+            else:
+                new_tpl = UserTemplate.objects.create(
+                    user=request.user,
+                    style_name=template_name,
+                    document_type=post_doc_type,
+                    custom_html=design_json,
+                    is_system_default=False
+                )
+                if screenshot_file:
+                    new_tpl.screenshot = screenshot_file
+                    new_tpl.save()
+            return JsonResponse({"success": True, "message": "Diseño guardado con éxito."})
+
+        except Exception as e:
+            return JsonResponse({"success": False, "message": str(e)}, status=400)
+
+    context = {
+        'template': template_obj,
+        'saved_json': saved_json,
+        'document_type': doc_type,
+    }
+    return render(request, 'pages/template_builder.html', context)
+
+
+@login_required
+@require_POST
+def delete_user_template(request, template_id):
+    template_obj = get_object_or_404(UserTemplate, id=template_id, user=request.user, is_system_default=False)
+    template_obj.delete()
+    return JsonResponse({"success": True})
+
+
+@login_required
+@require_POST
+def set_default_payroll_template(request):
+    from sba_app.models import UserProfile
+    data = json.loads(request.body)
+    template_id = data.get('template_id')
+    template_obj = get_object_or_404(UserTemplate, id=template_id, document_type='payroll')
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.default_payroll_template = template_obj
+    profile.save()
+    return JsonResponse({"success": True})
+
+
+@login_required
+@require_POST
+def set_default_delivery_note_template(request):
+    from sba_app.models import UserProfile
+    data = json.loads(request.body)
+    template_id = data.get('template_id')
+    template_obj = get_object_or_404(UserTemplate, id=template_id, document_type='delivery_note')
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.default_delivery_note_template = template_obj
+    profile.save()
+    return JsonResponse({"success": True})
+
+import stripe
+import json
+from django.conf import settings
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt 
+def crear_pago_stripe(request):
+    if request.method == 'POST':
+        try:
+            # 1. Leemos lo que nos manda Cloudflare
+            body = json.loads(request.body)
+            email_cliente = body.get('email')
+            nombre_cliente = body.get('nombre')
+            apellido_cliente = body.get('apellido')
+            telefono_cliente = body.get('telefono')
+            precio_id = body.get('price_id') # Cloudflare nos dirá qué plan ha elegido
+
+            # 2. Le pedimos a Stripe que prepare la caja registradora
+            checkout_session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                mode='subscription', # Porque es un pago mensual/anual
+                
+                # Autocompletamos el email para que el cliente no trabaje el doble
+                customer_email=email_cliente, 
+                
+                # METADATOS: El sello invisible. Aquí guardamos los datos temporalmente
+                metadata={
+                    'nombre': nombre_cliente,
+                    'telefono': telefono_cliente,
+                    'apellido': apellido_cliente,
+                    'email': email_cliente,
+                },
+
+                line_items=[
+                    {
+                        'price': precio_id, # Usamos el ID del precio que manda Cloudflare
+                        'quantity': 1,
+                    },
+                ],
+                
+                # URLs de vuelta (sustituye por las reales de tu web en Cloudflare)
+                success_url='', 
+                cancel_url='',
+            )
+
+            # 3. Devolvemos el enlace mágico a Cloudflare
+            return JsonResponse({'url': checkout_session.url})
+
+        except Exception as e:
+            # Si algo falla (ej. tarjeta no válida), avisamos a Cloudflare
+            return JsonResponse({'error': str(e)}, status=500)
+            
+    return JsonResponse({'error': 'Método no permitido'}, status=405)
+
+
+# ==================== REGISTRO DESDE LANDING PAGE ====================
+
+def _send_confirmation_email(nombre, email, confirm_url):
+    from django.core.mail import send_mail, get_connection
+
+    if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
+        raise ValueError('Credenciales de email no configuradas en el .env')
+
+    subject = "Confirma tu correo — SmartBook AI"
+    html_message = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:4px;overflow:hidden;">
+        <tr>
+          <td style="background:#111;padding:28px 40px;">
+            <p style="margin:0;color:#fff;font-size:20px;font-weight:600;letter-spacing:-0.3px;">SmartBook AI</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 40px 28px;">
+            <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111;">Hola, {nombre}.</h1>
+            <p style="margin:0 0 28px;font-size:15px;color:#555;line-height:1.6;">
+              Gracias por registrarte en SmartBook AI. Confirma tu correo electrónico para continuar con la activación de tu cuenta y seleccionar tu plan.
+            </p>
+            <a href="{confirm_url}"
+               style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:13px 28px;border-radius:2px;font-size:14px;font-weight:600;">
+              Confirmar correo y activar cuenta
+            </a>
+            <p style="margin:24px 0 0;font-size:12px;color:#aaa;line-height:1.6;">
+              Este enlace es válido durante 30 minutos por motivos de seguridad. Si no has solicitado esta cuenta, ignora este correo.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid #eee;">
+            <p style="margin:0;font-size:12px;color:#aaa;">© SmartBook AI · Todos los derechos reservados</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+    plain_message = (
+        f"Hola {nombre},\n\n"
+        "Confirma tu correo para activar tu cuenta en SmartBook AI:\n"
+        f"{confirm_url}\n\n"
+        "Este enlace caduca en 30 minutos por motivos de seguridad."
+    )
+    send_mail(subject, plain_message, settings.DEFAULT_FROM_EMAIL, [email],
+              html_message=html_message, fail_silently=False)
+
+
+@csrf_exempt
+@require_POST
+@csrf_exempt
+@require_POST
+def api_login(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    email    = (data.get('email') or '').strip().lower()
+    password = (data.get('password') or '').strip()
+
+    if not email or not password:
+        return JsonResponse({'error': 'Email y contraseña son obligatorios.'}, status=400)
+
+    user = authenticate(request, username=email, password=password)
+    if user is None:
+        return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
+
+    auth_login(request, user)
+    return JsonResponse({'ok': True, 'redirect': 'http://127.0.0.1:8080/'})
+
+
+@csrf_exempt
+@require_POST
+def api_register(request):
+    import urllib.request as _urllib_req
+    from django.contrib.auth.hashers import make_password
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    nombre               = (data.get('nombre') or '').strip()
+    telefono             = (data.get('telefono') or '').strip()
+    email                = (data.get('email') or '').strip().lower()
+    password             = (data.get('password') or '').strip()
+    google_access_token  = (data.get('google_access_token') or '').strip()
+    price_id             = (data.get('price_id') or '').strip()
+
+    # Resolver nombre de plan → price_id de Stripe
+    if not price_id:
+        plan_name = (data.get('plan') or '').strip().lower()
+        price_id = settings.STRIPE_PLANS.get(plan_name, {}).get('price_id', '')
+
+    # Validar credencial: Google o contraseña
+    if google_access_token:
+        try:
+            req = _urllib_req.Request(
+                'https://www.googleapis.com/oauth2/v3/userinfo',
+                headers={'Authorization': f'Bearer {google_access_token}'},
+            )
+            with _urllib_req.urlopen(req, timeout=5) as resp:
+                idinfo = json.loads(resp.read())
+        except Exception as exc:
+            logger.warning('api_register google: token inválido: %s', exc)
+            return JsonResponse({'error': 'Token de Google inválido. Vuelve a intentarlo.'}, status=401)
+
+        if not idinfo.get('email_verified'):
+            return JsonResponse({'error': 'El email de Google no está verificado.'}, status=401)
+
+        google_email = idinfo['email'].lower()
+        if email and email != google_email:
+            return JsonResponse({'error': 'El email no coincide con tu cuenta de Google.'}, status=400)
+
+        email        = google_email
+        nombre       = nombre or idinfo.get('name', email.split('@')[0])
+        password_hash = make_password(None)
+    else:
+        if not password:
+            return JsonResponse({'error': 'La contraseña es obligatoria.'}, status=400)
+        password_hash = make_password(password)
+
+    if not nombre or not email:
+        return JsonResponse({'error': 'nombre y email son obligatorios.'}, status=400)
+
+    if not price_id or not price_id.startswith('price_'):
+        return JsonResponse({'error': 'Debes seleccionar un plan válido antes de registrarte.'}, status=400)
+
+    if User.objects.filter(email__iexact=email).exists():
+        return JsonResponse({'error': 'Ya existe una cuenta con ese email.'}, status=400)
+
+    expiry = timezone.now() - timedelta(minutes=30)
+    PendingRegistration.objects.filter(confirmed=False, created_at__lt=expiry).delete()
+    PendingRegistration.objects.filter(email__iexact=email, confirmed=False).delete()
+
+    pending = PendingRegistration.objects.create(
+        nombre=nombre,
+        telefono=telefono,
+        email=email,
+        password_hash=password_hash,
+        price_id=price_id,
+        last_email_sent_at=timezone.now(),
+    )
+
+    confirm_url = f"{settings.SITE_URL}/confirmar-email/{pending.token}/"
+
+    try:
+        _send_confirmation_email(nombre, email, confirm_url)
+    except Exception as exc:
+        logger.error('api_register: error enviando email de confirmación a %s: %s', email, exc)
+        pending.delete()
+        return JsonResponse({'error': 'No se pudo enviar el correo de confirmación.'}, status=500)
+
+    return JsonResponse({'ok': True}, status=201)
+
+
+@csrf_exempt
+@require_POST
+def api_resend_confirmation(request):
+    RESEND_COOLDOWN_SECONDS = 180
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return JsonResponse({'error': 'El campo email es obligatorio.'}, status=400)
+
+    pending = PendingRegistration.objects.filter(email__iexact=email, confirmed=False).first()
+    if not pending:
+        return JsonResponse({'ok': True}, status=200)
+
+    now = timezone.now()
+
+    if pending.last_email_sent_at:
+        elapsed = (now - pending.last_email_sent_at).total_seconds()
+        if elapsed < RESEND_COOLDOWN_SECONDS:
+            wait = int(RESEND_COOLDOWN_SECONDS - elapsed)
+            return JsonResponse({'error': f'Espera {wait} segundos antes de volver a enviar.'}, status=429)
+
+    if now - pending.created_at > timedelta(minutes=30):
+        return JsonResponse({'error': 'El registro ha expirado. Por favor, regístrate de nuevo.'}, status=410)
+
+    confirm_url = f"{settings.SITE_URL}/confirmar-email/{pending.token}/"
+
+    try:
+        _send_confirmation_email(pending.nombre, pending.email, confirm_url)
+    except Exception as exc:
+        logger.error('api_resend_confirmation: error enviando email a %s: %s', email, exc)
+        return JsonResponse({'error': 'No se pudo enviar el correo. Inténtalo de nuevo más tarde.'}, status=500)
+
+    pending.last_email_sent_at = now
+    pending.save(update_fields=['last_email_sent_at'])
+
+    return JsonResponse({'ok': True}, status=200)
+
+
+@csrf_exempt
+@require_POST
+def api_google_auth(request):
+    import urllib.request as _urllib_req
+    import urllib.error as _urllib_err
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    access_token = (data.get('access_token') or '').strip()
+    if not access_token:
+        return JsonResponse({'error': 'Token de Google no recibido.'}, status=400)
+
+    try:
+        req = _urllib_req.Request(
+            'https://www.googleapis.com/oauth2/v3/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+        with _urllib_req.urlopen(req, timeout=5) as resp:
+            idinfo = json.loads(resp.read())
+    except Exception as exc:
+        logger.warning('api_google_auth: error verificando token: %s', exc)
+        return JsonResponse({'error': 'Token de Google inválido o expirado.'}, status=401)
+
+    if not idinfo.get('email_verified'):
+        return JsonResponse({'error': 'El email de Google no está verificado.'}, status=401)
+
+    email = (idinfo.get('email') or '').lower()
+    if not email:
+        return JsonResponse({'error': 'No se pudo obtener el email de Google.'}, status=401)
+
+    user = User.objects.filter(email__iexact=email).first()
+
+    if not user:
+        return JsonResponse({'action': 'register'}, status=200)
+
+    auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    return JsonResponse({'ok': True, 'redirect': 'http://127.0.0.1:8080/'}, status=200)
+
+
+def confirmar_email(request, token):
+    pending = get_object_or_404(PendingRegistration, token=token, confirmed=False)
+
+    if pending.link_used:
+        return render(request, 'pages/auth/confirm_error.html', {'already_used': True}, status=410)
+
+    if timezone.now() - pending.created_at > timedelta(minutes=30):
+        pending.delete()
+        return render(request, 'pages/auth/confirm_error.html', {'expired': True}, status=410)
+
+    pending.link_used = True
+    pending.save(update_fields=['link_used'])
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            mode='subscription',
+            customer_email=pending.email,
+            metadata={
+                'pending_token': str(pending.token),
+                'email': pending.email,
+            },
+            line_items=[{'price': pending.price_id, 'quantity': 1}],
+            success_url=f"{settings.SITE_URL}/bienvenido/",
+            cancel_url="http://127.0.0.1:5500/login.html",
+        )
+        return redirect(checkout_session.url)
+    except Exception as exc:
+        logger.error('confirmar_email: error creando sesión Stripe para %s: %s', pending.email, exc)
+        return render(request, 'pages/auth/confirm_error.html', status=500)
+
+
+def bienvenido(request):
+    return render(request, 'pages/auth/bienvenido.html')
+
+
+# ==================== MI PLAN ====================
+
+@login_required
+def mi_plan(request):
+    return render(request, 'pages/mi_plan.html')
+
+
+# ==================== STRIPE WEBHOOK ====================
+
+# product_id → tokens (construido desde settings.STRIPE_PLANS)
+_PRODUCT_TOKENS = {p['product_id']: p['tokens'] for p in settings.STRIPE_PLANS.values()}
+
+
+def _handle_checkout_completed(session):
+    session_id = session['id']
+    meta = session['metadata']
+    stripe_email = (getattr(meta, 'email', None) or '').strip().lower()
+    pending_token = (getattr(meta, 'pending_token', None) or '').strip()
+
+    logger.info('stripe_webhook checkout: sesión=%s email=%s token=%s', session_id, stripe_email, pending_token)
+
+    if not pending_token:
+        logger.warning('stripe_webhook checkout: sin pending_token en sesión %s', session_id)
+        return
+
+    try:
+        full_session = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=['line_items.data.price.product']
+        )
+        product_id = full_session.line_items.data[0].price.product.id
+        logger.info('stripe_webhook checkout: product_id=%s', product_id)
+    except Exception as exc:
+        logger.error('stripe_webhook: error obteniendo line_items de sesión %s: %s', session_id, exc)
+        return
+
+    tokens_to_add = _PRODUCT_TOKENS.get(product_id)
+    if tokens_to_add is None:
+        logger.warning('stripe_webhook: producto desconocido %s — IDs conocidos: %s', product_id, list(_PRODUCT_TOKENS.keys()))
+        return
+
+    logger.info('stripe_webhook checkout: tokens_to_add=%d', tokens_to_add)
+
+    try:
+        pending = PendingRegistration.objects.get(token=pending_token, confirmed=False)
+    except PendingRegistration.DoesNotExist:
+        logger.warning('stripe_webhook checkout: pending_token %s no encontrado o ya confirmado', pending_token)
+        return
+
+    if User.objects.filter(email__iexact=pending.email).exists():
+        logger.warning('stripe_webhook checkout: usuario %s ya existe, marcando pending como confirmado', pending.email)
+        pending.confirmed = True
+        pending.save(update_fields=['confirmed'])
+        return
+
+    with transaction.atomic():
+        user = User(username=pending.email, email=pending.email, first_name=pending.nombre)
+        user.password = pending.password_hash
+        user.save()
+        logger.info('stripe_webhook checkout: User creado id=%d', user.id)
+        UserProfile.objects.filter(user=user).update(
+            phone=pending.telefono or None,
+            tokens=tokens_to_add,
+            stripe_email=stripe_email,
+        )
+        pending.confirmed = True
+        pending.save(update_fields=['confirmed'])
+
+    logger.info('stripe_webhook checkout: usuario creado %s con %d tokens', pending.email, tokens_to_add)
+
+
+def _handle_invoice_paid(invoice):
+    if invoice['billing_reason'] != 'subscription_cycle':
+        return
+
+    stripe_email = (getattr(invoice, 'customer_email', None) or '').strip().lower()
+    if not stripe_email:
+        logger.warning('stripe_webhook invoice.paid: sin email en factura %s', invoice['id'])
+        return
+
+    try:
+        line = invoice['lines']['data'][0]
+        product_id = line['price']['product']
+        if not isinstance(product_id, str):
+            product_id = product_id['id']
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.error('stripe_webhook invoice.paid: error leyendo product_id en %s: %s', invoice['id'], exc)
+        return
+
+    tokens_to_add = _PRODUCT_TOKENS.get(product_id)
+    if tokens_to_add is None:
+        logger.warning('stripe_webhook invoice.paid: producto desconocido %s', product_id)
+        return
+
+    try:
+        profile = UserProfile.objects.select_related('user').get(stripe_email__iexact=stripe_email)
+    except UserProfile.DoesNotExist:
+        logger.warning('stripe_webhook invoice.paid: perfil no encontrado para stripe_email %s', stripe_email)
+        return
+
+    profile.tokens = profile.tokens + tokens_to_add
+    profile.save(update_fields=['tokens'])
+    logger.info('stripe_webhook invoice.paid: +%d tokens → %s (total: %d)', tokens_to_add, stripe_email, profile.tokens)
+
+
+@csrf_exempt
+def stripe_webhook(request):
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
+
+    if not sig_header:
+        logger.error('stripe_webhook: petición sin cabecera Stripe-Signature')
+        return HttpResponse(status=400)
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.error('stripe_webhook: STRIPE_WEBHOOK_SECRET no configurado en .env')
+        return HttpResponse(status=500)
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as exc:
+        logger.error('stripe_webhook: payload inválido: %s', exc)
+        return HttpResponse(status=400)
+    except stripe.error.SignatureVerificationError as exc:
+        logger.error('stripe_webhook: firma inválida (¿STRIPE_WEBHOOK_SECRET incorrecto?): %s', exc)
+        return HttpResponse(status=400)
+
+    logger.info('stripe_webhook: evento recibido %s id=%s', event['type'], event['id'])
+
+    try:
+        if event['type'] == 'checkout.session.completed':
+            _handle_checkout_completed(event['data']['object'])
+        elif event['type'] == 'invoice.paid':
+            _handle_invoice_paid(event['data']['object'])
+    except Exception as exc:
+        logger.exception('stripe_webhook: excepción no controlada procesando %s: %s', event['type'], exc)
+        return HttpResponse(status=500)
+
+    return HttpResponse(status=200)

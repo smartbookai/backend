@@ -191,7 +191,7 @@
 </section>
 
 <script>
-const IS_ADMIN = '{% if request.user.company_user.role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
+const IS_ADMIN = '{% if user_role == "admin" %}admin{% else %}other{% endif %}' === 'admin';
 let INVOICES_DATA = [];
 
 document.addEventListener('DOMContentLoaded', function() {

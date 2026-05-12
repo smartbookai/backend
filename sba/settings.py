@@ -1,5 +1,5 @@
 import os
-
+import stripe
 import rollbar
 
 from sba_app.utils.env_utils import loan_env
@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "sba_app",
     "django_celery_beat",
     "django_celery_results",
@@ -43,6 +44,7 @@ AUTHENTICATION_BACKENDS = [
 
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -53,6 +55,14 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "rollbar.contrib.django.middleware.RollbarNotifierMiddleware",
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500"
+]
+CORS_ALLOW_CREDENTIALS = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False
 
 ROOT_URLCONF = "sba.urls"
 
@@ -68,6 +78,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "django.template.context_processors.static",
+                "sba_app.context_processors.user_profile",
             ],
         },
     },
@@ -215,9 +226,39 @@ CELERY_TASK_IGNORE_RESULT = False
 CELERY_RESULT_EXTENDED = True
 CELERY_RESULT_EXPIRES = 3 * 24 * 3600   # 3 days
 
-SITE_URL = env("SITE_URL")
+SITE_URL = env("SITE_URL")           # URL base de Django, ej: http://localhost:8080
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5500")  # URL del frontend estático
 
-LOGIN_URL = 'login'
+LOGIN_URL = 'http://127.0.0.1:5500/login.html'
 LOGIN_REDIRECT_URL = 'index'
 
+GOOGLE_CLIENT_ID = '777000793019-pi4b3ijo5jcn2l79brbv9d0f3a4lg59s.apps.googleusercontent.com'
 
+# Cargamos las claves de Stripe de forma segura desde el .env
+STRIPE_PUBLIC_KEY = env('STRIPE_PUBLIC_KEY')
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY')
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='')
+
+# Planes: nombre → price_id (checkout) + product_id (webhook) + tokens
+# price_id:   Stripe Dashboard → Products → click producto → sección Pricing → ID que empieza por price_
+# product_id: Stripe Dashboard → Products → columna ID → empieza por prod_
+STRIPE_PLANS = {
+    'starter': {'price_id': 'price_1TR9nqA8fYEQHYCQLblxWePc', 'product_id': 'prod_UPznKPl4ObKhD5', 'tokens': 0},
+    'lite':    {'price_id': 'price_1TUqacA8fYEQHYCQA3bkh3eb', 'product_id': 'prod_UToD4Txvc5ZkIQ', 'tokens': 100},
+    'smart':   {'price_id': 'price_1TD2CDA8fYEQHYCQynH18L1S', 'product_id': 'prod_UBP0VqGcJ0t4Ci', 'tokens': 250},
+    'power':   {'price_id': 'price_1TD2DOA8fYEQHYCQ4L7vkEzg', 'product_id': 'prod_UBP1jehIOIvlL1', 'tokens': 500},
+    'ultra':   {'price_id': 'price_1TD2EvA8fYEQHYCQAjjVWynF', 'product_id': 'prod_UBP3sMeZIIMoie', 'tokens': 1000},
+}
+
+# Inicializamos Stripe
+stripe.api_key = STRIPE_SECRET_KEY
+
+# Email (Hostinger SSL)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.hostinger.com')
+EMAIL_PORT = env('EMAIL_PORT', default=465)
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='')

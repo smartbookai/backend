@@ -1,0 +1,707 @@
+{% extends 'layouts/base.html' %}
+{% block content %}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Montserrat:wght@400;700&family=Raleway:wght@400;700&family=Nunito:wght@400;700&family=Inter:wght@400;700&family=Oswald:wght@400;700&family=Poppins:wght@400;700&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=PT+Sans:wght@400;700&display=swap">
+
+<style>
+    :root {
+        --white-alpha: rgba(255, 255, 255, 0.3);
+        --white-alpha-hover: rgba(255, 255, 255, 0.45);
+    }
+
+    /* BARRA DE HERRAMIENTAS PREMIUM */
+    .editor-toolbar {
+        background: radial-gradient(circle at center, #9d4edd 0%, #4a0e78 100%);
+        border: none; border-radius: 14px; box-shadow: 0 10px 30px rgba(74, 14, 120, 0.4);
+        display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 24px; color: white;
+    }
+
+    .toolbar-divider { width: 1px; height: 28px; background: rgba(255, 255, 255, 0.2); }
+
+    .modern-input { 
+        background: var(--white-alpha) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: white !important; border-radius: 8px !important; padding: 6px 12px; font-size: 14px; outline: none;
+    }
+    .modern-input option { color: #333; background: white; } 
+
+    .tool-btn { 
+        border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; 
+        border: none; background: transparent; color: rgba(255, 255, 255, 0.7); font-size: 16px; cursor: pointer; transition: all 0.2s;
+    }
+    .tool-btn:hover { background: var(--white-alpha); color: white; }
+    .tool-btn.active { background: white !important; color: #4a0e78 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .tool-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+    .modern-group { 
+        display: flex; flex-direction: row; align-items: center; background: var(--white-alpha); 
+        border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; height: 36px; padding: 0 4px;
+    }
+    
+    .group-btn { 
+        background: transparent !important; border: none !important; color: white !important; 
+        font-size: 14px; font-weight: bold; padding: 0 8px; cursor: pointer;
+    }
+    .group-btn:hover { color: #e0b3ff !important; }
+    .group-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+    .group-input { 
+        background: transparent !important; border: none !important; color: white !important; 
+        width: 45px; text-align: center; font-weight: 600; font-size: 13px; padding: 0; outline: none !important;
+    }
+
+    #selection-info { 
+        margin-left: auto; background: white; color: #4a0e78; padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 700;
+    }
+
+    #logo-controls.disabled, #align-controls.disabled { opacity: 0.5; pointer-events: none; }
+
+    /* FONT DROPDOWN CUSTOM */
+    .font-dropdown-wrapper { position: relative; }
+    .font-dropdown-btn {
+        background: var(--white-alpha); border: 1px solid rgba(255,255,255,0.1);
+        color: white; border-radius: 8px; padding: 6px 10px; font-size: 13px;
+        cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+        gap: 6px; width: 150px; height: 36px; transition: background 0.2s; white-space: nowrap; overflow: hidden;
+    }
+    .font-dropdown-btn:hover:not(:disabled) { background: var(--white-alpha-hover); }
+    .font-dropdown-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .font-dropdown-btn span { overflow: hidden; text-overflow: ellipsis; }
+    .font-dropdown-panel {
+        position: absolute; top: calc(100% + 6px); left: 0; z-index: 9999;
+        background: white; border-radius: 14px; box-shadow: 0 12px 40px rgba(74,14,120,0.2);
+        border: 1.5px solid #e9d5ff; width: 220px; max-height: 340px;
+        overflow-y: auto; display: none; padding: 6px;
+    }
+    .font-dropdown-panel.open { display: block; }
+    .font-dropdown-panel::-webkit-scrollbar { width: 6px; }
+    .font-dropdown-panel::-webkit-scrollbar-track { background: #f5f0ff; border-radius: 999px; }
+    .font-dropdown-panel::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 999px; }
+    .font-option {
+        padding: 9px 12px; border-radius: 9px; cursor: pointer;
+        color: #1e293b; transition: background 0.15s; display: flex; align-items: center;
+    }
+    .font-option:hover { background: #f5f0ff; }
+    .font-option.selected { background: #9d4edd; color: white; }
+
+    /* PANEL AÑADIR CAMPO */
+    #add-field-panel {
+        background: white; border-radius: 14px; border: 2px solid #e9d5ff;
+        box-shadow: 0 8px 24px rgba(74, 14, 120, 0.1); padding: 20px 24px; margin-bottom: 16px;
+    }
+    #add-field-panel h6 { color: #4a0e78; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+    .token-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: #f5f0ff; border: 1.5px solid #d8b4fe; color: #5b21b6;
+        border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+        cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .token-chip:hover { background: #9d4edd; color: white; border-color: #9d4edd; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(157, 78, 221, 0.3); }
+    .token-chip-label { background: #f0fdf4; border-color: #86efac; color: #166534; }
+    .token-chip-label:hover { background: #16a34a; color: white; border-color: #16a34a; }
+    .token-section { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+    /* EL FOLIO */
+    .folio-container { background-color: #f1f5f9; border-radius: 16px; border: 2px dashed #cbd5e1; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.02); }
+    #selection-marquee { position: absolute; border: 1px solid #9d4edd; background-color: rgba(157, 78, 221, 0.1); z-index: 9999; display: none; pointer-events: none; border-radius: 4px; }
+</style>
+
+<div class="container-fluid mt-4 mb-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold m-0" style="color: #1e293b; font-size: 1.5rem;">🎨 Editor Visual Studio</h2>
+            <p class="text-muted small m-0 mt-1">Selecciona cajas y diseña tu factura. Se guardará una miniatura al terminar.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button id="btn-add-field" class="btn px-4 py-2 fw-bold" style="background-color: #f5f0ff; color: #4a0e78; border: 2px solid #d8b4fe; border-radius: 10px;">
+                <i class="fas fa-plus me-2"></i> Añadir campo
+            </button>
+            <button id="btn-save" class="btn text-white px-4 py-2 fw-bold" style="background-color: #4a0e78; border-radius: 10px; border: none;">
+                <i class="fas fa-save me-2"></i> Guardar Diseño
+            </button>
+        </div>
+    </div>
+
+    <!-- PANEL AÑADIR CAMPO -->
+    <div id="add-field-panel" style="display: none;">
+        <div class="row g-4">
+
+            <!-- ── FACTURA ── -->
+            <div class="col-12 col-md-6 col-lg-3 panel-invoice" style="display:none;">
+                <h6><i class="fas fa-file-invoice me-1"></i> Factura</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('NUMERO','Nº Factura')"><i class="fas fa-hashtag"></i> Nº Factura</span>
+                    <span class="token-chip" onclick="addField('FECHA_EMISION','Fecha emisión')"><i class="fas fa-calendar"></i> F. Emisión</span>
+                    <span class="token-chip" onclick="addField('FECHA_VENCIMIENTO','Fecha vencimiento')"><i class="fas fa-calendar-times"></i> F. Vencimiento</span>
+                    <span class="token-chip" onclick="addField('FORMA_PAGO','Forma de pago')"><i class="fas fa-credit-card"></i> Forma de pago</span>
+                    <span class="token-chip" onclick="addField('NOTAS','Notas')"><i class="fas fa-sticky-note"></i> Notas</span>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3 panel-invoice" style="display:none;">
+                <h6><i class="fas fa-euro-sign me-1"></i> Importes</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('BASE_IMPONIBLE','Base imponible')"><i class="fas fa-calculator"></i> Base imponible</span>
+                    <span class="token-chip" onclick="addField('IVA','IVA')"><i class="fas fa-percent"></i> IVA</span>
+                    <span class="token-chip" onclick="addField('DESCUENTO','Descuento')"><i class="fas fa-tag"></i> Descuento</span>
+                    <span class="token-chip" onclick="addField('DESCUENTO_PCT','% Descuento')"><i class="fas fa-percent"></i> % Descuento</span>
+                    <span class="token-chip" onclick="addField('TOTAL','Total')"><i class="fas fa-coins"></i> Total</span>
+                </div>
+                <h6 class="mt-3"><i class="fas fa-university me-1"></i> Cuentas contables</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('CUENTA_INGRESOS','Cuenta ingresos')"><i class="fas fa-hand-holding-usd"></i> Cta. Ingresos</span>
+                    <span class="token-chip" onclick="addField('CUENTA_CLIENTE','Cuenta cliente')"><i class="fas fa-user-tag"></i> Cta. Cliente</span>
+                    <span class="token-chip" onclick="addField('CUENTA_IVA','Cuenta IVA rep.')"><i class="fas fa-receipt"></i> Cta. IVA</span>
+                </div>
+            </div>
+
+            <!-- ── ALBARÁN ── -->
+            <div class="col-12 col-md-6 col-lg-3 panel-delivery_note" style="display:none;">
+                <h6><i class="fas fa-truck me-1"></i> Albarán</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('NUMERO_ALBARAN','Nº Albarán')"><i class="fas fa-hashtag"></i> Nº Albarán</span>
+                    <span class="token-chip" onclick="addField('FECHA_EMISION','Fecha emisión')"><i class="fas fa-calendar"></i> F. Emisión</span>
+                    <span class="token-chip" onclick="addField('FECHA_ENTREGA','Fecha entrega')"><i class="fas fa-calendar-check"></i> F. Entrega</span>
+                    <span class="token-chip" onclick="addField('METODO_ENTREGA','Método entrega')"><i class="fas fa-shipping-fast"></i> Método entrega</span>
+                    <span class="token-chip" onclick="addField('ESTADO','Estado')"><i class="fas fa-info-circle"></i> Estado</span>
+                    <span class="token-chip" onclick="addField('NOTAS','Notas')"><i class="fas fa-sticky-note"></i> Notas</span>
+                    <span class="token-chip" onclick="addField('TABLA_LINEAS','Tabla líneas')"><i class="fas fa-table"></i> Tabla líneas</span>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3 panel-delivery_note" style="display:none;">
+                <h6><i class="fas fa-euro-sign me-1"></i> Importes</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('BASE_IMPONIBLE','Base imponible')"><i class="fas fa-calculator"></i> Base imponible</span>
+                    <span class="token-chip" onclick="addField('IVA','IVA')"><i class="fas fa-percent"></i> IVA</span>
+                    <span class="token-chip" onclick="addField('TOTAL','Total')"><i class="fas fa-coins"></i> Total</span>
+                </div>
+                <h6 class="mt-3"><i class="fas fa-university me-1"></i> Cuentas contables</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('CUENTA_INGRESOS','Cuenta ingresos')"><i class="fas fa-hand-holding-usd"></i> Cta. Ingresos</span>
+                    <span class="token-chip" onclick="addField('CUENTA_CLIENTE','Cuenta cliente')"><i class="fas fa-user-tag"></i> Cta. Cliente</span>
+                    <span class="token-chip" onclick="addField('CUENTA_IVA','Cuenta IVA rep.')"><i class="fas fa-receipt"></i> Cta. IVA</span>
+                </div>
+            </div>
+
+            <!-- ── EMPRESA y CLIENTE (comunes) ── -->
+            <div class="col-12 col-md-6 col-lg-3">
+                <h6><i class="fas fa-building me-1"></i> Empresa</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('LOGO_EMPRESA','Logo')"><i class="fas fa-image"></i> Logo</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_NOMBRE','Empresa nombre')"><i class="fas fa-building"></i> Nombre</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_CIF','CIF/NIF empresa')"><i class="fas fa-id-card"></i> CIF/NIF</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_DIR','Dirección empresa')"><i class="fas fa-map-marker-alt"></i> Dirección</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_EMAIL','Email empresa')"><i class="fas fa-envelope"></i> Email</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_TEL','Teléfono empresa')"><i class="fas fa-phone"></i> Teléfono</span>
+                    <span class="token-chip" onclick="addField('EMPRESA_WEB','Web empresa')"><i class="fas fa-globe"></i> Web</span>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <h6><i class="fas fa-user me-1"></i> Cliente</h6>
+                <div class="token-section">
+                    <span class="token-chip" onclick="addField('CLIENTE_NOMBRE','Cliente nombre')"><i class="fas fa-user"></i> Nombre</span>
+                    <span class="token-chip" onclick="addField('CLIENTE_CIF','CIF/NIF cliente')"><i class="fas fa-id-card"></i> CIF/NIF</span>
+                    <span class="token-chip" onclick="addField('CLIENTE_DIR','Dirección cliente')"><i class="fas fa-map-marker-alt"></i> Dirección</span>
+                    <span class="token-chip" onclick="addField('CLIENTE_EMAIL','Email cliente')"><i class="fas fa-envelope"></i> Email</span>
+                    <span class="token-chip" onclick="addField('CLIENTE_TEL','Teléfono cliente')"><i class="fas fa-phone"></i> Teléfono</span>
+                    <span class="token-chip" onclick="addField('CLIENTE_CONTACTO','Contacto cliente')"><i class="fas fa-address-book"></i> Contacto</span>
+                </div>
+            </div>
+        </div>
+        <!-- Etiqueta de texto libre -->
+        <div class="mt-3 pt-3" style="border-top: 1px solid #e9d5ff;">
+            <h6><i class="fas fa-font me-1"></i> Texto libre</h6>
+            <div class="d-flex align-items-center gap-2">
+                <input type="text" id="custom-label-input" class="form-control form-control-sm" placeholder="Escribe un texto fijo..." style="max-width: 260px;">
+                <button class="token-chip token-chip-label" onclick="addLabel()"><i class="fas fa-plus"></i> Añadir texto</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="editor-toolbar">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-font text-white" title="Tipografía"></i>
+            <div class="font-dropdown-wrapper" id="font-dropdown-wrapper">
+                <button type="button" id="tool-font-btn" class="font-dropdown-btn" disabled>
+                    <span id="tool-font-label">Helvetica</span>
+                    <i class="fas fa-chevron-down" style="font-size: 10px; opacity: 0.7; flex-shrink: 0;"></i>
+                </button>
+                <div id="font-dropdown-panel" class="font-dropdown-panel"></div>
+            </div>
+            <div class="modern-group" style="width: 80px;">
+                <input type="number" id="tool-size" class="group-input" style="width: 40px;" placeholder="12" disabled>
+                <span style="font-size: 12px; font-weight: bold; opacity: 0.7; padding-right: 8px;">pt</span>
+            </div>
+            <input type="color" id="tool-color" class="modern-input" style="width: 36px; height: 36px; padding: 2px; cursor: pointer;" title="Color" disabled>
+        </div>
+
+        <div style="display: flex; gap: 2px;">
+            <button id="tool-bold" class="tool-btn" title="Negrita" disabled><i class="fas fa-bold"></i></button>
+            <button id="tool-italic" class="tool-btn" title="Cursiva" disabled><i class="fas fa-italic"></i></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Márgenes</span>
+            <div class="modern-group">
+                <button type="button" class="group-btn" id="tool-margin-minus"><i class="fas fa-minus"></i></button>
+                <input type="text" class="group-input" id="tool-margin-size" value="20px" readonly>
+                <button type="button" class="group-btn" id="tool-margin-plus"><i class="fas fa-plus"></i></button>
+            </div>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div id="logo-controls" style="display: flex; align-items: center; gap: 8px; transition: opacity 0.3s;" class="disabled">
+            <span style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fas fa-image me-1"></i> Logo</span>
+            <div class="modern-group">
+                <button type="button" class="group-btn" id="tool-logo-minus" disabled><i class="fas fa-minus"></i></button>
+                <input type="text" class="group-input" id="tool-logo-size" value="120px" readonly disabled>
+                <button type="button" class="group-btn" id="tool-logo-plus" disabled><i class="fas fa-plus"></i></button>
+            </div>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div id="align-controls" style="display: flex; gap: 2px; transition: opacity 0.3s;" class="disabled">
+            <button id="tool-align-left" class="tool-btn" title="Vincular en Columna" disabled><i class="fas fa-align-left"></i></button>
+            <button id="tool-align-top" class="tool-btn" title="Vincular en Fila" disabled><i class="fas fa-align-center" style="transform: rotate(90deg);"></i></button>
+            <button id="tool-align-center-y" class="tool-btn" title="Centrar verticalmente" disabled><i class="fas fa-align-center"></i></button>
+            <button id="tool-unlink" class="tool-btn" style="color: #ff8787;" title="Romper Vínculos" disabled><i class="fas fa-unlink"></i></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div id="spacing-controls" style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Espaciado</span>
+            <div class="modern-group">
+                <button type="button" class="group-btn" id="tool-spacing-minus"><i class="fas fa-minus"></i></button>
+                <input type="text" class="group-input" id="tool-spacing-size" value="5mm" style="width: 50px;">
+                <button type="button" class="group-btn" id="tool-spacing-plus"><i class="fas fa-plus"></i></button>
+            </div>
+            <button id="tool-space-x" class="tool-btn" title="Distribuir horizontalmente (X)"><i class="fas fa-arrows-left-right"></i></button>
+            <button id="tool-space-y" class="tool-btn" title="Distribuir verticalmente (Y)"><i class="fas fa-arrows-up-down"></i></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <button id="tool-delete" class="tool-btn" title="Eliminar selección (Supr)" disabled style="color: #ff6b6b;">
+            <i class="fas fa-trash"></i>
+        </button>
+
+        <div id="selection-info">Nada seleccionado</div>
+    </div>
+
+    <div class="folio-container p-5 d-flex justify-content-center">
+        <div id="folio" style="background: white; box-shadow: 0 20px 40px rgba(0,0,0,0.08); position: relative; overflow: hidden; border-radius: 4px;">
+            <div id="selection-marquee"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<script>
+    // --- 1. ESTADO GLOBAL Y ESCALA ---
+    let designData = [];
+    let selectedIds = [];
+    let isDragging = false; let dragStartX = 0; let dragStartY = 0;
+    let isSelecting = false; let selectStartX = 0; let selectStartY = 0;
+    let marginSize = 20; const MIN_MARGIN = 0; const MAX_MARGIN = 100;
+    let spacingMM = 5; const MM_TO_PX = 595 / 210;
+
+    const BASE_W = 595; const BASE_H = 842;
+    let currentScale = 1;
+
+    const DOCUMENT_TYPE = '{{ document_type|default:"invoice" }}';
+
+    window.onload = function() {
+        try {
+            const rawData = '{{ saved_json|escapejs }}';
+            if (rawData && rawData !== '{}') { designData = JSON.parse(rawData); }
+        } catch (e) { console.error("Error cargando JSON:", e); }
+        setTimeout(adjustFolioSize, 50);
+    };
+
+    function adjustFolioSize() {
+        const toolbar = document.querySelector('.editor-toolbar');
+        const folio = document.getElementById('folio');
+        if (!toolbar || !folio) return;
+        const newWidth = toolbar.offsetWidth; 
+        if (newWidth === 0) return; 
+
+        currentScale = newWidth / BASE_W; 
+        folio.style.width = newWidth + 'px';
+        folio.style.height = (BASE_H * currentScale) + 'px'; 
+        renderFolio(); 
+    }
+    window.addEventListener('resize', adjustFolioSize);
+
+    function renderFolio() {
+        const folio = document.getElementById('folio');
+        const marquee = document.getElementById('selection-marquee');
+        folio.innerHTML = ''; folio.appendChild(marquee);
+
+        const marginBox = document.createElement('div');
+        marginBox.style.position = 'absolute'; marginBox.style.top = (marginSize * currentScale) + 'px'; 
+        marginBox.style.left = (marginSize * currentScale) + 'px';
+        marginBox.style.width = ((BASE_W - marginSize * 2) * currentScale) + 'px'; 
+        marginBox.style.height = ((BASE_H - marginSize * 2) * currentScale) + 'px';
+        marginBox.style.border = '1.5px dashed rgba(157, 78, 221, 0.4)'; marginBox.style.pointerEvents = 'none'; 
+        folio.appendChild(marginBox);
+
+        designData.forEach(item => {
+            const el = document.createElement('div');
+            el.style.position = 'absolute'; el.style.left = (item.x * currentScale) + 'px'; el.style.top = (item.y * currentScale) + 'px';
+            el.style.cursor = 'grab'; el.style.userSelect = 'none';
+            el.dataset.id = item.id || Math.random().toString(36).substr(2, 9);
+            if(!item.id) item.id = el.dataset.id;
+
+            if (selectedIds.includes(item.id)) { el.style.outline = '2px solid #9d4edd'; el.style.outlineOffset = '2px'; }
+            if(item.link_x || item.link_y) el.style.boxShadow = 'inset 0 0 0 2px rgba(13, 110, 253, 0.4)';
+
+            if (item.type === 'shape') {
+                el.style.width = (item.width * currentScale) + 'px'; el.style.height = (item.height * currentScale) + 'px';
+                el.style.backgroundColor = item.bg_color || '#cccccc'; el.style.borderRadius = (item.border_radius * currentScale || 0) + 'px'; el.style.zIndex = 1;
+            } else {
+                el.style.zIndex = 10;
+                if (item.type === 'value' && item.token === 'LOGO_EMPRESA') {
+                    const currentSize = (item.logo_width || 120) * currentScale;
+                    el.style.width = currentSize + 'px'; el.style.height = (currentSize * 0.8) + 'px'; 
+                    el.style.backgroundColor = '#f1f5f9'; el.style.border = '1px dashed #64748b';
+                    el.style.display = 'flex'; el.style.flexDirection = 'column'; el.style.alignItems = 'center'; el.style.justifyContent = 'center';
+                    el.innerHTML = `<i class="fas fa-image" style="font-size: ${20 * currentScale}px; color:#94a3b8; margin-bottom:4px;"></i><span style="font-size: ${10 * currentScale}px; font-weight: bold; color: #475569;">LOGOTIPO</span>`;
+                } else {
+                    el.style.color = item.color || '#000000'; el.style.fontSize = (item.size * currentScale) + 'px'; el.style.fontFamily = getFontCSS(item.font);
+                    if (item.bold) el.style.fontWeight = 'bold'; if (item.italic) el.style.fontStyle = 'italic';
+                    if (item.type === 'label') {
+                        el.innerText = item.text || item.label || 'Texto';
+                        el.addEventListener('dblclick', () => { const newText = prompt("Editar:", item.text || item.label); if (newText !== null) { item.text = item.label = newText; renderFolio(); }});
+                    } else if (item.type === 'value') {
+                        el.innerText = `[ ${item.token} ]`;
+                        if(!selectedIds.includes(item.id)) el.style.backgroundColor = 'rgba(157, 78, 221, 0.1)';
+                        el.style.padding = "2px 4px"; el.style.borderRadius = "4px";
+                    }
+                }
+            }
+
+            el.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                if (e.shiftKey) { if (!selectedIds.includes(item.id)) selectedIds.push(item.id); } else { if (!selectedIds.includes(item.id)) selectedIds = [item.id]; }
+                isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+                updateToolbar(); renderFolio();
+            });
+            folio.appendChild(el);
+        });
+    }
+
+    // --- 2. LÓGICA DEL RATÓN Y FÍSICAS ---
+    document.getElementById('folio').addEventListener('mousedown', (e) => {
+        if (e.target.id !== 'folio') return; 
+        isSelecting = true; const rect = e.target.getBoundingClientRect();
+        selectStartX = e.clientX - rect.left; selectStartY = e.clientY - rect.top;
+        selectedIds = []; 
+        const marquee = document.getElementById('selection-marquee');
+        marquee.style.left = selectStartX + 'px'; marquee.style.top = selectStartY + 'px'; marquee.style.width = '0px'; marquee.style.height = '0px'; marquee.style.display = 'block';
+        updateToolbar(); renderFolio();
+    });
+
+    function getEstimatedSize(item) {
+        if (item.type === 'shape') return { w: item.width || 100, h: item.height || 50 };
+        if (item.token === 'LOGO_EMPRESA') return { w: item.logo_width || 120, h: (item.logo_width || 120) * 0.8 };
+        const textLen = (item.text || item.label || `[ ${item.token} ]`).length;
+        return { w: textLen * ((item.size || 12) * 0.6), h: (item.size || 12) * 1.2 };
+    }
+
+    document.addEventListener('mousemove', (e) => {
+        if (isSelecting) {
+            const folio = document.getElementById('folio'); const rect = folio.getBoundingClientRect();
+            let currentX = Math.max(0, Math.min(e.clientX - rect.left, folio.offsetWidth)); let currentY = Math.max(0, Math.min(e.clientY - rect.top, folio.offsetHeight));
+            const marquee = document.getElementById('selection-marquee');
+            marquee.style.left = Math.min(currentX, selectStartX) + 'px'; marquee.style.top = Math.min(currentY, selectStartY) + 'px';
+            marquee.style.width = Math.abs(currentX - selectStartX) + 'px'; marquee.style.height = Math.abs(currentY - selectStartY) + 'px';
+            return;
+        }
+        if (!isDragging || selectedIds.length === 0) return;
+        const dx = (e.clientX - dragStartX) / currentScale; const dy = (e.clientY - dragStartY) / currentScale;
+
+        let moveXIds = new Set(selectedIds); let moveYIds = new Set(selectedIds);
+        selectedIds.forEach(id => {
+            const item = designData.find(i => i.id === id);
+            if (item.link_x) designData.filter(i => i.link_x === item.link_x).forEach(i => moveXIds.add(i.id));
+            if (item.link_y) designData.filter(i => i.link_y === item.link_y).forEach(i => moveYIds.add(i.id));
+        });
+
+        let minDx = -Infinity, maxDx = Infinity, minDy = -Infinity, maxDy = Infinity;
+        moveXIds.forEach(id => { const item = designData.find(i => i.id === id); const size = getEstimatedSize(item); const allowLeft = marginSize - item.x; const allowRight = (BASE_W - marginSize - size.w) - item.x; if (allowLeft > minDx) minDx = allowLeft; if (allowRight < maxDx) maxDx = allowRight; });
+        moveYIds.forEach(id => { const item = designData.find(i => i.id === id); const size = getEstimatedSize(item); const allowTop = marginSize - item.y; const allowBottom = (BASE_H - marginSize - size.h) - item.y; if (allowTop > minDy) minDy = allowTop; if (allowBottom < maxDy) maxDy = allowBottom; });
+
+        const applyDx = Math.max(minDx, Math.min(dx, maxDx)); const applyDy = Math.max(minDy, Math.min(dy, maxDy));
+
+        if (applyDx !== 0) { moveXIds.forEach(id => { designData.find(i => i.id === id).x += applyDx; }); dragStartX += (applyDx * currentScale); } else { dragStartX = e.clientX; }
+        if (applyDy !== 0) { moveYIds.forEach(id => { designData.find(i => i.id === id).y += applyDy; }); dragStartY += (applyDy * currentScale); } else { dragStartY = e.clientY; }
+
+        if (applyDx !== 0 || applyDy !== 0) renderFolio();
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isSelecting) {
+            isSelecting = false; document.getElementById('selection-marquee').style.display = 'none'; const marquee = document.getElementById('selection-marquee');
+            const boxRect = { left: parseInt(marquee.style.left) / currentScale, top: parseInt(marquee.style.top) / currentScale, right: (parseInt(marquee.style.left) + parseInt(marquee.style.width)) / currentScale, bottom: (parseInt(marquee.style.top) + parseInt(marquee.style.height)) / currentScale };
+            designData.forEach(item => { const size = getEstimatedSize(item); const itemRect = { left: item.x, top: item.y, right: item.x + size.w, bottom: item.y + size.h }; if (itemRect.left < boxRect.right && itemRect.right > boxRect.left && itemRect.top < boxRect.bottom && itemRect.bottom > boxRect.top) { if (!selectedIds.includes(item.id)) selectedIds.push(item.id); } });
+            updateToolbar(); renderFolio();
+        }
+        isDragging = false;
+    });
+
+    document.getElementById('tool-align-left').onclick = () => { const items = designData.filter(i => selectedIds.includes(i.id)); const minX = Math.min(...items.map(i => i.x)); const groupId = 'link_x_' + Date.now(); items.forEach(i => { i.x = minX; i.link_x = groupId; }); updateToolbar(); renderFolio(); };
+    document.getElementById('tool-align-top').onclick = () => { const items = designData.filter(i => selectedIds.includes(i.id)); const minY = Math.min(...items.map(i => i.y)); const groupId = 'link_y_' + Date.now(); items.forEach(i => { i.y = minY; i.link_y = groupId; }); updateToolbar(); renderFolio(); };
+    document.getElementById('tool-align-center-y').onclick = () => { const items = designData.filter(i => selectedIds.includes(i.id)); const avgCenterY = items.reduce((sum, i) => sum + i.y + getEstimatedSize(i).h / 2, 0) / items.length; const groupId = 'link_y_' + Date.now(); items.forEach(i => { i.y = avgCenterY - getEstimatedSize(i).h / 2; i.link_y = groupId; }); updateToolbar(); renderFolio(); };
+    document.getElementById('tool-unlink').onclick = () => { designData.filter(i => selectedIds.includes(i.id)).forEach(i => { delete i.link_x; delete i.link_y; }); updateToolbar(); renderFolio(); };
+
+    // --- FUENTES ---
+    const FONT_LIST = [
+        { value: 'Helvetica',        label: 'Helvetica',        css: 'Helvetica, Arial, sans-serif' },
+        { value: 'Arial',            label: 'Arial',            css: 'Arial, sans-serif' },
+        { value: 'Times-Roman',      label: 'Times New Roman',  css: '"Times New Roman", Times, serif' },
+        { value: 'Courier',          label: 'Courier',          css: '"Courier New", Courier, monospace' },
+        { value: 'Roboto',           label: 'Roboto',           css: "'Roboto', sans-serif" },
+        { value: 'Open Sans',        label: 'Open Sans',        css: "'Open Sans', sans-serif" },
+        { value: 'Lato',             label: 'Lato',             css: "'Lato', sans-serif" },
+        { value: 'Montserrat',       label: 'Montserrat',       css: "'Montserrat', sans-serif" },
+        { value: 'Raleway',          label: 'Raleway',          css: "'Raleway', sans-serif" },
+        { value: 'Nunito',           label: 'Nunito',           css: "'Nunito', sans-serif" },
+        { value: 'Inter',            label: 'Inter',            css: "'Inter', sans-serif" },
+        { value: 'Oswald',           label: 'Oswald',           css: "'Oswald', sans-serif" },
+        { value: 'Poppins',          label: 'Poppins',          css: "'Poppins', sans-serif" },
+        { value: 'Playfair Display', label: 'Playfair Display', css: "'Playfair Display', serif" },
+        { value: 'Merriweather',     label: 'Merriweather',     css: "'Merriweather', serif" },
+        { value: 'PT Sans',          label: 'PT Sans',          css: "'PT Sans', sans-serif" },
+    ];
+
+    function getFontCSS(fontValue) {
+        const f = FONT_LIST.find(f => f.value === fontValue);
+        return f ? f.css : 'Helvetica, Arial, sans-serif';
+    }
+
+    let _fontValue = 'Helvetica';
+    let _fontOnChange = null;
+    const tFont = {
+        get value() { return _fontValue; },
+        set value(v) { _fontValue = v; _syncFontUI(v); },
+        get disabled() { return document.getElementById('tool-font-btn').disabled; },
+        set disabled(v) { document.getElementById('tool-font-btn').disabled = v; },
+        set onchange(fn) { _fontOnChange = fn; }
+    };
+
+    function _syncFontUI(value) {
+        const f = FONT_LIST.find(f => f.value === value) || FONT_LIST[0];
+        const label = document.getElementById('tool-font-label');
+        label.textContent = f.label;
+        label.style.fontFamily = f.css;
+        document.querySelectorAll('#font-dropdown-panel .font-option').forEach(el => {
+            el.classList.toggle('selected', el.dataset.value === value);
+        });
+    }
+
+    (function buildFontPanel() {
+        const panel = document.getElementById('font-dropdown-panel');
+        FONT_LIST.forEach(font => {
+            const div = document.createElement('div');
+            div.className = 'font-option';
+            div.dataset.value = font.value;
+            div.style.fontFamily = font.css;
+            div.style.fontSize = '14px';
+            div.textContent = font.label;
+            div.addEventListener('click', () => {
+                if (document.getElementById('tool-font-btn').disabled) return;
+                _fontValue = font.value;
+                _syncFontUI(font.value);
+                panel.classList.remove('open');
+                if (_fontOnChange) _fontOnChange({ target: { value: font.value } });
+            });
+            panel.appendChild(div);
+        });
+    })();
+
+    document.getElementById('tool-font-btn').addEventListener('click', function() {
+        if (this.disabled) return;
+        document.getElementById('font-dropdown-panel').classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#font-dropdown-wrapper')) {
+            document.getElementById('font-dropdown-panel').classList.remove('open');
+        }
+    });
+
+    // --- 3. BARRA DE HERRAMIENTAS ---
+    const tColor = document.getElementById('tool-color'); const tSize = document.getElementById('tool-size'); const tBold = document.getElementById('tool-bold'); const tItalic = document.getElementById('tool-italic'); const selInfo = document.getElementById('selection-info'); const logoControls = document.getElementById('logo-controls'); const tLogoSize = document.getElementById('tool-logo-size'); const tLogoMinus = document.getElementById('tool-logo-minus'); const tLogoPlus = document.getElementById('tool-logo-plus'); const alignControls = document.getElementById('align-controls'); const tAlignLeft = document.getElementById('tool-align-left'); const tAlignTop = document.getElementById('tool-align-top'); const tAlignCenterY = document.getElementById('tool-align-center-y'); const tUnlink = document.getElementById('tool-unlink');
+    const spacingControls = document.getElementById('spacing-controls'); const tSpacingMinus = document.getElementById('tool-spacing-minus'); const tSpacingPlus = document.getElementById('tool-spacing-plus'); const tSpacingSize = document.getElementById('tool-spacing-size'); const tSpaceX = document.getElementById('tool-space-x'); const tSpaceY = document.getElementById('tool-space-y');
+    const tDelete = document.getElementById('tool-delete');
+
+    function updateToolbar() {
+        logoControls.classList.add('disabled'); tLogoMinus.disabled = tLogoPlus.disabled = true;
+        tFont.disabled = tColor.disabled = tSize.disabled = tBold.disabled = tItalic.disabled = true; tBold.classList.remove('active'); tItalic.classList.remove('active');
+        alignControls.classList.add('disabled'); tAlignLeft.disabled = tAlignTop.disabled = tAlignCenterY.disabled = tUnlink.disabled = true;
+
+        tDelete.disabled = selectedIds.length === 0;
+        if (selectedIds.length === 0) { selInfo.innerText = "Nada seleccionado"; return; }
+        const hasLinks = designData.some(i => selectedIds.includes(i.id) && (i.link_x || i.link_y));
+
+        if (selectedIds.length > 1) { selInfo.innerText = selectedIds.length + " elementos"; alignControls.classList.remove('disabled'); tAlignLeft.disabled = tAlignTop.disabled = tAlignCenterY.disabled = false; tUnlink.disabled = !hasLinks; return; }
+
+        const item = designData.find(i => i.id === selectedIds[0]);
+        if (hasLinks) { alignControls.classList.remove('disabled'); tUnlink.disabled = false; }
+
+        if (item.token === 'LOGO_EMPRESA') { selInfo.innerText = "Logotipo"; logoControls.classList.remove('disabled'); tLogoMinus.disabled = tLogoPlus.disabled = false; tLogoSize.value = (item.logo_width || 120) + "px"; } 
+        else { tColor.disabled = false; if (item.type === 'shape') { selInfo.innerText = "Fondo"; tColor.value = item.bg_color || '#cccccc'; } 
+        else { selInfo.innerText = item.type === 'label' ? "Etiqueta" : "Dato Variable"; tFont.disabled = tSize.disabled = tBold.disabled = tItalic.disabled = false; tColor.value = item.color || '#000000'; tSize.value = item.size || 12; tFont.value = item.font || 'Helvetica'; tBold.classList.toggle('active', !!item.bold); tItalic.classList.toggle('active', !!item.italic); } }
+    }
+
+    function pushItemsInsideMargins() { designData.forEach(item => { const size = getEstimatedSize(item); if (item.x < marginSize) item.x = marginSize; if (item.y < marginSize) item.y = marginSize; if (item.x + size.w > BASE_W - marginSize) item.x = BASE_W - marginSize - size.w; if (item.y + size.h > BASE_H - marginSize) item.y = BASE_H - marginSize - size.h; }); }
+    document.getElementById('tool-margin-plus').onclick = () => { if (marginSize < MAX_MARGIN) { marginSize += 5; document.getElementById('tool-margin-size').value = marginSize + 'px'; pushItemsInsideMargins(); renderFolio(); } };
+    document.getElementById('tool-margin-minus').onclick = () => { if (marginSize > MIN_MARGIN) { marginSize -= 5; document.getElementById('tool-margin-size').value = marginSize + 'px'; pushItemsInsideMargins(); renderFolio(); } };
+    tLogoMinus.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.logo_width = Math.max(40, (item.logo_width || 120) - 10); updateToolbar(); renderFolio(); } };
+    tLogoPlus.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.logo_width = Math.min(300, (item.logo_width || 120) + 10); updateToolbar(); renderFolio(); } };
+    tFont.onchange = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.font = e.target.value; renderFolio(); } };
+    tColor.oninput = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.type === 'shape' ? item.bg_color = e.target.value : item.color = e.target.value; renderFolio(); } };
+    tSize.onchange = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.size = parseInt(e.target.value, 10); renderFolio(); } };
+    tBold.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.bold = !item.bold; updateToolbar(); renderFolio(); } };
+    tItalic.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.italic = !item.italic; updateToolbar(); renderFolio(); } };
+    tSpacingMinus.onclick = () => { if (spacingMM > 0) { spacingMM = Math.max(0, spacingMM - 1); tSpacingSize.value = spacingMM + 'mm'; } };
+    tSpacingPlus.onclick = () => { spacingMM += 1; tSpacingSize.value = spacingMM + 'mm'; };
+    tSpacingSize.oninput = () => { const v = parseFloat(tSpacingSize.value); if (!isNaN(v) && v >= 0) spacingMM = v; };
+    tSpacingSize.onblur = () => { tSpacingSize.value = spacingMM + 'mm'; };
+    tSpaceX.onclick = () => { const items = designData.filter(i => selectedIds.includes(i.id)).sort((a, b) => a.x - b.x); const gapPx = spacingMM * MM_TO_PX; let cursor = items[0].x + getEstimatedSize(items[0]).w; for (let i = 1; i < items.length; i++) { items[i].x = cursor + gapPx; cursor = items[i].x + getEstimatedSize(items[i]).w; } renderFolio(); };
+    tSpaceY.onclick = () => { const items = designData.filter(i => selectedIds.includes(i.id)).sort((a, b) => a.y - b.y); const gapPx = spacingMM * MM_TO_PX; let cursor = items[0].y + getEstimatedSize(items[0]).h; for (let i = 1; i < items.length; i++) { items[i].y = cursor + gapPx; cursor = items[i].y + getEstimatedSize(items[i]).h; } renderFolio(); };
+
+    // --- ELIMINAR ELEMENTOS ---
+    function deleteSelected() {
+        if (selectedIds.length === 0) return;
+        designData = designData.filter(i => !selectedIds.includes(i.id));
+        selectedIds = [];
+        updateToolbar();
+        renderFolio();
+    }
+    tDelete.onclick = deleteSelected;
+    document.addEventListener('keydown', (e) => {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+            e.preventDefault();
+            deleteSelected();
+        }
+    });
+
+    // Mostrar columnas del panel según tipo de documento
+    document.querySelectorAll('.panel-' + DOCUMENT_TYPE).forEach(el => el.style.display = '');
+
+    // --- PANEL AÑADIR CAMPO ---
+    document.getElementById('btn-add-field').onclick = function() {
+        const panel = document.getElementById('add-field-panel');
+        const isVisible = panel.style.display !== 'none';
+        panel.style.display = isVisible ? 'none' : 'block';
+        this.style.background = isVisible ? '#f5f0ff' : '#9d4edd';
+        this.style.color = isVisible ? '#4a0e78' : 'white';
+        this.style.borderColor = isVisible ? '#d8b4fe' : '#9d4edd';
+    };
+
+    function addField(token, label) {
+        const newId = Math.random().toString(36).substr(2, 9);
+        const usedY = designData.map(i => i.y);
+        const startY = usedY.length > 0 ? Math.max(...usedY) + 24 : marginSize + 20;
+        const newItem = { id: newId, type: 'value', token: token, x: marginSize + 20, y: Math.min(startY, BASE_H - marginSize - 30), size: 10, color: '#000000', font: 'Helvetica', bold: false, italic: false };
+        if (token === 'LOGO_EMPRESA') { newItem.logo_width = 120; }
+        designData.push(newItem);
+        selectedIds = [newId];
+        updateToolbar();
+        renderFolio();
+    }
+
+    function addLabel() {
+        const input = document.getElementById('custom-label-input');
+        const text = input.value.trim();
+        if (!text) { input.focus(); return; }
+        const newId = Math.random().toString(36).substr(2, 9);
+        const usedY = designData.map(i => i.y);
+        const startY = usedY.length > 0 ? Math.max(...usedY) + 24 : marginSize + 20;
+        const newItem = { id: newId, type: 'label', text: text, token: '', x: marginSize + 20, y: Math.min(startY, BASE_H - marginSize - 30), size: 10, color: '#000000', font: 'Helvetica', bold: false, italic: false };
+        designData.push(newItem);
+        selectedIds = [newId];
+        input.value = '';
+        updateToolbar();
+        renderFolio();
+    }
+
+    document.getElementById('custom-label-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') addLabel();
+    });
+
+    // --- 4. GUARDAR CON CAPTURA ---
+    document.getElementById('btn-save').onclick = function() {
+        const templateName = prompt("Nombre de esta plantilla:", "Copia de Plantilla");
+        if (!templateName) return;
+
+        const btn = this;
+        btn.innerHTML = '⏳ Capturando...';
+        btn.disabled = true;
+
+        const folio = document.getElementById('folio');
+        
+        // Ajustamos html2canvas para que sea más preciso
+        html2canvas(folio, {
+            scale: 1, // Calidad 1:1
+            useCORS: true, 
+            backgroundColor: '#ffffff',
+            logging: true, // Esto nos dirá en la consola del navegador si hay errores
+            width: folio.offsetWidth,
+            height: folio.offsetHeight
+        }).then(canvas => {
+            const screenshotDataUrl = canvas.toDataURL('image/png');
+            console.log("Imagen capturada:", screenshotDataUrl.substring(0, 50) + "..."); // Debug
+
+            const REDIRECT_MAP = {
+                'invoice':       "{% url 'generar_factura' %}",
+                'delivery_note': "{% url 'generar_albaran' %}",
+                'payroll':       "{% url 'generar_nomina' %}",
+            };
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({
+                    name: templateName,
+                    design: designData,
+                    screenshot: screenshotDataUrl,
+                    overwrite: false,
+                    doc_type: DOCUMENT_TYPE,
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = '<i class="fas fa-save me-2"></i> Guardar Diseño';
+                btn.disabled = false;
+                if (data.success) {
+                    alert("✅ Guardado con captura.");
+                    window.location.href = REDIRECT_MAP[DOCUMENT_TYPE] || REDIRECT_MAP['invoice'];
+                } else if (data.requires_overwrite) {
+                    if (confirm(data.message)) {
+                        // Reenviar con overwrite=true
+                        fetch(window.location.href, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                            body: JSON.stringify({ name: templateName, design: designData, screenshot: screenshotDataUrl, overwrite: true, doc_type: DOCUMENT_TYPE })
+                        }).then(r => r.json()).then(d => {
+                            if (d.success) { alert("✅ Guardado."); window.location.href = REDIRECT_MAP[DOCUMENT_TYPE] || REDIRECT_MAP['invoice']; }
+                        });
+                    }
+                } else {
+                    alert("❌ Error: " + (data.message || 'desconocido'));
+                }
+            });
+        });
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,187 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configura tu cuenta | SBA</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=2">
+    <link rel="shortcut icon" href="{% static 'images/logo-symbol.svg' %}" type="image/x-icon">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+
+<img src="{% static 'images/sba_login_head_logo.jpeg' %}" alt="SBA Logo" class="corner-logo">
+
+<div class="auth-shell">
+    <img src="{% static 'images/sba_login_text_logo.jpeg' %}" alt="SBA - SmartBook AI" class="auth-logo-img">
+
+    <div class="auth-card-wrapper">
+        <div class="login-container">
+
+            <div class="px-5 mb-4 text-start">
+                <h5 class="mb-1" style="font-weight:700;color:#111;">Configura tu cuenta</h5>
+                <p class="mb-0" style="font-size:13px;color:#888;">
+                    Hola, <strong>{{ user_obj.first_name }} {{ user_obj.last_name }}</strong>.
+                    Puedes usar las credenciales generadas o cambiarlas ahora.
+                </p>
+            </div>
+
+            {% if errors %}
+            <div class="alert alert-danger mx-5 mb-3" role="alert">
+                <ul class="mb-0 ps-3">
+                    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <form method="POST" class="px-5" id="setupForm">
+                {% csrf_token %}
+                {% if signed %}<input type="hidden" name="t_signed" value="{{ signed }}">{% endif %}
+
+                <div class="mb-3 text-start">
+                    <label for="username" class="form-label">Usuario</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="username" name="username"
+                               value="{{ user_obj.username }}" required autocomplete="username">
+                        <button class="btn btn-outline-secondary" type="button" id="toggleUsernameVisibility"
+                                title="Ver usuario">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Este será tu nombre de acceso a la plataforma.</div>
+                </div>
+
+                <div class="mb-3 text-start">
+                    <label for="password" class="form-label">Contraseña</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="password" name="password"
+                               value="{{ temp_password }}" autocomplete="new-password">
+                        <button class="btn btn-outline-secondary" type="button" id="togglePasswordVisibility"
+                                title="Ver contraseña">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Déjala tal cual para usar la contraseña generada, o escribe una nueva.</div>
+                </div>
+
+                <div class="mb-4 text-start">
+                    <label for="password_confirm" class="form-label">Confirmar contraseña</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="password_confirm" name="password_confirm"
+                               value="{{ temp_password }}" autocomplete="new-password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggleConfirmVisibility"
+                                title="Ver contraseña">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 mt-1">Guardar y acceder</button>
+
+                <p class="text-center mt-3" style="font-size:12px;color:#aaa;">
+                    ¿Ya configuraste tu cuenta?
+                    <a href="{% url 'login' %}" class="text-decoration-none" style="color:#555;">Ir al login</a>
+                </p>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFieldVisibility(inputId, btnId) {
+    $('#' + btnId).on('click', function () {
+        var input = $('#' + inputId);
+        var icon = $(this).find('i');
+        if (input.attr('type') === 'password') {
+            input.attr('type', 'text');
+            icon.removeClass('bi-eye').addClass('bi-eye-slash');
+        } else {
+            input.attr('type', 'password');
+            icon.removeClass('bi-eye-slash').addClass('bi-eye');
+        }
+    });
+}
+
+$(document).ready(function () {
+    toggleFieldVisibility('password', 'togglePasswordVisibility');
+    toggleFieldVisibility('password_confirm', 'toggleConfirmVisibility');
+
+    $('#setupForm').on('submit', function (e) {
+        var pwd = $('#password').val();
+        var pwdConfirm = $('#password_confirm').val();
+        if (pwd !== pwdConfirm) {
+            e.preventDefault();
+            alert('Las contraseñas no coinciden.');
+        }
+    });
+});
+</script>
+
+<style>
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    .corner-logo {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        width: 170px;
+        height: auto;
+    }
+    .auth-shell { text-align: center; }
+    .auth-logo-img {
+        max-width: 200px;
+        height: auto;
+        margin-bottom: -16px;
+    }
+    .auth-card-wrapper { display: flex; justify-content: center; }
+    .login-container {
+        background: #ffffff;
+        border: none;
+        box-shadow: none;
+        padding: 24px 0 20px;
+        width: 380px;
+        max-width: 100%;
+    }
+    .form-control {
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .form-control:focus {
+        border-color: #62328A;
+        box-shadow: 0 0 0 1px rgba(98,50,138,0.2);
+    }
+    .btn-primary {
+        background-color: #111111;
+        border-color: #111111;
+        border-radius: 0;
+        font-weight: 500;
+    }
+    .btn-primary:hover, .btn-primary:focus {
+        background-color: #000000;
+        border-color: #000000;
+    }
+    .btn-outline-secondary {
+        border-radius: 0;
+        border-color: #dee2e6;
+        color: #6c757d;
+    }
+    @media (max-width: 480px) {
+        .corner-logo { position: static; display: block; margin: 0 auto 20px; width: 100px; }
+        .login-container { width: 100%; margin: 0 16px; }
+    }
+</style>
+
+</body>
+</html>

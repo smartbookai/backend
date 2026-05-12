@@ -2,21 +2,129 @@
 {% load static %}
 {% block title %}Generar Factura | SBA{% endblock %}
 {% block content %}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    .templates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .template-card {
+        background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;
+        padding: 20px; transition: all 0.3s ease; text-align: center;
+        display: flex; flex-direction: column; justify-content: space-between;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .template-card:hover { transform: translateY(-4px); border-color: #9d4edd; box-shadow: 0 10px 20px rgba(157,78,221,0.15); }
+    .template-card--selected {
+        border-color: #9d4edd !important; background: #faf5ff !important;
+        box-shadow: 0 0 0 3px rgba(157,78,221,0.25) !important; position: relative;
+    }
+    .template-card--selected::after {
+        content: '✓'; position: absolute; top: -10px; right: -10px;
+        background: #9d4edd; color: white; width: 24px; height: 24px; border-radius: 50%;
+        font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .template-icon { font-size: 36px; margin-bottom: 12px; }
+    .btn-card-main {
+        background: linear-gradient(135deg, #9d4edd, #4a0e78); color: white; border: none;
+        border-radius: 8px; padding: 10px; font-weight: 600; font-size: 14px;
+        width: 100%; margin-bottom: 10px; cursor: pointer; transition: opacity 0.2s, transform 0.2s;
+        display: flex; justify-content: center; align-items: center; gap: 8px; text-decoration: none;
+    }
+    .btn-card-main:hover { opacity: 0.9; transform: scale(1.02); color: white; }
+    .action-row { display: flex; gap: 8px; }
+    .btn-card-sec {
+        background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px;
+        padding: 8px; font-size: 13px; font-weight: 600; flex-grow: 1; text-decoration: none;
+        transition: all 0.2s; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-card-sec:hover { background: #e2e8f0; color: #1e293b; border-color: #94a3b8; }
+    .btn-card-del {
+        background: #e62222; color: #ffffff; border: 1px solid #cc0000; border-radius: 8px;
+        padding: 8px 14px; font-size: 13px; transition: all 0.2s; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-card-del:hover { background: #cc0000; border-color: #990000; }
+
+    /* IRPF dropdown */
+    .irpf-wrap { position: relative; display: inline-block; }
+    .irpf-btn {
+        display: flex; align-items: center; gap: 6px;
+        padding: 8px 14px; border: 1.5px solid #D1D5DB; border-radius: 8px;
+        background: #fff; font-size: 14px; cursor: pointer; transition: border-color .2s;
+        white-space: nowrap;
+    }
+    .irpf-btn:hover { border-color: #9d4edd; }
+    .irpf-btn.has-value { border-color: #9d4edd; background: #faf5ff; color: #7c3aed; font-weight: 600; }
+    .irpf-dropdown {
+        display: none; position: absolute; top: calc(100% + 4px); left: 0;
+        background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.10); z-index: 100; min-width: 140px; overflow: hidden;
+    }
+    .irpf-dropdown.open { display: block; }
+    .irpf-option {
+        padding: 10px 16px; font-size: 14px; cursor: pointer; transition: background .15s;
+    }
+    .irpf-option:hover { background: #f5f0ff; color: #7c3aed; }
+    .irpf-option.selected { background: #9d4edd; color: #fff; font-weight: 600; }
+
+    /* IVA dropdown (per-line) */
+    .iva-wrap { position: relative; display: block; width: 100%; }
+    .iva-btn {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        padding: 8px 14px; border: 1.5px solid #D1D5DB; border-radius: 8px;
+        background: #fff; font-size: 14px; cursor: pointer; transition: border-color .2s;
+        white-space: nowrap; width: 100%; box-sizing: border-box;
+    }
+    .iva-btn:hover { border-color: #9d4edd; }
+    .iva-btn.has-value { border-color: #9d4edd; background: #faf5ff; color: #7c3aed; font-weight: 600; }
+    .iva-dropdown {
+        display: none; position: absolute; top: calc(100% + 4px); left: 0;
+        background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.10); z-index: 100; min-width: 120px; overflow: hidden;
+    }
+    .iva-dropdown.open { display: block; }
+    .iva-option {
+        padding: 10px 16px; font-size: 14px; cursor: pointer; transition: background .15s;
+    }
+    .iva-option:hover { background: #f5f0ff; color: #7c3aed; }
+    .iva-option.selected { background: #9d4edd; color: #fff; font-weight: 600; }
+
+    /* Btn limpiar */
+    .btn-clear {
+        display: flex; align-items: center; gap: 6px;
+        padding: 8px 16px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+        background: #fff; color: #6B7280; font-size: 13px; font-weight: 600;
+        cursor: pointer; transition: all .15s;
+    }
+    .btn-clear:hover { border-color: #DC2626; color: #DC2626; background: #fef2f2; }
+</style>
+
 <section>
   <div style="max-width:100%;margin:24px auto 0;padding:0 16px;">
-    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+    <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
       <div>
-        <h1 style="font-size:28px;font-weight:700;margin:24px 0 6px 0;">Generar Factura</h1>
-        <div style="color:#6B7280;margin-bottom:20px;">Crear nueva factura de venta</div>
+        <h1 style="font-size:28px;font-weight:700;margin:0 0 6px;">Generar Factura</h1>
+        <div style="color:#6B7280;">Crear nueva factura de venta</div>
       </div>
+      {% if not preloaded_data %}
+      <button type="button" class="btn-clear" onclick="clearFormData()" title="Vaciar todos los campos">
+        <i class="bi bi-trash"></i> Limpiar datos
+      </button>
+      {% endif %}
     </div>
 
-    <form id="invoiceForm" style="margin-top:24px;">
-      <!-- Campo oculto para IDs de albaranes -->
+    <form id="invoiceForm" style="margin-top:24px;" data-preloaded="{% if preloaded_data %}1{% else %}0{% endif %}">
+      <input type="hidden" name="template_id" id="selected_template_id" value="">
+      <input type="hidden" name="irpf_rate" id="irpf_rate" value="">
+      <input type="hidden" name="irpf_amount" id="irpf_amount_hidden" value="">
+
       {% if preloaded_data %}
       <input type="hidden" name="delivery_note_ids" id="delivery_note_ids" value="{{ preloaded_data.albaran_ids }}">
-      
-      <!-- Banner informativo de albaranes -->
       <div class="card" style="padding:16px 24px;margin-bottom:16px;background:linear-gradient(135deg,#F3E8FF 0%,#E9D5FF 100%);border:1px solid #C084FC;">
         <div style="display:flex;align-items:center;gap:12px;">
           <span style="font-size:24px;">📦</span>
@@ -27,20 +135,18 @@
         </div>
       </div>
       {% endif %}
-      
-      <!-- Datos principales de la factura -->
+
+      <!-- Datos principales -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
-        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Datos de la Factura</h2>
-        
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px;color:#111827;">Datos de la Factura</h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
-          <!-- Cliente -->
           <div class="form-field">
             <label for="client">Cliente *</label>
             {% if preloaded_data %}
             <input type="hidden" name="client" value="{{ preloaded_data.client_id }}">
             <input type="text" value="{{ preloaded_data.client_name }}" disabled style="background:#F3F4F6;cursor:not-allowed;">
             {% else %}
-            <select id="client" name="client" required>
+            <select id="client" name="client" required onchange="saveFormData()">
               <option value="">Seleccionar cliente...</option>
               {% for client in clients %}
                 <option value="{{ client.id }}">{{ client.name }}</option>
@@ -48,40 +154,31 @@
             </select>
             {% endif %}
           </div>
-
-          <!-- Número de factura -->
           <div class="form-field">
             <label for="invoice_number">Número de Factura *</label>
-            <input type="text" id="invoice_number" name="invoice_number" required placeholder="Ej: F-2024-001">
+            <input type="text" id="invoice_number" name="invoice_number" required placeholder="Ej: F-2024-001" oninput="saveFormData()">
           </div>
-
-          <!-- Fecha de emisión -->
           <div class="form-field">
             <label for="issue_date">Fecha de Emisión *</label>
-            <input type="date" id="issue_date" name="issue_date" required>
+            <input type="date" id="issue_date" name="issue_date" required onchange="saveFormData()">
           </div>
-
-          <!-- Fecha de vencimiento -->
           <div class="form-field">
             <label for="due_date">Fecha de Vencimiento</label>
-            <input type="date" id="due_date" name="due_date">
+            <input type="date" id="due_date" name="due_date" onchange="saveFormData()">
           </div>
-
-          <!-- Forma de pago -->
           <div class="form-field">
             <label for="payment_method">Forma de Pago</label>
-            <input type="text" id="payment_method" name="payment_method" placeholder="Ej: Transferencia bancaria">
+            <input type="text" id="payment_method" name="payment_method" placeholder="Ej: Transferencia bancaria" oninput="saveFormData()">
           </div>
         </div>
       </div>
 
-      <!-- Líneas de la factura -->
+      <!-- Líneas -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 style="font-size:18px;font-weight:600;margin:0;color:#111827;">Líneas de Factura</h2>
           <button type="button" class="btn-secondary" onclick="addInvoiceLine()">+ Añadir Línea</button>
         </div>
-        
         <div id="invoiceLines" style="margin-bottom:20px;">
           {% if preloaded_data and preloaded_data.lines %}
             {% for line in preloaded_data.lines %}
@@ -100,29 +197,52 @@
               </div>
               <div class="form-field">
                 <label>% IVA *</label>
-                <input type="number" name="line_vat_rate[]" required min="0" max="100" step="0.01" value="{{ line.vat_rate|default:'21' }}" onchange="calculateTotals()">
+                {% with vr=line.vat_rate|default:21 %}
+                <div class="iva-wrap">
+                  <button type="button" class="iva-btn has-value" onclick="toggleIVADropdown(this)">
+                    <span class="iva-label">{{ vr }}%</span>
+                    <i class="bi bi-chevron-down" style="font-size:11px;"></i>
+                  </button>
+                  <div class="iva-dropdown">
+                    <div class="iva-option{% if vr == 4 %} selected{% endif %}" data-pct="4" onclick="setIVA(this,4)">4%</div>
+                    <div class="iva-option{% if vr == 10 %} selected{% endif %}" data-pct="10" onclick="setIVA(this,10)">10%</div>
+                    <div class="iva-option{% if vr == 21 %} selected{% endif %}" data-pct="21" onclick="setIVA(this,21)">21%</div>
+                  </div>
+                  <input type="hidden" name="line_vat_rate[]" value="{{ vr }}">
+                </div>
+                {% endwith %}
               </div>
               <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>
             </div>
             {% endfor %}
           {% else %}
-          <!-- Primera línea por defecto -->
           <div class="invoice-line" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;">
             <div class="form-field">
               <label>Descripción *</label>
-              <input type="text" name="line_description[]" required placeholder="Ej: Consultoría técnica">
+              <input type="text" name="line_description[]" required placeholder="Ej: Consultoría técnica" oninput="saveFormData()">
             </div>
             <div class="form-field">
               <label>Cantidad *</label>
-              <input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals()">
+              <input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals();saveFormData()">
             </div>
             <div class="form-field">
               <label>Precio Unitario *</label>
-              <input type="number" name="line_unit_price[]" required min="0" step="0.01" onchange="calculateTotals()">
+              <input type="number" name="line_unit_price[]" required min="0" step="0.01" onchange="calculateTotals();saveFormData()">
             </div>
             <div class="form-field">
               <label>% IVA *</label>
-              <input type="number" name="line_vat_rate[]" required min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
+              <div class="iva-wrap">
+                <button type="button" class="iva-btn has-value" onclick="toggleIVADropdown(this)">
+                  <span class="iva-label">21%</span>
+                  <i class="bi bi-chevron-down" style="font-size:11px;"></i>
+                </button>
+                <div class="iva-dropdown">
+                  <div class="iva-option" data-pct="4" onclick="setIVA(this,4)">4%</div>
+                  <div class="iva-option" data-pct="10" onclick="setIVA(this,10)">10%</div>
+                  <div class="iva-option selected" data-pct="21" onclick="setIVA(this,21)">21%</div>
+                </div>
+                <input type="hidden" name="line_vat_rate[]" value="21">
+              </div>
             </div>
             <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>
           </div>
@@ -132,8 +252,7 @@
 
       <!-- Totales -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
-        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Resumen de Totales</h2>
-        
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px;color:#111827;">Resumen de Totales</h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
           <div class="form-field">
             <label>Base Imponible</label>
@@ -141,15 +260,34 @@
           </div>
           <div class="form-field">
             <label>Descuento</label>
-            <input type="number" id="discount_amount" name="discount_amount" min="0" step="0.01" onchange="calculateTotals()">
+            <input type="number" id="discount_amount" name="discount_amount" min="0" step="0.01" onchange="calculateTotals();saveFormData()">
           </div>
           <div class="form-field">
             <label>% Descuento</label>
-            <input type="number" id="discount_percentage" name="discount_percentage" min="0" max="100" step="0.01" onchange="calculateTotals()">
+            <input type="number" id="discount_percentage" name="discount_percentage" min="0" max="100" step="0.01" onchange="calculateTotals();saveFormData()">
           </div>
           <div class="form-field">
             <label>Importe IVA</label>
             <input type="number" id="tax_amount" name="tax_amount" readonly style="background:#F3F4F6;">
+          </div>
+          <!-- IRPF -->
+          <div class="form-field">
+            <label>Retención IRPF</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="irpf-wrap">
+                <button type="button" id="irpf_toggle_btn" class="irpf-btn" onclick="toggleIRPFDropdown()">
+                  <span id="irpf_rate_label">Sin retención</span>
+                  <i class="bi bi-chevron-down" style="font-size:11px;"></i>
+                </button>
+                <div class="irpf-dropdown" id="irpf_dropdown">
+                  <div class="irpf-option" onclick="setIRPF(0)">Sin retención</div>
+                  <div class="irpf-option" onclick="setIRPF(7)">7%</div>
+                  <div class="irpf-option" onclick="setIRPF(15)">15%</div>
+                  <div class="irpf-option" onclick="setIRPF(19)">19%</div>
+                </div>
+              </div>
+              <input type="number" id="irpf_display" readonly placeholder="0.00" style="background:#F3F4F6;flex:1;min-width:80px;">
+            </div>
           </div>
           <div class="form-field">
             <label>Total Factura</label>
@@ -160,29 +298,28 @@
 
       <!-- Cuentas contables -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
-        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Cuentas Contables (Opcional)</h2>
-        
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px;color:#111827;">Cuentas Contables (Opcional)</h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
           <div class="form-field">
             <label for="account_income">Cuenta Ingresos</label>
-            <input type="text" id="account_income" name="account_income" placeholder="Ej: 700000">
+            <input type="text" id="account_income" name="account_income" placeholder="Ej: 700000" oninput="saveFormData()">
           </div>
           <div class="form-field">
             <label for="account_customer">Cuenta Cliente</label>
-            <input type="text" id="account_customer" name="account_customer" placeholder="Ej: 430000">
+            <input type="text" id="account_customer" name="account_customer" placeholder="Ej: 430000" oninput="saveFormData()">
           </div>
           <div class="form-field">
             <label for="account_vat_output">Cuenta IVA Repercutido</label>
-            <input type="text" id="account_vat_output" name="account_vat_output" placeholder="Ej: 477000">
+            <input type="text" id="account_vat_output" name="account_vat_output" placeholder="Ej: 477000" oninput="saveFormData()">
           </div>
         </div>
       </div>
 
       <!-- Notas -->
       <div class="card" style="padding:24px;margin-bottom:24px;">
-        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px 0;color:#111827;">Notas Adicionales</h2>
+        <h2 style="font-size:18px;font-weight:600;margin:0 0 20px;color:#111827;">Notas Adicionales</h2>
         <div class="form-field">
-          <textarea id="notes" name="notes" rows="4" placeholder="Observaciones o notas adicionales..."></textarea>
+          <textarea id="notes" name="notes" rows="4" placeholder="Observaciones o notas adicionales..." oninput="saveFormData()"></textarea>
         </div>
       </div>
 
@@ -193,155 +330,333 @@
       </div>
     </form>
   </div>
+
+  <!-- Modal de plantillas -->
+  <div class="modal fade" id="templateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="border:none;border-radius:16px;overflow:hidden;">
+        <div class="modal-header" style="background:white;border-bottom:1px solid #e2e8f0;padding:20px 25px;">
+          <h5 class="modal-title fw-bold" style="color:#1e293b;">Mis Diseños de Factura</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="background:#f8fafc;padding:25px;">
+          <h6 class="fw-bold mb-3 text-muted small text-uppercase" style="letter-spacing:1px;">Modelos Oficiales SBA</h6>
+          <div class="templates-grid">
+            {% for plantilla in templates_sistema %}
+            <div class="template-card" id="tcard-{{ plantilla.id }}">
+              <div>
+                <div class="template-icon">💎</div>
+                <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:16px;">{{ plantilla.style_name }}</div>
+              </div>
+              <div>
+                <button type="button" class="btn-card-main" id="tbtn-{{ plantilla.id }}" onclick="seleccionarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}')">
+                  <i class="fas fa-check-circle"></i> Usar este modelo
+                </button>
+                <div class="action-row">
+                  <a href="{% url 'template_builder_edit' plantilla.id %}" class="btn-card-sec">
+                    <i class="fas fa-eye"></i> Ver diseño
+                  </a>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <h6 class="fw-bold mb-3 mt-4 text-muted small text-uppercase" style="letter-spacing:1px;">Mis Diseños Personalizados</h6>
+          <div class="templates-grid">
+            {% for plantilla in templates_usuario %}
+            <div class="template-card" id="tcard-{{ plantilla.id }}">
+              <div>
+                {% if plantilla.screenshot %}
+                <img src="{{ plantilla.screenshot.url }}" alt="{{ plantilla.style_name }}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:12px;border:1px solid #e2e8f0;">
+                {% else %}
+                <div class="template-icon">🎨</div>
+                {% endif %}
+                <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:16px;">{{ plantilla.style_name }}</div>
+              </div>
+              <div>
+                <button type="button" class="btn-card-main" id="tbtn-{{ plantilla.id }}" onclick="seleccionarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}')">
+                  <i class="fas fa-check-circle"></i> Usar mi diseño
+                </button>
+                <div class="action-row">
+                  <a href="{% url 'template_builder_edit' plantilla.id %}" class="btn-card-sec">
+                    <i class="fas fa-pen"></i> Editar
+                  </a>
+                  <button type="button" class="btn-card-del" title="Borrar diseño" onclick="eliminarPlantilla({{ plantilla.id }}, '{{ plantilla.style_name }}', this)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% empty %}
+            <div class="template-card" style="grid-column:1/-1;border:2px dashed #cbd5e1;background:transparent;box-shadow:none;">
+              <p class="text-muted small m-0 py-3">No tienes diseños personalizados aún.</p>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <script>
-// Establecer fecha actual por defecto
+const FORM_KEY = 'sba_factura_draft';
+const IS_PRELOADED = document.getElementById('invoiceForm').dataset.preloaded === '1';
+let currentIRPF = 0;
+
+/* ── Template modal ──────────────────────────────── */
+function openTemplateModal() {
+  new bootstrap.Modal(document.getElementById('templateModal')).show();
+}
+function seleccionarPlantilla(id, nombre) {
+  document.querySelectorAll('.template-card--selected').forEach(c => c.classList.remove('template-card--selected'));
+  document.querySelectorAll('.btn-card-main').forEach(b => {
+    b.disabled = false; b.style.opacity = '1';
+    b.innerHTML = '<i class="fas fa-check-circle"></i> ' + (b.dataset.original || 'Usar este modelo');
+  });
+  const card = document.getElementById('tcard-' + id);
+  const btn  = document.getElementById('tbtn-' + id);
+  if (card) card.classList.add('template-card--selected');
+  if (btn) { if (!btn.dataset.original) btn.dataset.original = btn.innerText.trim(); btn.innerHTML = '<i class="fas fa-check-circle"></i> ✓ Seleccionada'; btn.disabled = true; btn.style.opacity = '0.85'; }
+  document.getElementById('selected_template_id').value = id;
+  const _tdn = document.getElementById('template_display_name');
+  if (_tdn) _tdn.innerText = nombre;
+  setTimeout(() => { const m = bootstrap.Modal.getInstance(document.getElementById('templateModal')); if (m) m.hide(); }, 400);
+}
+function eliminarPlantilla(id, nombre, btn) {
+  if (!confirm('¿Eliminar el diseño "' + nombre + '"? Esta acción no se puede deshacer.')) return;
+  btn.disabled = true;
+  fetch('/templates/builder/' + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } })
+    .then(r => r.json()).then(d => { if (d.success) btn.closest('.template-card').remove(); else { btn.disabled = false; alert('Error al eliminar el diseño.'); } })
+    .catch(() => { btn.disabled = false; alert('Error de red.'); });
+}
+
+/* ── IVA per-line dropdown ───────────────────────── */
+function toggleIVADropdown(btn) {
+  const dropdown = btn.nextElementSibling;
+  document.querySelectorAll('.iva-dropdown.open').forEach(d => { if (d !== dropdown) d.classList.remove('open'); });
+  dropdown.classList.toggle('open');
+}
+function setIVAForWrap(wrap, pct) {
+  const label  = wrap.querySelector('.iva-label');
+  const hidden = wrap.querySelector('input[name="line_vat_rate[]"]');
+  const btn    = wrap.querySelector('.iva-btn');
+  label.textContent = pct + '%';
+  hidden.value = pct;
+  btn.classList.toggle('has-value', pct > 0);
+  wrap.querySelectorAll('.iva-option').forEach(o => o.classList.toggle('selected', parseInt(o.dataset.pct) === pct));
+}
+function setIVA(option, pct) {
+  const wrap = option.closest('.iva-wrap');
+  setIVAForWrap(wrap, pct);
+  wrap.querySelector('.iva-dropdown').classList.remove('open');
+  calculateTotals();
+  saveFormData();
+}
+
+/* ── IRPF ────────────────────────────────────────── */
+function toggleIRPFDropdown() {
+  document.getElementById('irpf_dropdown').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.irpf-wrap')) document.getElementById('irpf_dropdown').classList.remove('open');
+  if (!e.target.closest('.iva-wrap')) document.querySelectorAll('.iva-dropdown.open').forEach(d => d.classList.remove('open'));
+});
+function setIRPF(pct) {
+  currentIRPF = pct;
+  document.getElementById('irpf_rate').value = pct || '';
+  const btn = document.getElementById('irpf_toggle_btn');
+  const lbl = document.getElementById('irpf_rate_label');
+  lbl.textContent = pct ? pct + '%' : 'Sin retención';
+  btn.classList.toggle('has-value', pct > 0);
+  document.querySelectorAll('.irpf-option').forEach(o => o.classList.remove('selected'));
+  const idx = [0, 7, 15, 19].indexOf(pct);
+  if (idx >= 0) document.querySelectorAll('.irpf-option')[idx].classList.add('selected');
+  document.getElementById('irpf_dropdown').classList.remove('open');
+  calculateTotals();
+  saveFormData();
+}
+
+/* ── Lines ───────────────────────────────────────── */
+function addInvoiceLine() {
+  const c = document.getElementById('invoiceLines');
+  const line = document.createElement('div');
+  line.className = 'invoice-line';
+  line.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;';
+  line.innerHTML = `
+    <div class="form-field"><label>Descripción *</label><input type="text" name="line_description[]" required placeholder="Ej: Consultoría técnica" oninput="saveFormData()"></div>
+    <div class="form-field"><label>Cantidad *</label><input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals();saveFormData()"></div>
+    <div class="form-field"><label>Precio Unitario *</label><input type="number" name="line_unit_price[]" required min="0" step="0.01" onchange="calculateTotals();saveFormData()"></div>
+    <div class="form-field"><label>% IVA *</label><div class="iva-wrap"><button type="button" class="iva-btn has-value" onclick="toggleIVADropdown(this)"><span class="iva-label">21%</span><i class="bi bi-chevron-down" style="font-size:11px;"></i></button><div class="iva-dropdown"><div class="iva-option" data-pct="4" onclick="setIVA(this,4)">4%</div><div class="iva-option" data-pct="10" onclick="setIVA(this,10)">10%</div><div class="iva-option selected" data-pct="21" onclick="setIVA(this,21)">21%</div></div><input type="hidden" name="line_vat_rate[]" value="21"></div></div>
+    <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>`;
+  c.appendChild(line);
+}
+function removeInvoiceLine(button) {
+  const c = document.getElementById('invoiceLines');
+  if (c.children.length > 1) { button.parentElement.remove(); calculateTotals(); saveFormData(); }
+  else alert('Debe haber al menos una línea en la factura.');
+}
+
+/* ── Totals ──────────────────────────────────────── */
+function calculateTotals() {
+  let base = 0, taxBruto = 0;
+  const descs = document.getElementsByName('line_description[]');
+  const qtys  = document.getElementsByName('line_quantity[]');
+  const prices = document.getElementsByName('line_unit_price[]');
+  const vats  = document.getElementsByName('line_vat_rate[]');
+  
+  // 1. Calculamos la Base Bruta y el IVA Bruto (sin descuentos todavía)
+  for (let i = 0; i < descs.length; i++) {
+    const qty = parseFloat(qtys[i].value) || 0;
+    const price = parseFloat(prices[i].value) || 0;
+    const vat = parseFloat(vats[i].value) || 0;
+    
+    const sub = qty * price;
+    base += sub; 
+    taxBruto += sub * (vat / 100);
+  }
+  // 2. Calculamos el Descuento Total
+  const discAmt = parseFloat(document.getElementById('discount_amount').value) || 0;
+  const discPct = parseFloat(document.getElementById('discount_percentage').value) || 0;
+  let totalDisc = discAmt + (discPct > 0 ? base * (discPct / 100) : 0);
+  
+  const finalBase = Math.max(0, base - totalDisc);
+  
+  // Ajustamos el IVA proporcionalmente al descuento
+  let tax = 0;
+  if (base > 0) {
+    const proporcion = finalBase / base;
+    tax = taxBruto * proporcion;
+  }
+  
+  // 5. Calculamos el IRPF sobre la Base Neta
+  const irpfAmt = finalBase * (currentIRPF / 100);
+  
+  const total = finalBase + tax - irpfAmt; 
+
+  // 7. Pintamos los resultados
+  document.getElementById('base_amount').value = finalBase.toFixed(2);
+  document.getElementById('tax_amount').value = tax.toFixed(2);
+  document.getElementById('irpf_display').value = irpfAmt > 0 ? irpfAmt.toFixed(2) : '';
+  document.getElementById('irpf_amount_hidden').value = irpfAmt > 0 ? irpfAmt.toFixed(2) : '';
+  document.getElementById('total_amount').value = total.toFixed(2);
+}
+
+/* ── sessionStorage ──────────────────────────────── */
+function getFormSnapshot() {
+  const lines = [];
+  document.querySelectorAll('.invoice-line').forEach(line => {
+    lines.push({
+      desc:  line.querySelector('[name="line_description[]"]').value,
+      qty:   line.querySelector('[name="line_quantity[]"]').value,
+      price: line.querySelector('[name="line_unit_price[]"]').value,
+      vat:   line.querySelector('[name="line_vat_rate[]"]').value,
+    });
+  });
+  return {
+    client:             document.getElementById('client')?.value ?? '',
+    invoice_number:     document.getElementById('invoice_number').value,
+    issue_date:         document.getElementById('issue_date').value,
+    due_date:           document.getElementById('due_date').value,
+    payment_method:     document.getElementById('payment_method').value,
+    discount_amount:    document.getElementById('discount_amount').value,
+    discount_percentage:document.getElementById('discount_percentage').value,
+    account_income:     document.getElementById('account_income').value,
+    account_customer:   document.getElementById('account_customer').value,
+    account_vat_output: document.getElementById('account_vat_output').value,
+    notes:              document.getElementById('notes').value,
+    irpf:               currentIRPF,
+    lines,
+  };
+}
+function saveFormData() {
+  if (IS_PRELOADED) return;
+  sessionStorage.setItem(FORM_KEY, JSON.stringify(getFormSnapshot()));
+}
+function restoreFormData() {
+  if (IS_PRELOADED) return;
+  const raw = sessionStorage.getItem(FORM_KEY);
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    const sel = document.getElementById('client');
+    if (sel && d.client) sel.value = d.client;
+    document.getElementById('invoice_number').value     = d.invoice_number || '';
+    if (d.issue_date) document.getElementById('issue_date').value = d.issue_date;
+    document.getElementById('due_date').value           = d.due_date || '';
+    document.getElementById('payment_method').value     = d.payment_method || '';
+    document.getElementById('discount_amount').value    = d.discount_amount || '';
+    document.getElementById('discount_percentage').value = d.discount_percentage || '';
+    document.getElementById('account_income').value     = d.account_income || '';
+    document.getElementById('account_customer').value   = d.account_customer || '';
+    document.getElementById('account_vat_output').value = d.account_vat_output || '';
+    document.getElementById('notes').value              = d.notes || '';
+    if (d.irpf) setIRPF(d.irpf);
+    if (d.lines && d.lines.length) {
+      const container = document.getElementById('invoiceLines');
+      container.innerHTML = '';
+      d.lines.forEach(l => {
+        addInvoiceLine();
+        const el = container.lastElementChild;
+        el.querySelector('[name="line_description[]"]').value = l.desc;
+        el.querySelector('[name="line_quantity[]"]').value    = l.qty;
+        el.querySelector('[name="line_unit_price[]"]').value  = l.price;
+        const vatWrap = el.querySelector('.iva-wrap');
+        if (vatWrap && l.vat) setIVAForWrap(vatWrap, parseInt(l.vat));
+      });
+    }
+    calculateTotals();
+  } catch(e) { console.warn('Error restoring form', e); }
+}
+function clearFormData() {
+  if (!confirm('¿Seguro que quieres vaciar todos los datos del formulario?')) return;
+  sessionStorage.removeItem(FORM_KEY);
+  location.reload();
+}
+
+/* ── Init ────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', function() {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('issue_date').value = today;
-  
-  // Calcular totales iniciales
+
+  // Auto-seleccionar plantilla predeterminada
+  var _tplId   = '{{ default_template_id|default:"" }}';
+  var _tplName = '{{ default_template_name|default:""|escapejs }}';
+  if (_tplId) seleccionarPlantilla(parseInt(_tplId, 10), _tplName);
+
+  restoreFormData();
   calculateTotals();
 });
 
-// Añadir nueva línea de factura
-function addInvoiceLine() {
-  const linesContainer = document.getElementById('invoiceLines');
-  const newLine = document.createElement('div');
-  newLine.className = 'invoice-line';
-  newLine.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:15px;align-items:end;margin-bottom:15px;padding:15px;background:#F9FAFB;border-radius:8px;';
-  
-  newLine.innerHTML = `
-    <div class="form-field">
-      <label>Descripción *</label>
-      <input type="text" name="line_description[]" required placeholder="Ej: Consultoría técnica">
-    </div>
-    <div class="form-field">
-      <label>Cantidad *</label>
-      <input type="number" name="line_quantity[]" required min="0" step="0.01" value="1" onchange="calculateTotals()">
-    </div>
-    <div class="form-field">
-      <label>Precio Unitario *</label>
-      <input type="number" name="line_unit_price[]" required min="0" step="0.01" onchange="calculateTotals()">
-    </div>
-    <div class="form-field">
-      <label>% IVA *</label>
-      <input type="number" name="line_vat_rate[]" required min="0" max="100" step="0.01" value="21" onchange="calculateTotals()">
-    </div>
-    <button type="button" onclick="removeInvoiceLine(this)" style="padding:8px;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer;">×</button>
-  `;
-  
-  linesContainer.appendChild(newLine);
-}
-
-// Eliminar línea de factura
-function removeInvoiceLine(button) {
-  const linesContainer = document.getElementById('invoiceLines');
-  if (linesContainer.children.length > 1) {
-    button.parentElement.remove();
-    calculateTotals();
-  } else {
-    alert('Debe haber al menos una línea en la factura.');
-  }
-}
-
-// Calcular totales
-function calculateTotals() {
-  let baseAmount = 0;
-  let taxAmount = 0;
-  
-  const descriptions = document.getElementsByName('line_description[]');
-  const quantities = document.getElementsByName('line_quantity[]');
-  const unitPrices = document.getElementsByName('line_unit_price[]');
-  const vatRates = document.getElementsByName('line_vat_rate[]');
-  
-  for (let i = 0; i < descriptions.length; i++) {
-    const quantity = parseFloat(quantities[i].value) || 0;
-    const unitPrice = parseFloat(unitPrices[i].value) || 0;
-    const vatRate = parseFloat(vatRates[i].value) || 0;
-    
-    const subtotal = quantity * unitPrice;
-    baseAmount += subtotal;
-    taxAmount += subtotal * (vatRate / 100);
-  }
-  
-  const discountAmount = parseFloat(document.getElementById('discount_amount').value) || 0;
-  const discountPercentage = parseFloat(document.getElementById('discount_percentage').value) || 0;
-  
-  let totalDiscount = discountAmount;
-  if (discountPercentage > 0) {
-    totalDiscount += baseAmount * (discountPercentage / 100);
-  }
-  
-  const finalBaseAmount = Math.max(0, baseAmount - totalDiscount);
-  const totalAmount = finalBaseAmount + taxAmount;
-  
-  document.getElementById('base_amount').value = finalBaseAmount.toFixed(2);
-  document.getElementById('tax_amount').value = taxAmount.toFixed(2);
-  document.getElementById('total_amount').value = totalAmount.toFixed(2);
-}
-
-// Enviar formulario
+/* ── Submit ──────────────────────────────────────── */
 document.getElementById('invoiceForm').addEventListener('submit', function(e) {
   e.preventDefault();
-  
-  // Validar que haya al menos una línea con descripción
-  const descriptions = document.getElementsByName('line_description[]');
-  let hasValidLine = false;
-  
-  for (let i = 0; i < descriptions.length; i++) {
-    if (descriptions[i].value.trim()) {
-      hasValidLine = true;
-      break;
-    }
-  }
-  
-  if (!hasValidLine) {
-    alert('Debe agregar al menos una línea con descripción.');
-    return;
-  }
-  
-  // Enviar datos al servidor
-  const formData = new FormData(this);
-  
+  const descs = document.getElementsByName('line_description[]');
+  let ok = false;
+  for (let i = 0; i < descs.length; i++) { if (descs[i].value.trim()) { ok = true; break; } }
+  if (!ok) { alert('Debe agregar al menos una línea con descripción.'); return; }
+
   fetch('/api/invoices-sent/manual-create/', {
-    method: 'POST',
-    body: formData,
-    headers: {
-      'X-CSRFToken': getCookie('csrftoken')
-    }
+    method: 'POST', body: new FormData(this),
+    headers: { 'X-CSRFToken': getCookie('csrftoken') }
   })
-  .then(response => response.json())
+  .then(r => r.json())
   .then(data => {
     if (data.success) {
+      sessionStorage.removeItem(FORM_KEY);
       alert('Factura generada correctamente: ' + data.invoice_number);
-      // Redirigir a facturas enviadas
       window.location.href = '/invoices-sent/';
     } else {
       alert('Error al generar la factura: ' + data.message);
     }
   })
-  .catch(error => {
-    console.error('Error:', error);
-    alert('Error al generar la factura. Por favor, inténtelo de nuevo.');
-  });
+  .catch(() => alert('Error al generar la factura. Por favor, inténtelo de nuevo.'));
 });
 
-// Función para obtener CSRF token
 function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
+  let v = null;
+  if (document.cookie) document.cookie.split(';').forEach(c => { c = c.trim(); if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1)); });
+  return v;
 }
 </script>
 {% endblock %}
