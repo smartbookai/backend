@@ -227,6 +227,7 @@ def get_document_data(document):
         'IMPORTE_IVA':      fmt_money(tax),
         'TASA_IVA':         f"{iva_rate:.0f} %" if iva_rate else '',
         'PCT_IVA':          f"{iva_rate:.0f} %" if iva_rate else '',
+        'IVA_PCT':          f"{iva_rate:.0f} %" if iva_rate else '',
         'DESCUENTO':        fmt_money(disc_a) if disc_a else '',
         'DESCUENTO_PCT':    f"{disc_p:.2f} %" if disc_p else '',
         'DESCUENTO_PORCENTAJE': f"{disc_p:.2f} %" if disc_p else '',
@@ -333,15 +334,33 @@ def generate_invoice_pdf(invoice, template_id=None):
 
     design_data = _load_template_design(template_id, 'invoice')
 
+    print(f"[PDF DEBUG] invoice #{invoice.invoice_number} | template_id={template_id} | design items={len(design_data) if design_data else 0}")
+
     if not design_data:
         c.drawString(100, height - 100, "Error: No hay diseño.")
         c.save()
         return buffer.getvalue()
     invoice_data = get_document_data(invoice)
-    y_table = height - 500 
+
+    # Debug account fields
+    print(f"[PDF DEBUG] CUENTA_INGRESOS={invoice_data.get('CUENTA_INGRESOS')!r}  CUENTA_CLIENTE={invoice_data.get('CUENTA_CLIENTE')!r}  CUENTA_IVA={invoice_data.get('CUENTA_IVA')!r}")
+
+    cuenta_tokens = {'CUENTA_INGRESOS', 'CUENTA_CLIENTE', 'CUENTA_IVA'}
+    for it in design_data:
+        if it.get('token') in cuenta_tokens:
+            print(f"[PDF DEBUG] Design item: token={it.get('token')} id={it.get('id')} label_id={it.get('label_id')} value_id={it.get('value_id')}")
+
+    y_table = height - 500
+
+    # Pre-compute label IDs to hide: labels whose linked value is empty
+    _SKIP_TOKENS = ('TABLA_ITEMS', 'LOGO_EMPRESA')
+    labels_to_skip = set()
+    for it in design_data:
+        if it.get('type') == 'value' and it.get('label_id') and it.get('token') not in _SKIP_TOKENS:
+            if not invoice_data.get(it.get('token', ''), ''):
+                labels_to_skip.add(it['label_id'])
 
     # DIBUJAR SHAPES (FONDOS)
-    # Si el shape tiene un 'token', se omite cuando ese token está vacío en los datos
     for item in design_data:
         if item.get('type') == 'shape':
             shape_token = item.get('token', '')
@@ -356,12 +375,12 @@ def generate_invoice_pdf(invoice, template_id=None):
     for item in design_data:
         x, y_web = item.get('x', 0), item.get('y', 0)
         token = item.get('token', '')
-        
+
         if token == 'LOGO_EMPRESA' and invoice.company.logo:
             try:
                 img = ImageReader(invoice.company.logo.path)
                 box_w = item.get('logo_width', 120)
-                box_h = box_w * 0.8  # same bounding box the builder placeholder uses
+                box_h = box_w * 0.8
                 iw, ih = img.getSize()
                 aspect = ih / float(iw)
                 if aspect <= 0.8:
@@ -370,12 +389,29 @@ def generate_invoice_pdf(invoice, template_id=None):
                     desired_h, desired_w = box_h, box_h / aspect
                 c.drawImage(img, x, height - y_web - desired_h, width=desired_w, height=desired_h, mask='auto')
             except: pass
-            
+
         elif item.get('type') in ['label', 'value'] and token != 'TABLA_ITEMS':
+            if item.get('type') == 'label':
+                item_id = item.get('id', '')
+                if item_id and item_id in labels_to_skip:
+                    continue
+                # Fallback for templates without explicit links (Y-proximity)
+                if not item.get('value_id'):
+                    label_y = item.get('y', 0)
+                    nearby = [
+                        it for it in design_data
+                        if it.get('type') == 'value'
+                        and it.get('token')
+                        and it.get('token') not in _SKIP_TOKENS
+                        and abs(it.get('y', 0) - label_y) <= 6
+                    ]
+                    if nearby and all(not invoice_data.get(it['token'], '') for it in nearby):
+                        continue
+
             size = item.get('size', 10)
             c.setFillColor(colors.HexColor(item.get('color', '#000000')))
             c.setFont(get_reportlab_font(item.get('font', 'Helvetica'), item.get('bold', False), item.get('italic', False)), size)
-            
+
             texto = item.get('text', '') if item.get('type') == 'label' else str(invoice_data.get(token, ''))
             if texto and texto != 'None':
                 c.drawString(x, height - y_web - size, texto)

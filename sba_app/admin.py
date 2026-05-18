@@ -189,12 +189,11 @@ class PrecontractualAcceptanceAdmin(admin.ModelAdmin):
     )
     
     def has_add_permission(self, request):
-        # No permitir agregar manualmente desde el admin
         return False
-    
+
     def has_delete_permission(self, request, obj=None):
-        # No permitir eliminar para mantener registro legal
-        return False
+        # Solo superusuarios pueden eliminar (necesario para borrar el usuario padre en cascada)
+        return request.user.is_superuser
 
 
 # ==================== ALBARANES ====================
@@ -331,6 +330,16 @@ class UserAdmin(DjangoUserAdmin):
         
         return super().changelist_view(request, extra_context)
     
+    def delete_model(self, request, obj):
+        from sba_app.models import PrecontractualAcceptance
+        PrecontractualAcceptance.objects.filter(user=obj).delete()
+        obj.delete()
+
+    def delete_queryset(self, request, queryset):
+        from sba_app.models import PrecontractualAcceptance
+        PrecontractualAcceptance.objects.filter(user__in=queryset).delete()
+        queryset.delete()
+
     def get_actions(self, request):
         """Agregar acción personalizada de impersonación"""
         actions = super().get_actions(request)

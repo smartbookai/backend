@@ -143,9 +143,12 @@
                 <h6><i class="fas fa-euro-sign me-1"></i> Importes</h6>
                 <div class="token-section">
                     <span class="token-chip" onclick="addField('BASE_IMPONIBLE','Base imponible')"><i class="fas fa-calculator"></i> Base imponible</span>
+                    <span class="token-chip" onclick="addField('IVA_PCT','% IVA')"><i class="fas fa-percent"></i> % IVA</span>
                     <span class="token-chip" onclick="addField('IVA','IVA')"><i class="fas fa-percent"></i> IVA</span>
                     <span class="token-chip" onclick="addField('DESCUENTO','Descuento')"><i class="fas fa-tag"></i> Descuento</span>
                     <span class="token-chip" onclick="addField('DESCUENTO_PCT','% Descuento')"><i class="fas fa-percent"></i> % Descuento</span>
+                    <span class="token-chip" onclick="addField('IRPF_TASA','% IRPF')"><i class="fas fa-percent"></i> % IRPF</span>
+                    <span class="token-chip" onclick="addField('IRPF_IMPORTE','IRPF')"><i class="fas fa-minus-circle"></i> IRPF</span>
                     <span class="token-chip" onclick="addField('TOTAL','Total')"><i class="fas fa-coins"></i> Total</span>
                 </div>
                 <h6 class="mt-3"><i class="fas fa-university me-1"></i> Cuentas contables</h6>
@@ -239,6 +242,12 @@
         <div style="display: flex; gap: 2px;">
             <button id="tool-bold" class="tool-btn" title="Negrita" disabled><i class="fas fa-bold"></i></button>
             <button id="tool-italic" class="tool-btn" title="Cursiva" disabled><i class="fas fa-italic"></i></button>
+        </div>
+
+        <div id="label-text-wrap" style="display:none; align-items:center; gap:6px;">
+            <div class="toolbar-divider"></div>
+            <i class="fas fa-tag" style="color:rgba(255,255,255,0.7); font-size:13px;" title="Texto de la etiqueta"></i>
+            <input type="text" id="tool-label-text" class="modern-input" style="width:180px;" placeholder="Texto etiqueta...">
         </div>
 
         <div class="toolbar-divider"></div>
@@ -538,6 +547,7 @@
 
     // --- 3. BARRA DE HERRAMIENTAS ---
     const tColor = document.getElementById('tool-color'); const tSize = document.getElementById('tool-size'); const tBold = document.getElementById('tool-bold'); const tItalic = document.getElementById('tool-italic'); const selInfo = document.getElementById('selection-info'); const logoControls = document.getElementById('logo-controls'); const tLogoSize = document.getElementById('tool-logo-size'); const tLogoMinus = document.getElementById('tool-logo-minus'); const tLogoPlus = document.getElementById('tool-logo-plus'); const alignControls = document.getElementById('align-controls'); const tAlignLeft = document.getElementById('tool-align-left'); const tAlignTop = document.getElementById('tool-align-top'); const tAlignCenterY = document.getElementById('tool-align-center-y'); const tUnlink = document.getElementById('tool-unlink');
+    const labelTextWrap = document.getElementById('label-text-wrap'); const tLabelText = document.getElementById('tool-label-text');
     const spacingControls = document.getElementById('spacing-controls'); const tSpacingMinus = document.getElementById('tool-spacing-minus'); const tSpacingPlus = document.getElementById('tool-spacing-plus'); const tSpacingSize = document.getElementById('tool-spacing-size'); const tSpaceX = document.getElementById('tool-space-x'); const tSpaceY = document.getElementById('tool-space-y');
     const tDelete = document.getElementById('tool-delete');
 
@@ -545,6 +555,7 @@
         logoControls.classList.add('disabled'); tLogoMinus.disabled = tLogoPlus.disabled = true;
         tFont.disabled = tColor.disabled = tSize.disabled = tBold.disabled = tItalic.disabled = true; tBold.classList.remove('active'); tItalic.classList.remove('active');
         alignControls.classList.add('disabled'); tAlignLeft.disabled = tAlignTop.disabled = tAlignCenterY.disabled = tUnlink.disabled = true;
+        labelTextWrap.style.display = 'none';
 
         tDelete.disabled = selectedIds.length === 0;
         if (selectedIds.length === 0) { selInfo.innerText = "Nada seleccionado"; return; }
@@ -555,9 +566,18 @@
         const item = designData.find(i => i.id === selectedIds[0]);
         if (hasLinks) { alignControls.classList.remove('disabled'); tUnlink.disabled = false; }
 
-        if (item.token === 'LOGO_EMPRESA') { selInfo.innerText = "Logotipo"; logoControls.classList.remove('disabled'); tLogoMinus.disabled = tLogoPlus.disabled = false; tLogoSize.value = (item.logo_width || 120) + "px"; } 
-        else { tColor.disabled = false; if (item.type === 'shape') { selInfo.innerText = "Fondo"; tColor.value = item.bg_color || '#cccccc'; } 
-        else { selInfo.innerText = item.type === 'label' ? "Etiqueta" : "Dato Variable"; tFont.disabled = tSize.disabled = tBold.disabled = tItalic.disabled = false; tColor.value = item.color || '#000000'; tSize.value = item.size || 12; tFont.value = item.font || 'Helvetica'; tBold.classList.toggle('active', !!item.bold); tItalic.classList.toggle('active', !!item.italic); } }
+        if (item.token === 'LOGO_EMPRESA') { selInfo.innerText = "Logotipo"; logoControls.classList.remove('disabled'); tLogoMinus.disabled = tLogoPlus.disabled = false; tLogoSize.value = (item.logo_width || 120) + "px"; }
+        else { tColor.disabled = false; if (item.type === 'shape') { selInfo.innerText = "Fondo"; tColor.value = item.bg_color || '#cccccc'; }
+        else {
+            selInfo.innerText = item.type === 'label' ? "Etiqueta" : "Dato Variable";
+            tFont.disabled = tSize.disabled = tBold.disabled = tItalic.disabled = false;
+            tColor.value = item.color || '#000000'; tSize.value = item.size || 12; tFont.value = item.font || 'Helvetica';
+            tBold.classList.toggle('active', !!item.bold); tItalic.classList.toggle('active', !!item.italic);
+            if (item.type === 'label') {
+                labelTextWrap.style.display = 'flex';
+                tLabelText.value = item.text || '';
+            }
+        } }
     }
 
     function pushItemsInsideMargins() { designData.forEach(item => { const size = getEstimatedSize(item); if (item.x < marginSize) item.x = marginSize; if (item.y < marginSize) item.y = marginSize; if (item.x + size.w > BASE_W - marginSize) item.x = BASE_W - marginSize - size.w; if (item.y + size.h > BASE_H - marginSize) item.y = BASE_H - marginSize - size.h; }); }
@@ -565,11 +585,15 @@
     document.getElementById('tool-margin-minus').onclick = () => { if (marginSize > MIN_MARGIN) { marginSize -= 5; document.getElementById('tool-margin-size').value = marginSize + 'px'; pushItemsInsideMargins(); renderFolio(); } };
     tLogoMinus.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.logo_width = Math.max(40, (item.logo_width || 120) - 10); updateToolbar(); renderFolio(); } };
     tLogoPlus.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.logo_width = Math.min(300, (item.logo_width || 120) + 10); updateToolbar(); renderFolio(); } };
-    tFont.onchange = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.font = e.target.value; renderFolio(); } };
-    tColor.oninput = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.type === 'shape' ? item.bg_color = e.target.value : item.color = e.target.value; renderFolio(); } };
-    tSize.onchange = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.size = parseInt(e.target.value, 10); renderFolio(); } };
-    tBold.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.bold = !item.bold; updateToolbar(); renderFolio(); } };
-    tItalic.onclick = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.italic = !item.italic; updateToolbar(); renderFolio(); } };
+    tFont.onchange    = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.font = e.target.value; syncLabelToValue(item); renderFolio(); } };
+    tColor.oninput    = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.type === 'shape' ? item.bg_color = e.target.value : item.color = e.target.value; syncLabelToValue(item); renderFolio(); } };
+    tSize.onchange    = (e) => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.size = parseInt(e.target.value, 10); syncLabelToValue(item); renderFolio(); } };
+    tBold.onclick     = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.bold = !item.bold; syncLabelToValue(item); updateToolbar(); renderFolio(); } };
+    tItalic.onclick   = () => { const item = designData.find(i => i.id === selectedIds[0]); if (item) { item.italic = !item.italic; syncLabelToValue(item); updateToolbar(); renderFolio(); } };
+    tLabelText.oninput = (e) => {
+        const item = designData.find(i => i.id === selectedIds[0]);
+        if (item && item.type === 'label') { item.text = e.target.value; renderFolio(); }
+    };
     tSpacingMinus.onclick = () => { if (spacingMM > 0) { spacingMM = Math.max(0, spacingMM - 1); tSpacingSize.value = spacingMM + 'mm'; } };
     tSpacingPlus.onclick = () => { spacingMM += 1; tSpacingSize.value = spacingMM + 'mm'; };
     tSpacingSize.oninput = () => { const v = parseFloat(tSpacingSize.value); if (!isNaN(v) && v >= 0) spacingMM = v; };
@@ -608,16 +632,67 @@
         this.style.borderColor = isVisible ? '#d8b4fe' : '#9d4edd';
     };
 
-    function addField(token, label) {
-        const newId = Math.random().toString(36).substr(2, 9);
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function _nextY() {
         const usedY = designData.map(i => i.y);
         const startY = usedY.length > 0 ? Math.max(...usedY) + 24 : marginSize + 20;
-        const newItem = { id: newId, type: 'value', token: token, x: marginSize + 20, y: Math.min(startY, BASE_H - marginSize - 30), size: 10, color: '#000000', font: 'Helvetica', bold: false, italic: false };
-        if (token === 'LOGO_EMPRESA') { newItem.logo_width = 120; }
-        designData.push(newItem);
-        selectedIds = [newId];
-        updateToolbar();
-        renderFolio();
+        return Math.min(startY, BASE_H - marginSize - 30);
+    }
+
+    // Propaga tipografía del label a su value vinculado
+    function syncLabelToValue(labelItem) {
+        if (!labelItem.value_id) return;
+        const valueItem = designData.find(i => i.id === labelItem.value_id);
+        if (!valueItem) return;
+        valueItem.font   = labelItem.font;
+        valueItem.size   = labelItem.size;
+        valueItem.bold   = labelItem.bold;
+        valueItem.italic = labelItem.italic;
+        valueItem.color  = labelItem.color;
+    }
+
+    // Tokens sin etiqueta de texto (elementos visuales/tabla)
+    const NO_LABEL_TOKENS = new Set(['LOGO_EMPRESA', 'TABLA_ITEMS', 'TABLA_LINEAS']);
+
+    function addField(token, label) {
+        const y = _nextY();
+        const size = 10;
+
+        // Elementos visuales: solo se inserta el value
+        if (NO_LABEL_TOKENS.has(token)) {
+            const newId = Math.random().toString(36).substr(2, 9);
+            const newItem = { id: newId, type: 'value', token, x: marginSize + 20, y, size,
+                              color: '#000000', font: 'Helvetica', bold: false, italic: false };
+            if (token === 'LOGO_EMPRESA') newItem.logo_width = 120;
+            designData.push(newItem);
+            selectedIds = [newId];
+            updateToolbar(); renderFolio();
+            return;
+        }
+
+        // Par label + value vinculados
+        const labelId  = Math.random().toString(36).substr(2, 9);
+        const valueId  = Math.random().toString(36).substr(2, 9);
+        const groupId  = 'pair_' + Date.now();          // link compartido: mueve ambos juntos
+        const labelText = label + ':';
+        const estimatedLabelW = labelText.length * size * 0.6;
+        const gapPx = 7 * MM_TO_PX;
+
+        const labelItem = {
+            id: labelId, type: 'label', text: labelText, token: '', value_id: valueId,
+            link_x: groupId, link_y: groupId,
+            x: marginSize + 20, y, size, color: '#000000', font: 'Helvetica', bold: false, italic: false
+        };
+        const valueItem = {
+            id: valueId, type: 'value', token, label_id: labelId,
+            link_x: groupId, link_y: groupId,
+            x: marginSize + 20 + estimatedLabelW + gapPx, y, size,
+            color: '#000000', font: 'Helvetica', bold: false, italic: false
+        };
+
+        designData.push(labelItem, valueItem);
+        selectedIds = [labelId, valueId];
+        updateToolbar(); renderFolio();
     }
 
     function addLabel() {
@@ -625,14 +700,12 @@
         const text = input.value.trim();
         if (!text) { input.focus(); return; }
         const newId = Math.random().toString(36).substr(2, 9);
-        const usedY = designData.map(i => i.y);
-        const startY = usedY.length > 0 ? Math.max(...usedY) + 24 : marginSize + 20;
-        const newItem = { id: newId, type: 'label', text: text, token: '', x: marginSize + 20, y: Math.min(startY, BASE_H - marginSize - 30), size: 10, color: '#000000', font: 'Helvetica', bold: false, italic: false };
+        const newItem = { id: newId, type: 'label', text, token: '', x: marginSize + 20, y: _nextY(),
+                          size: 10, color: '#000000', font: 'Helvetica', bold: false, italic: false };
         designData.push(newItem);
         selectedIds = [newId];
         input.value = '';
-        updateToolbar();
-        renderFolio();
+        updateToolbar(); renderFolio();
     }
 
     document.getElementById('custom-label-input').addEventListener('keydown', function(e) {

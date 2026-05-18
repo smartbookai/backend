@@ -27,6 +27,7 @@ class UserProfile(models.Model):
     active_company = models.ForeignKey('Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_for_users', verbose_name="Empresa activa")
     tokens = models.PositiveIntegerField(default=0, verbose_name="Tokens disponibles")
     stripe_email = models.EmailField(null=True, blank=True, verbose_name="Email de Stripe")
+    is_trial = models.BooleanField(default=False, verbose_name="En período de prueba")
 
     def __str__(self):
         return str(self.user.email)
@@ -244,6 +245,20 @@ class PurchaseInvoice(BaseInvoice):
         verbose_name = "Factura recibida"
         verbose_name_plural = "Facturas recibidas"
         unique_together = ('company', 'invoice_number')
+
+
+class InvoiceCounter(models.Model):
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='invoice_counters')
+    year = models.PositiveIntegerField()
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('company', 'year')
+        verbose_name = "Contador de facturas"
+        verbose_name_plural = "Contadores de facturas"
+
+    def __str__(self):
+        return f"{self.company.name} - {self.year}: #{self.last_number}"
 
 
 class InvoiceLine(models.Model):

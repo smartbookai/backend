@@ -242,6 +242,9 @@ STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='')
 # Planes: nombre → price_id (checkout) + product_id (webhook) + tokens
 # price_id:   Stripe Dashboard → Products → click producto → sección Pricing → ID que empieza por price_
 # product_id: Stripe Dashboard → Products → columna ID → empieza por prod_
+TRIAL_PERIOD_DAYS = 7
+TRIAL_TOKENS = 20  # tokens asignados durante el trial (planes con tokens > 0)
+
 STRIPE_PLANS = {
     'starter': {'price_id': 'price_1TR9nqA8fYEQHYCQLblxWePc', 'product_id': 'prod_UPznKPl4ObKhD5', 'tokens': 0},
     'lite':    {'price_id': 'price_1TUqacA8fYEQHYCQA3bkh3eb', 'product_id': 'prod_UToD4Txvc5ZkIQ', 'tokens': 100},

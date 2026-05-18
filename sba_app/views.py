@@ -25,13 +25,32 @@ from django.views.decorators.csrf import csrf_exempt
 
 from sba_app.models import Company, CompanyUser, Supplier, User, UserProfile, SalesInvoice, Client, InvoiceLine, PurchaseInvoice, UserTemplate, \
     Employee, Payroll, AccountingEntryLine, AccountingEntry, PrecontractualAcceptance, SalesDeliveryNote, PurchaseDeliveryNote, DeliveryNoteLine, \
-    PendingRegistration
+    PendingRegistration, InvoiceCounter
 from sba_app.services.openai_service import extract_invoice_data, extract_purchase_invoice_data, extract_payroll_data, \
     generate_accounting_entry_for_purchase, generate_accounting_entry_for_sales, generate_accounting_entry_for_payroll, \
     process_invoice_header_only, extract_single_invoice_from_pdf, extract_single_purchase_invoice_from_pdf
 from sba_app.utils.payroll_pdf_generator import generate_payroll_pdf
 
 logger = logging.getLogger(__name__)
+
+
+@transaction.atomic
+def _get_next_invoice_number(company):
+    year = timezone.now().year
+    counter, _ = InvoiceCounter.objects.select_for_update().get_or_create(
+        company=company, year=year,
+        defaults={'last_number': 0}
+    )
+    counter.last_number += 1
+    counter.save()
+    return f"{year}-{counter.last_number}"
+
+
+def _preview_next_invoice_number(company):
+    year = timezone.now().year
+    counter = InvoiceCounter.objects.filter(company=company, year=year).first()
+    next_num = (counter.last_number if counter else 0) + 1
+    return f"{year}-{next_num}"
 
 
 def truncate_description(description, max_length=250):
@@ -547,6 +566,7 @@ def generar_factura(request):
             'templates_usuario': templates_usuario,
             'default_template_id': default_template_id,
             'default_template_name': default_template_name,
+            'next_invoice_number': _preview_next_invoice_number(company),
         }
         return render(request, 'pages/generar_factura.html', context)
         
@@ -567,7 +587,7 @@ def api_create_manual_invoice(request):
         
         # Obtener datos del formulario
         client_id = request.POST.get('client')
-        invoice_number = request.POST.get('invoice_number')
+        invoice_number_input = request.POST.get('invoice_number', '').strip()
         issue_date_str = request.POST.get('issue_date')
         due_date_str = request.POST.get('due_date')
         payment_method = request.POST.get('payment_method')
@@ -602,30 +622,30 @@ def api_create_manual_invoice(request):
         vat_rates = request.POST.getlist('line_vat_rate[]')
         
         # Validaciones básicas
-        if not client_id or not invoice_number or not issue_date:
+        if not client_id or not invoice_number_input or not issue_date:
             return JsonResponse({
-                "success": False, 
+                "success": False,
                 "message": "Faltan campos obligatorios: cliente, número de factura o fecha de emisión"
             }, status=400)
-        
-        # Verificar que no exista una factura con el mismo número
-        if SalesInvoice.objects.filter(company=company, invoice_number=invoice_number).exists():
-            return JsonResponse({
-                "success": False, 
-                "message": "Ya existe una factura con este número. Por favor, verifica que no esté duplicada."
-            }, status=400)
-        
+
         # Obtener cliente
         try:
             client = Client.objects.get(id=client_id, company=company)
         except Client.DoesNotExist:
             return JsonResponse({
-                "success": False, 
+                "success": False,
                 "message": "El cliente seleccionado no es válido"
             }, status=400)
-        
+
+        # Solo avanzar el contador si el usuario usó el número sugerido
+        suggested = _preview_next_invoice_number(company)
+        if invoice_number_input == suggested:
+            invoice_number = _get_next_invoice_number(company)
+        else:
+            invoice_number = invoice_number_input
+
         from decimal import Decimal
-        
+
         # Crear factura
         invoice = SalesInvoice.objects.create(
             company=company,
@@ -7520,11 +7540,11 @@ def confirmar_email(request, token):
     pending = get_object_or_404(PendingRegistration, token=token, confirmed=False)
 
     if pending.link_used:
-        return render(request, 'pages/auth/confirm_error.html', {'already_used': True}, status=410)
+        return redirect(f"{settings.FRONTEND_URL}/confirm-error.html?reason=used")
 
     if timezone.now() - pending.created_at > timedelta(minutes=30):
         pending.delete()
-        return render(request, 'pages/auth/confirm_error.html', {'expired': True}, status=410)
+        return redirect(f"{settings.FRONTEND_URL}/confirm-error.html?reason=expired")
 
     pending.link_used = True
     pending.save(update_fields=['link_used'])
@@ -7539,6 +7559,7 @@ def confirmar_email(request, token):
                 'email': pending.email,
             },
             line_items=[{'price': pending.price_id, 'quantity': 1}],
+            subscription_data={'trial_period_days': 7},
             success_url=f"{settings.SITE_URL}/bienvenido/",
             cancel_url="http://127.0.0.1:5500/login.html",
         )
@@ -7567,11 +7588,21 @@ _PRODUCT_TOKENS = {p['product_id']: p['tokens'] for p in settings.STRIPE_PLANS.v
 
 def _handle_checkout_completed(session):
     session_id = session['id']
+    payment_status = session['payment_status']
+
+    # 'paid' → pago inmediato normal
+    # 'no_payment_required' → suscripción en período de prueba (trial)
+    if payment_status not in ('paid', 'no_payment_required'):
+        logger.warning('stripe_webhook checkout: payment_status inesperado "%s" en sesión %s — ignorado', payment_status, session_id)
+        return
+
+    is_trial = payment_status == 'no_payment_required'
+
     meta = session['metadata']
     stripe_email = (getattr(meta, 'email', None) or '').strip().lower()
     pending_token = (getattr(meta, 'pending_token', None) or '').strip()
 
-    logger.info('stripe_webhook checkout: sesión=%s email=%s token=%s', session_id, stripe_email, pending_token)
+    logger.info('stripe_webhook checkout: sesión=%s email=%s token=%s trial=%s', session_id, stripe_email, pending_token, is_trial)
 
     if not pending_token:
         logger.warning('stripe_webhook checkout: sin pending_token en sesión %s', session_id)
@@ -7593,7 +7624,13 @@ def _handle_checkout_completed(session):
         logger.warning('stripe_webhook: producto desconocido %s — IDs conocidos: %s', product_id, list(_PRODUCT_TOKENS.keys()))
         return
 
-    logger.info('stripe_webhook checkout: tokens_to_add=%d', tokens_to_add)
+    # Durante el trial se asignan tokens reducidos; starter siempre recibe 0
+    if is_trial:
+        assigned_tokens = settings.TRIAL_TOKENS if tokens_to_add > 0 else 0
+    else:
+        assigned_tokens = tokens_to_add
+
+    logger.info('stripe_webhook checkout: tokens_to_add=%d assigned_tokens=%d is_trial=%s', tokens_to_add, assigned_tokens, is_trial)
 
     try:
         pending = PendingRegistration.objects.get(token=pending_token, confirmed=False)
@@ -7614,13 +7651,14 @@ def _handle_checkout_completed(session):
         logger.info('stripe_webhook checkout: User creado id=%d', user.id)
         UserProfile.objects.filter(user=user).update(
             phone=pending.telefono or None,
-            tokens=tokens_to_add,
+            tokens=assigned_tokens,
             stripe_email=stripe_email,
+            is_trial=is_trial,
         )
         pending.confirmed = True
         pending.save(update_fields=['confirmed'])
 
-    logger.info('stripe_webhook checkout: usuario creado %s con %d tokens', pending.email, tokens_to_add)
+    logger.info('stripe_webhook checkout: usuario creado %s | tokens=%d | trial=%s', pending.email, assigned_tokens, is_trial)
 
 
 def _handle_invoice_paid(invoice):
@@ -7652,9 +7690,17 @@ def _handle_invoice_paid(invoice):
         logger.warning('stripe_webhook invoice.paid: perfil no encontrado para stripe_email %s', stripe_email)
         return
 
-    profile.tokens = profile.tokens + tokens_to_add
-    profile.save(update_fields=['tokens'])
-    logger.info('stripe_webhook invoice.paid: +%d tokens → %s (total: %d)', tokens_to_add, stripe_email, profile.tokens)
+    if profile.is_trial:
+        # Primera factura real tras el trial: reemplazar tokens de prueba por los del plan contratado
+        profile.tokens = tokens_to_add
+        profile.is_trial = False
+        profile.save(update_fields=['tokens', 'is_trial'])
+        logger.info('stripe_webhook invoice.paid: trial finalizado → tokens reemplazados a %d para %s', tokens_to_add, stripe_email)
+    else:
+        # Renovación normal: acumular tokens del nuevo período
+        profile.tokens = profile.tokens + tokens_to_add
+        profile.save(update_fields=['tokens'])
+        logger.info('stripe_webhook invoice.paid: +%d tokens → %s (total: %d)', tokens_to_add, stripe_email, profile.tokens)
 
 
 @csrf_exempt

@@ -69,6 +69,14 @@ def _render_from_template(delivery_note, design_data):
     width, height = A4
     dn_data = get_delivery_note_data(delivery_note)
 
+    # Pre-compute label IDs to hide: labels whose linked value is empty
+    _SKIP_TOKENS = ('TABLA_LINEAS', 'LOGO_EMPRESA')
+    labels_to_skip = set()
+    for it in design_data:
+        if it.get('type') == 'value' and it.get('label_id') and it.get('token') not in _SKIP_TOKENS:
+            if not dn_data.get(it.get('token', ''), ''):
+                labels_to_skip.add(it['label_id'])
+
     # 1. Shapes
     for item in design_data:
         if item.get('type') == 'shape':
@@ -86,7 +94,7 @@ def _render_from_template(delivery_note, design_data):
             try:
                 img = ImageReader(delivery_note.company.logo.path)
                 box_w = item.get('logo_width', 120)
-                box_h = box_w * 0.8  # same bounding box the builder placeholder uses
+                box_h = box_w * 0.8
                 iw, ih = img.getSize()
                 aspect = ih / float(iw)
                 if aspect <= 0.8:
@@ -101,6 +109,23 @@ def _render_from_template(delivery_note, design_data):
             _draw_lines_table(c, delivery_note, x, height - y_web, width - x - 50)
 
         elif item.get('type') in ['label', 'value']:
+            if item.get('type') == 'label':
+                item_id = item.get('id', '')
+                if item_id and item_id in labels_to_skip:
+                    continue
+                # Fallback Y-proximity for templates without explicit links
+                if not item.get('value_id'):
+                    label_y = item.get('y', 0)
+                    nearby = [
+                        it for it in design_data
+                        if it.get('type') == 'value'
+                        and it.get('token')
+                        and it.get('token') not in _SKIP_TOKENS
+                        and abs(it.get('y', 0) - label_y) <= 6
+                    ]
+                    if nearby and all(not dn_data.get(it['token'], '') for it in nearby):
+                        continue
+
             size = item.get('size', 10)
             c.setFillColor(colors.HexColor(item.get('color', '#000000')))
             c.setFont(_rl_font(item.get('font', 'Helvetica'), item.get('bold', False), item.get('italic', False)), size)

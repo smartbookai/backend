@@ -156,7 +156,9 @@
           </div>
           <div class="form-field">
             <label for="invoice_number">Número de Factura *</label>
-            <input type="text" id="invoice_number" name="invoice_number" required placeholder="Ej: F-2024-001" oninput="saveFormData()">
+            <input type="text" id="invoice_number" name="invoice_number" required
+                   value="{{ next_invoice_number }}" placeholder="{{ next_invoice_number }}"
+                   oninput="saveFormData()">
           </div>
           <div class="form-field">
             <label for="issue_date">Fecha de Emisión *</label>
@@ -645,7 +647,7 @@ document.getElementById('invoiceForm').addEventListener('submit', function(e) {
     if (data.success) {
       sessionStorage.removeItem(FORM_KEY);
       alert('Factura generada correctamente: ' + data.invoice_number);
-      window.location.href = '/invoices-sent/';
+      window.location.replace('/invoices-sent/');
     } else {
       alert('Error al generar la factura: ' + data.message);
     }
