@@ -53,6 +53,29 @@ def _preview_next_invoice_number(company):
     return f"{year}-{next_num}"
 
 
+_NO_TOKENS_RESPONSE = {
+    'success': False,
+    'error': 'sin_tokens',
+    'message': (
+        'Has gastado todos los tokens de tu plan de este mes. '
+        'Puedes ampliar tu plan a uno mayor o comprar tokens adicionales para terminar el mes.'
+    ),
+}
+
+
+def _check_tokens(user):
+    """Comprueba si el usuario tiene tokens disponibles (dentro de una transacción atómica).
+    Devuelve (profile, None) si hay tokens, o (None, JsonResponse_402) si no hay.
+    Usa select_for_update para evitar race conditions.
+    """
+    profile, _ = UserProfile.objects.select_for_update().get_or_create(
+        user=user, defaults={'tokens': 0}
+    )
+    if profile.tokens <= 0:
+        return None, JsonResponse(_NO_TOKENS_RESPONSE, status=402)
+    return profile, None
+
+
 def truncate_description(description, max_length=250):
     """
     Trunca una descripción si supera max_length caracteres.
@@ -4698,6 +4721,9 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
     utilizando IA para determinar las cuentas contables apropiadas.
     """
     company = get_current_company(request.user)
+    profile, token_error = _check_tokens(request.user)
+    if token_error:
+        return token_error
 
     print("\n" + "=" * 80)
     print("🔍 GENERANDO ASIENTO CONTABLE PARA FACTURA DE COMPRA")
@@ -4915,14 +4941,18 @@ def generate_entry_for_purchase_invoice(request, invoice_id):
 
         logger.info(f'Asiento {entry.entry_number} generado para {company.name} - Factura {invoice.invoice_number}')
 
+        profile.tokens = max(0, profile.tokens - 1)
+        profile.save(update_fields=['tokens'])
+
         return JsonResponse({
             'success': True,
             'message': f'Asiento contable #{entry.entry_number} generado correctamente',
             'entry_id': entry.id,
-            'entry_number': entry.entry_number,  # ← NUEVO
+            'entry_number': entry.entry_number,
             'debit_total': str(entry.debit_total),
             'credit_total': str(entry.credit_total),
             'ai_reasoning': ai_result.get('reasoning', ''),
+            'tokens_remaining': profile.tokens,
             'accounts_used': {
                 'expense': ai_result['account_expense'],
                 'vat': ai_result['account_vat_input'],
@@ -4957,6 +4987,9 @@ def generate_entry_for_sales_invoice(request, invoice_id):
     utilizando IA para determinar las cuentas contables apropiadas.
     """
     company = get_current_company(request.user)
+    profile, token_error = _check_tokens(request.user)
+    if token_error:
+        return token_error
 
     print("\n" + "=" * 80)
     print("🔍 GENERANDO ASIENTO CONTABLE PARA FACTURA DE VENTA")
@@ -5176,6 +5209,9 @@ def generate_entry_for_sales_invoice(request, invoice_id):
         logger.info(
             f'Asiento {entry.entry_number} generado para {company.name} - Factura venta {invoice.invoice_number}')
 
+        profile.tokens = max(0, profile.tokens - 1)
+        profile.save(update_fields=['tokens'])
+
         return JsonResponse({
             'success': True,
             'message': f'Asiento contable #{entry.entry_number} generado correctamente',
@@ -5184,6 +5220,7 @@ def generate_entry_for_sales_invoice(request, invoice_id):
             'debit_total': str(entry.debit_total),
             'credit_total': str(entry.credit_total),
             'ai_reasoning': ai_result.get('reasoning', ''),
+            'tokens_remaining': profile.tokens,
             'accounts_used': {
                 'customer': ai_result['account_customer'],
                 'income': ai_result['account_income'],
@@ -5218,6 +5255,9 @@ def generate_entry_for_payroll(request, payroll_id):
     utilizando IA para generar descripciones apropiadas.
     """
     company = get_current_company(request.user)
+    profile, token_error = _check_tokens(request.user)
+    if token_error:
+        return token_error
 
     print("\n" + "=" * 80)
     print("🔍 GENERANDO ASIENTO CONTABLE PARA NÓMINA")
@@ -5448,6 +5488,9 @@ def generate_entry_for_payroll(request, payroll_id):
 
         logger.info(f'Asiento {entry.entry_number} generado para nómina de {employee_name}')
 
+        profile.tokens = max(0, profile.tokens - 1)
+        profile.save(update_fields=['tokens'])
+
         return JsonResponse({
             'success': True,
             'message': f'Asiento contable #{entry.entry_number} generado correctamente',
@@ -5456,6 +5499,7 @@ def generate_entry_for_payroll(request, payroll_id):
             'debit_total': str(entry.debit_total),
             'credit_total': str(entry.credit_total),
             'ai_reasoning': ai_result.get('reasoning', ''),
+            'tokens_remaining': profile.tokens,
         })
 
     except ValueError as ve:

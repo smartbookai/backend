@@ -580,7 +580,7 @@ async function generatePayrollEntry(id) {
       let msg = 'Error al generar el asiento contable de la nómina.';
       try {
         const data = await res.json();
-        if (data.error) msg = data.error;
+        msg = data.message || data.error || msg;
       } catch (_) {}
       throw new Error(msg);
     }
