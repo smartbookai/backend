@@ -284,23 +284,12 @@ def anonymous_required(function=None):
 
 
 @anonymous_required
-def login(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
+def login_page(request):
+    return render(request, 'pages/auth/login.html', {'frontend_url': settings.FRONTEND_URL})
 
-        if username and password:
-            user = authenticate(request, username=username, password=password)
-            if user is not None:
-                auth_login(request, user)
-                next_url = request.GET.get('next', 'index')
-                return redirect(next_url)
-            else:
-                messages.error(request, 'username o password invalidos.')
-        else:
-            messages.error(request, 'Por favor complete todos los campos.')
 
-    return render(request, 'pages/auth/login.html')
+def register_page(request):
+    return render(request, 'pages/auth/register.html', {'frontend_url': settings.FRONTEND_URL})
 
 
 @login_required
@@ -502,7 +491,7 @@ def logout_view(request):
     """Logs out the user and redirects to the login page."""
     logout(request)
     messages.success(request, "Ha cerrado sesion correctamente.")
-    return redirect('http://127.0.0.1:5500/login.html')
+    return redirect(settings.LOGIN_URL)
 
 
 @login_required
@@ -7407,7 +7396,7 @@ def api_login(request):
         return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
 
     auth_login(request, user)
-    return JsonResponse({'ok': True, 'redirect': 'http://127.0.0.1:8080/'})
+    return JsonResponse({'ok': True, 'redirect': f"{settings.SITE_URL}/"})
 
 
 @csrf_exempt
@@ -7577,7 +7566,7 @@ def api_google_auth(request):
         return JsonResponse({'action': 'register'}, status=200)
 
     auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-    return JsonResponse({'ok': True, 'redirect': 'http://127.0.0.1:8080/'}, status=200)
+    return JsonResponse({'ok': True, 'redirect': f"{settings.SITE_URL}/"}, status=200)
 
 
 def confirmar_email(request, token):
@@ -7605,7 +7594,7 @@ def confirmar_email(request, token):
             line_items=[{'price': pending.price_id, 'quantity': 1}],
             subscription_data={'trial_period_days': 7},
             success_url=f"{settings.SITE_URL}/bienvenido/",
-            cancel_url="http://127.0.0.1:5500/login.html",
+            cancel_url=f"{settings.SITE_URL}/login/",
         )
         return redirect(checkout_session.url)
     except Exception as exc:
@@ -7614,7 +7603,7 @@ def confirmar_email(request, token):
 
 
 def bienvenido(request):
-    return render(request, 'pages/auth/bienvenido.html')
+    return render(request, 'pages/auth/bienvenido.html', {'site_url': settings.SITE_URL})
 
 
 # ==================== MI PLAN ====================

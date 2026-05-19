@@ -1,303 +1,220 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | SBA</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=2">
-    <link rel="shortcut icon" href="{% static 'images/logo-symbol.svg' %}" type="image/x-icon">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iniciar sesión | SmartBook AI</title>
+  <meta name="description" content="Inicia sesión en SmartBook AI con tu correo y contraseña." />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' https://accounts.google.com {{ frontend_url }}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.pravatar.cc https://lh3.googleusercontent.com {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self' https://accounts.google.com https://www.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self'"
+  />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+  <link rel="icon" type="image/png" href="{{ frontend_url }}/favicon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #5d3085;
+      --accent-dark: #3b1668;
+      --accent-mid: #7c4aad;
+      --white: #ffffff;
+      --gray-50: #f8f7fc;
+      --gray-100: #ededf5;
+      --gray-400: #9b92b0;
+      --gray-700: #3d3552;
+      --gray-900: #111111;
+      --success: #1a7f37;
+      --radius-card: 20px;
+      --radius-input: 10px;
+    }
+
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+
+    .login-root { display: flex; min-height: 100dvh; }
+
+    .login-left {
+      flex: 0 0 52%;
+      background: linear-gradient(145deg, #2d1057 0%, #4a2278 45%, #6b38a0 100%);
+      display: flex; flex-direction: column; padding: 40px 48px; position: relative; overflow: hidden;
+    }
+    .login-left::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 80% 20%, rgba(124,74,173,.4) 0%, transparent 70%),
+                  radial-gradient(ellipse 40% 40% at 20% 80%, rgba(93,48,133,.3) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .login-left-brand { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+    .login-left-brand img { height: 32px; filter: brightness(0) invert(1); }
+    .login-left-body { flex: 1; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 1; padding: 32px 0 0; }
+    .login-left-headline { font-size: clamp(1.6rem, 2.8vw, 2.2rem); font-weight: 800; color: #fff; line-height: 1.18; margin-bottom: 16px; letter-spacing: -.02em; }
+    .login-left-headline em { font-style: normal; color: #c4a0f0; }
+    .login-left-sub { font-size: .97rem; color: rgba(255,255,255,.72); line-height: 1.6; margin-bottom: 36px; max-width: 380px; }
+    .login-features { list-style: none; display: flex; flex-direction: column; gap: 18px; margin-bottom: 40px; }
+    .login-feature { display: flex; align-items: flex-start; gap: 14px; }
+    .login-feature-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; }
+    .login-feature-icon svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .login-feature-text strong { display: block; font-size: .93rem; font-weight: 700; color: #fff; margin-bottom: 2px; }
+    .login-feature-text span { font-size: .83rem; color: rgba(255,255,255,.62); line-height: 1.45; }
+    .login-preview { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.16); border-radius: 14px; padding: 18px 20px; backdrop-filter: blur(6px); margin-bottom: 32px; }
+    .preview-title { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.6); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+    .preview-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .preview-stat { background: rgba(255,255,255,.08); border-radius: 8px; padding: 12px; }
+    .preview-stat-label { font-size: .72rem; color: rgba(255,255,255,.55); margin-bottom: 4px; }
+    .preview-stat-value { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 2px; }
+    .preview-stat-delta { font-size: .7rem; font-weight: 600; }
+    .preview-stat-delta.up { color: #6ee7a0; }
+    .preview-stat-delta.down { color: #f87171; }
+    .login-testimonial { display: flex; align-items: flex-start; gap: 14px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.13); border-radius: 14px; padding: 18px 20px; }
+    .testimonial-avatar { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,.3); }
+    .testimonial-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .testimonial-body blockquote { font-size: .83rem; color: rgba(255,255,255,.82); line-height: 1.55; font-style: italic; margin-bottom: 8px; }
+    .testimonial-author { font-size: .78rem; color: rgba(255,255,255,.55); }
+    .testimonial-author strong { color: rgba(255,255,255,.85); font-style: normal; }
+
+    .login-right { flex: 1; background: var(--gray-50); display: flex; align-items: center; justify-content: center; padding: 48px 32px; }
+    .login-card { background: #fff; border-radius: var(--radius-card); box-shadow: 0 4px 32px rgba(93,48,133,.09), 0 1px 4px rgba(0,0,0,.05); padding: 48px 44px 44px; width: 100%; max-width: 440px; text-align: center; }
+    .login-card-icon { width: 64px; height: 64px; border-radius: 16px; background: var(--gray-50); border: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+    .login-card-icon img { width: 38px; height: 38px; object-fit: contain; }
+    .login-card h1 { font-size: 1.55rem; font-weight: 800; color: var(--gray-900); margin-bottom: 6px; letter-spacing: -.02em; }
+    .login-card-sub { font-size: .9rem; color: var(--gray-400); margin-bottom: 32px; }
+    .login-banner { display: none; background: #eafaf1; border: 1px solid #abefc6; border-radius: 10px; padding: 12px 16px; font-size: .85rem; color: var(--success); font-weight: 500; margin-bottom: 20px; text-align: left; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; text-align: left; }
+    .field-label { display: block; font-size: .82rem; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+    .input-wrap { position: relative; display: flex; align-items: center; }
+    .input-icon { position: absolute; left: 14px; width: 17px; height: 17px; stroke: var(--gray-400); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+    .login-input { width: 100%; height: 46px; padding: 0 44px 0 42px; border: 1.5px solid var(--gray-100); border-radius: var(--radius-input); font-size: .93rem; color: var(--gray-900); background: var(--gray-50); outline: none; transition: border-color 160ms, box-shadow 160ms; }
+    .login-input::placeholder { color: var(--gray-400); }
+    .login-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93,48,133,.12); background: #fff; }
+    .btn-eye { position: absolute; right: 12px; background: none; border: none; padding: 4px; cursor: pointer; color: var(--gray-400); display: flex; align-items: center; transition: color 160ms; }
+    .btn-eye:hover { color: var(--accent); }
+    .btn-eye svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .login-meta { display: flex; align-items: center; justify-content: space-between; font-size: .83rem; margin-top: -4px; }
+    .login-remember { display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--gray-700); font-size: .83rem; font-weight: 500; }
+    .login-remember input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .login-forgot { color: var(--accent); text-decoration: none; font-weight: 600; font-size: .83rem; }
+    .login-forgot:hover { text-decoration: underline; }
+    .btn-login-submit { width: 100%; height: 48px; border: none; border-radius: 999px; background: linear-gradient(135deg, #5d3085 0%, #7c4aad 100%); color: #fff; font-size: .97rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: box-shadow 180ms, transform 120ms, opacity 160ms; box-shadow: 0 4px 18px rgba(93,48,133,.30); margin-top: 4px; }
+    .btn-login-submit:hover:not(:disabled) { box-shadow: 0 8px 28px rgba(93,48,133,.42); transform: translateY(-1px); }
+    .btn-login-submit:disabled { opacity: .58; cursor: not-allowed; transform: none; }
+    .btn-login-submit svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .login-error { display: none; font-size: .83rem; color: #c0392b; background: #fff0ee; border: 1px solid #f5c6c2; border-radius: 8px; padding: 10px 14px; margin-top: -4px; text-align: left; }
+    .login-divider { display: flex; align-items: center; gap: 12px; font-size: .8rem; color: var(--gray-400); margin: 4px 0; }
+    .login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: var(--gray-100); }
+    .social-buttons { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .btn-social { height: 44px; border: 1.5px solid var(--gray-100); border-radius: var(--radius-input); background: #fff; color: var(--gray-700); font-size: .85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: border-color 160ms, background 160ms; }
+    .btn-social:hover { border-color: rgba(93,48,133,.3); background: var(--gray-50); }
+    .btn-social svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .login-register-link { font-size: .85rem; color: var(--gray-400); text-align: center; margin-top: 4px; }
+    .login-register-link a { color: var(--accent); font-weight: 700; text-decoration: none; }
+    .login-register-link a:hover { text-decoration: underline; }
+
+    @media (max-width: 860px) { .login-left { display: none; } .login-right { background: #fff; } .login-card { box-shadow: none; padding: 32px 24px; } }
+    @media (max-width: 480px) { .login-right { padding: 24px 16px; align-items: flex-start; padding-top: 48px; } }
+  </style>
 </head>
 <body>
+  <div class="login-root">
 
-<img src="{% static 'images/sba_login_head_logo.jpeg' %}" alt="SBA Logo" class="corner-logo">
-
-<div class="auth-shell">
-    <img src="{% static 'images/sba_login_text_logo.jpeg' %}" alt="SBA - SmartBook AI" class="auth-logo-img">
-
-    <div class="text-center mb-3" id="resetPwdContent" style="display: none;">
-        <h5 class="mb-3">Reset your password</h5>
-        <p id="reset-p">To reset your password enter the email you used to create your account. We will send you a code so you can recover your account.</p>
-    </div>
-    <div class="auth-card-wrapper">
-        <div class="login-container">
-            <!-- SVG Icons Definition -->
-            <svg xmlns="http://www.w3.org/2000/svg" class="d-none">
-                <symbol id="check-circle-fill" viewBox="0 0 16 16">
-                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
-                </symbol>
-                <symbol id="info-fill" viewBox="0 0 16 16">
-                    <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
-                </symbol>
-                <symbol id="exclamation-triangle-fill" viewBox="0 0 16 16">
-                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
-                </symbol>
-            </svg>
-
-            <!-- Flash Messages -->
-            {% if messages %}
-                {% for message in messages %}
-                    {% if message.tags == 'success' %}
-                    <div class="alert alert-success d-flex align-items-center alert-dismissible fade show justify-content-between" role="alert">
-                        <div class="d-flex align-items-center gap-1">
-                            <svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:">
-                                <use xlink:href="#check-circle-fill"/>
-                            </svg>
-                            <div>{{ message }}</div>
-                        </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    {% elif message.tags == 'error' %}
-                    <div class="alert alert-danger d-flex align-items-center alert-dismissible fade show justify-content-between" role="alert">
-                        <div class="d-flex align-items-center gap-1">
-                            <svg class="bi flex-shrink-0 me-2" role="img" aria-label="Danger:">
-                                <use xlink:href="#exclamation-triangle-fill"/>
-                            </svg>
-                            <div>{{ message }}</div>
-                        </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-
-            <!-- Login Form -->
-            <form method="POST" class="px-5" id="loginForm">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="login">
-                <div class="mb-3 text-start">
-                    <label for="username" class="form-label">Username</label>
-                    <input type="text" class="form-control" id="username" name="username"
-                           placeholder="Ingrese su email" required>
-                </div>
-                <div class="mb-3 text-start">
-                    <label for="password" class="form-label">Password</label>
-                    <input type="password" class="form-control" id="password" name="password"
-                           placeholder="Ingrese su password" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 mt-2">Login</button>
-
-                <!--<div class="text-center mt-3">
-                    <a href="#" id="forgot-pwd" class="text-decoration-none">Forgot password?</a>
-                </div>-->
-            </form>
-
-            <!-- Reset Password Email Form -->
-            <form method="POST" class="px-5 d-none" id="resetPwdForm">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="reset_request">
-                <div class="mb-3 text-start">
-                    <label for="email" class="form-label">Email address</label>
-                    <input type="email" class="form-control" id="email" name="email"
-                           placeholder="Enter your email" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 mt-2">Send code</button>
-                <div class="text-center mt-3">
-                    <a href="#" id="back-to-login" class="text-decoration-none">Back to login</a>
-                </div>
-            </form>
-
-            <!-- Verification Code Form -->
-            <form method="POST" class="px-5 d-none" id="sendCodeForm">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="verify_code">
-                <div class="mb-3 text-start">
-                    <label for="code" class="form-label">Verification Code</label>
-                    <input type="text" class="form-control" id="code" name="code"
-                           placeholder="Enter the code sent to your email" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 mt-2">Verify Code</button>
-            </form>
-
-            <!-- New Password Form -->
-            <form method="POST" class="px-5 d-none" id="newPwdForm">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="new_password">
-                <div class="mb-3 text-start">
-                    <label for="new_pwd" class="form-label">New password</label>
-                    <input type="password" class="form-control" id="new_pwd" name="new_pwd"
-                           placeholder="Enter your new password" required>
-                </div>
-                <div class="mb-3 text-start">
-                    <label for="repeat_new_pwd" class="form-label">Confirm new password</label>
-                    <input type="password" class="form-control" id="repeat_new_pwd" name="repeat_new_pwd"
-                           placeholder="Repeat your new password" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 mt-2">Save new password</button>
-            </form>
+    <aside class="login-left" aria-hidden="true">
+      <div class="login-left-brand">
+        <img src="{{ frontend_url }}/logo.png" alt="SmartBook AI" />
+      </div>
+      <div class="login-left-body">
+        <h2 class="login-left-headline">Tu gestión contable,<br /><em>más simple y poderosa</em></h2>
+        <p class="login-left-sub">Automatiza facturas, controla tu negocio<br />y toma decisiones con datos reales.</p>
+        <ul class="login-features">
+          <li class="login-feature">
+            <div class="login-feature-icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+            <div class="login-feature-text"><strong>Ahorra tiempo</strong><span>Automatiza tareas y olvídate del papeleo.</span></div>
+          </li>
+          <li class="login-feature">
+            <div class="login-feature-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+            <div class="login-feature-text"><strong>Todo bajo control</strong><span>Información clara y actualizada al instante.</span></div>
+          </li>
+          <li class="login-feature">
+            <div class="login-feature-icon"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+            <div class="login-feature-text"><strong>Decisiones inteligentes</strong><span>Datos y reportes que impulsan tu negocio.</span></div>
+          </li>
+        </ul>
+        <div class="login-preview" role="presentation">
+          <p class="preview-title">Resumen del mes</p>
+          <div class="preview-stats">
+            <div class="preview-stat"><p class="preview-stat-label">Ingresos</p><p class="preview-stat-value">25.430 €</p><p class="preview-stat-delta up">▲ 12.5%</p></div>
+            <div class="preview-stat"><p class="preview-stat-label">Gastos</p><p class="preview-stat-value">18.250 €</p><p class="preview-stat-delta down">▼ 4.3%</p></div>
+            <div class="preview-stat"><p class="preview-stat-label">Resultado</p><p class="preview-stat-value">7.180 €</p><p class="preview-stat-delta up">▲ 8.1%</p></div>
+          </div>
         </div>
-    </div>
-</div>
+        <div class="login-testimonial">
+          <div class="testimonial-avatar"><img src="https://i.pravatar.cc/88?img=5" alt="María González" width="44" height="44" /></div>
+          <div class="testimonial-body">
+            <blockquote>"Desde que usamos SBA, tenemos el control total de nuestra contabilidad y ahorramos horas cada semana."</blockquote>
+            <p class="testimonial-author"><strong>María González</strong> — CEO, Greening Group SA</p>
+          </div>
+        </div>
+      </div>
+    </aside>
 
-<script>
-$(document).ready(function() {
-    // Hide all forms except login
-    function hideAllForms() {
-        $('#loginForm, #resetPwdForm, #sendCodeForm, #newPwdForm').addClass('d-none');
-        $('#resetPwdContent').hide();
-    }
+    <main class="login-right">
+      <div class="login-card">
+        <div class="login-card-icon" aria-hidden="true">
+          <img src="{{ frontend_url }}/favicon.png" alt="" />
+        </div>
+        <h1>¡Bienvenido de nuevo!</h1>
+        <p class="login-card-sub">Accede a tu cuenta para continuar</p>
+        <div id="login-banner" class="login-banner" role="alert">
+          Cuenta activada correctamente. Ya puedes iniciar sesión.
+        </div>
+        <form id="form-login" class="login-form" novalidate>
+          <div>
+            <label class="field-label" for="login-email">Correo electrónico</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
+              <input id="login-email" class="login-input" type="email" placeholder="tu@email.com" autocomplete="email" maxlength="160" required />
+            </div>
+          </div>
+          <div>
+            <label class="field-label" for="login-password">Contraseña</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input id="login-password" class="login-input" type="password" placeholder="••••••••" autocomplete="current-password" minlength="8" required />
+              <button type="button" class="btn-eye" id="btn-eye" aria-label="Mostrar contraseña">
+                <svg id="icon-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="login-meta">
+            <label class="login-remember"><input type="checkbox" id="login-remember" name="recordarme" /> Recordarme</label>
+            <a href="#" class="login-forgot">¿Olvidaste tu contraseña?</a>
+          </div>
+          <p id="login-error" class="login-error" role="alert"></p>
+          <button type="submit" class="btn-login-submit" id="btn-login-submit">
+            <span id="btn-login-label">Iniciar sesión</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+          <div class="login-divider">o continúa con</div>
+          <div class="social-buttons">
+            <button type="button" id="btn-google" class="btn-social" aria-label="Continuar con Google">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Continuar con Google
+            </button>
+          </div>
+          <p class="login-register-link">¿No tienes cuenta? <a href="{{ frontend_url }}/pricing.html">Regístrate aquí</a></p>
+        </form>
+      </div>
+    </main>
 
-    // Show specific form
-    function showForm(formId, message = '') {
-        hideAllForms();
-        $(formId).removeClass('d-none');
-        if (message) {
-            $('#resetPwdContent').show();
-            $('#reset-p').html(message);
-        }
-    }
+  </div>
 
-    // Forgot password link
-    $('#forgot-pwd').click(function(e) {
-        e.preventDefault();
-        showForm('#resetPwdForm', 'To reset your password enter the email you used to create your account. We will send you a code so you can recover your account.');
-    });
-
-    // Back to login link
-    $('#back-to-login').click(function(e) {
-        e.preventDefault();
-        showForm('#loginForm');
-    });
-
-    // Form submissions
-    $('form').on('submit', function(e) {
-        const formId = $(this).attr('id');
-
-        // Extra validation for new password
-        if (formId === 'newPwdForm') {
-            const newPwd = $('#new_pwd').val();
-            const repeatPwd = $('#repeat_new_pwd').val();
-
-            if (newPwd !== repeatPwd) {
-                e.preventDefault();
-                alert('Passwords Incorrecta!');
-                return false;
-            }
-        }
-
-        {% if form_status == 'code_sent' %}
-            showForm('#sendCodeForm', 'Enter the code we sent you via email.');
-        {% elif form_status == 'code_verified' %}
-            showForm('#newPwdForm', 'Enter a new password.');
-        {% endif %}
-    });
-});
-</script>
-
-<style>
-    .hover-shadow:hover {
-        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
-    }
-
-    .transition {
-        transition: all 0.2s ease-in-out;
-    }
-
-    /* Auth layout */
-    body {
-        margin: 0;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #ffffff;
-        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    }
-
-    .corner-logo {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        width: 170px;
-        height: auto;
-    }
-
-    .auth-shell {
-        text-align: center;
-    }
-
-    @media (max-width: 768px) {
-        .corner-logo {
-            width: 80px;
-            top: 15px;
-            left: 15px;
-        }
-    }
-
-    @media (max-width: 480px) {
-        .corner-logo {
-            position: static;
-            display: block;
-            margin: 0 auto 20px;
-            width: 100px;
-        }
-    }
-
-    .auth-logo-img {
-        max-width: 200px;
-        height: auto;
-        margin-bottom: -16px;
-    }
-
-    .auth-card-wrapper {
-        display: flex;
-        justify-content: center;
-    }
-
-    .login-container {
-        background: #ffffff;
-        border: none;
-        box-shadow: none;
-        padding: 24px 0 20px;
-        width: 360px;
-        max-width: 100%;
-    }
-
-    .login-container form {
-        padding: 0 24px;
-    }
-
-    .login-container .alert {
-        margin: 0 24px 12px 24px;
-        text-align: left;
-    }
-
-    .form-control {
-        border-radius: 0;
-        box-shadow: none;
-    }
-
-    .form-control:focus {
-        border-color: #62328A;
-        box-shadow: 0 0 0 1px rgba(98,50,138,0.2);
-    }
-
-    .btn-primary {
-        background-color: #111111;
-        border-color: #111111;
-        border-radius: 0;
-        font-weight: 500;
-    }
-
-    .btn-primary:hover,
-    .btn-primary:focus {
-        background-color: #000000;
-        border-color: #000000;
-    }
-
-    @media (max-width: 480px) {
-        .login-container {
-            width: 100%;
-            margin: 0 16px;
-        }
-    }
-
-</style>
-
+  <script>window.__SBA_FRONTEND = "{{ frontend_url }}";</script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="{{ frontend_url }}/main.js" defer></script>
 </body>
 </html>

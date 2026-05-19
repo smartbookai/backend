@@ -56,13 +56,25 @@ MIDDLEWARE = [
     "rollbar.contrib.django.middleware.RollbarNotifierMiddleware",
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:5500",
-    "http://localhost:5500"
-]
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://127.0.0.1:5500", "http://localhost:5500"],
+)
 CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False
+
+# ── Seguridad HTTPS ────────────────────────────────────────────────────────
+if IS_PRODUCTION:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000          # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+else:
+    SESSION_COOKIE_SECURE = False
 
 ROOT_URLCONF = "sba.urls"
 
@@ -229,7 +241,7 @@ CELERY_RESULT_EXPIRES = 3 * 24 * 3600   # 3 days
 SITE_URL = env("SITE_URL")           # URL base de Django, ej: http://localhost:8080
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5500")  # URL del frontend estático
 
-LOGIN_URL = 'http://127.0.0.1:5500/login.html'
+LOGIN_URL = f"{SITE_URL}/login/"
 LOGIN_REDIRECT_URL = 'index'
 
 GOOGLE_CLIENT_ID = '777000793019-pi4b3ijo5jcn2l79brbv9d0f3a4lg59s.apps.googleusercontent.com'

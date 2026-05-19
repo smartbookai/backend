@@ -8,7 +8,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # path('login/', views.login, name="login"),  # login handled by landing page
+    path('login/', views.login_page, name='login_page'),
+    path('register/', views.register_page, name='register_page'),
     path('bienvenido/', views.bienvenido, name='bienvenido'),
     path('', views.index, name="index"),
     path('logout/', views.logout_view, name='logout'),
