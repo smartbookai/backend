@@ -143,6 +143,7 @@ body {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #d4bfec transparent;
 }
@@ -1505,10 +1506,7 @@ a, input, select, button {
     margin-left: 18rem;
     padding: 2rem 3rem;
   }
-  /* Aumenta la altura de cada item y el espacio superior del listado para ocupar más vertical */
   .sidebar nav { padding-top: 0.5rem; }
-  .sidebar .sidebar-link { padding: 1.5rem 1.25rem; font-size: 18px; }
-  .sidebar .sidebar-link svg { font-size: 1.35rem; }
   .grid {
     grid-template-columns: repeat(4, 1fr);
     gap: 2rem;

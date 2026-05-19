@@ -7391,11 +7391,25 @@ def api_login(request):
     if not email or not password:
         return JsonResponse({'error': 'Email y contraseña son obligatorios.'}, status=400)
 
-    user = authenticate(request, username=email, password=password)
+    user_obj = (
+        User.objects.filter(email__iexact=email).first()
+        or User.objects.filter(username__iexact=email).first()
+    )
+    logger.info('api_login: email=%s user_found=%s', email, user_obj.username if user_obj else None)
+
+    if user_obj is None:
+        logger.warning('api_login: usuario no encontrado para email=%s', email)
+        return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
+
+    user = authenticate(request, username=user_obj.username, password=password)
+    logger.info('api_login: authenticate resultado=%s is_active=%s', user, getattr(user_obj, 'is_active', '?'))
+
     if user is None:
+        logger.warning('api_login: contraseña incorrecta para username=%s', user_obj.username)
         return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
 
     auth_login(request, user)
+    logger.info('api_login: login exitoso para user_id=%s', user.id)
     return JsonResponse({'ok': True, 'redirect': f"{settings.SITE_URL}/"})
 
 
