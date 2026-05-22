@@ -14,14 +14,14 @@
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
   <meta name="sba-frontend" content="{{ frontend_url }}" />
   <meta name="sba-api" content="{{ site_url }}" />
-  <link rel="icon" type="image/png" href="{{ frontend_url }}/favicon.png" />
-  <link rel="stylesheet" href="{{ frontend_url }}/styles.css?v=20260506-1" />
+  <link rel="icon" type="image/png" href="{{ frontend_url }}/assets/favicon.png" />
+  <link rel="stylesheet" href="{{ frontend_url }}/styles.css?v=20260521-3" />
 </head>
 <body class="auth-page">
   <header class="navbar" id="navbar">
     <div class="container nav-inner">
       <a href="{{ frontend_url }}/index.html" class="logo" aria-label="SmartBook AI - Inicio">
-        <img src="{{ frontend_url }}/logo.png" alt="SmartBook AI" class="logo-img" height="36" />
+        <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" class="logo-img" height="36" />
       </a>
       <nav class="nav-links" aria-label="Enlaces principales">
         <span class="nav-pill" aria-hidden="true"></span>
@@ -76,8 +76,8 @@
             </div>
           </div>
 
-          <p id="registro-error" class="registro-error" role="alert"></p>
-          <button type="submit" class="btn btn-primary auth-submit">Registrarme gratis</button>
+          <p id="registro-error" class="registro-error" data-form-feedback role="alert"></p>
+          <button type="submit" class="btn btn-primary auth-submit auth-form-submit"><span>Registrarme gratis</span></button>
           <p class="auth-switch">¿Ya tienes cuenta? <a href="/login/">Inicia sesión</a></p>
         </form>
       </div>
@@ -87,7 +87,7 @@
   <footer class="site-footer">
     <div class="container footer-inner">
       <a href="{{ frontend_url }}/index.html" class="logo" aria-label="SmartBook AI">
-        <img src="{{ frontend_url }}/logo.png" alt="SmartBook AI" class="logo-img logo-footer" height="28" />
+        <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" class="logo-img logo-footer" height="28" />
       </a>
       <nav aria-label="Enlaces footer">
         <a href="{{ frontend_url }}/privacy-policy.html">Política de Privacidad</a>
@@ -100,6 +100,6 @@
     </div>
   </footer>
 
-  <script src="{{ frontend_url }}/main.js?v=20260520" defer></script>
+  <script src="{{ frontend_url }}/main.js?v=20260521-2" defer></script>
 </body>
 </html>

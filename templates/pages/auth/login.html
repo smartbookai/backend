@@ -14,7 +14,7 @@
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
   <meta name="sba-frontend" content="{{ frontend_url }}" />
   <meta name="sba-api" content="{{ site_url }}" />
-  <link rel="icon" type="image/png" href="{{ frontend_url }}/favicon.png" />
+  <link rel="icon" type="image/png" href="{{ frontend_url }}/assets/favicon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -122,7 +122,7 @@
 
     <aside class="login-left" aria-hidden="true">
       <div class="login-left-brand">
-        <img src="{{ frontend_url }}/logo.png" alt="SmartBook AI" />
+        <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" />
       </div>
       <div class="login-left-body">
         <h2 class="login-left-headline">Tu gestión contable,<br /><em>más simple y poderosa</em></h2>
@@ -162,7 +162,7 @@
     <main class="login-right">
       <div class="login-card">
         <div class="login-card-icon" aria-hidden="true">
-          <img src="{{ frontend_url }}/favicon.png" alt="" />
+          <img src="{{ frontend_url }}/assets/favicon.png" alt="" />
         </div>
         <h1>¡Bienvenido de nuevo!</h1>
         <p class="login-card-sub">Accede a tu cuenta para continuar</p>
@@ -191,7 +191,7 @@
             <label class="login-remember"><input type="checkbox" id="login-remember" name="recordarme" /> Recordarme</label>
             <a href="#" class="login-forgot">¿Olvidaste tu contraseña?</a>
           </div>
-          <p id="login-error" class="login-error" role="alert"></p>
+          <p id="login-error" class="login-error" data-form-feedback role="alert"></p>
           <button type="submit" class="btn-login-submit" id="btn-login-submit">
             <span id="btn-login-label">Iniciar sesión</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -208,7 +208,7 @@
               Continuar con Google
             </button>
           </div>
-          <p class="login-register-link">¿No tienes cuenta? <a href="{{ frontend_url }}/pricing.html">Regístrate aquí</a></p>
+          <p class="login-register-link">¿No tienes cuenta? <a href="/register/">Regístrate aquí</a></p>
         </form>
       </div>
     </main>
@@ -216,6 +216,6 @@
   </div>
 
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <script src="{{ frontend_url }}/main.js?v=20260520" defer></script>
+  <script src="{{ frontend_url }}/main.js?v=20260521-2" defer></script>
 </body>
 </html>

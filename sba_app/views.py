@@ -293,17 +293,19 @@ def _site_url(request):
 def login_page(request):
     if request.user.is_authenticated:
         return redirect('index')
-    next_url = request.GET.get('next', '')
-    target = f"{settings.FRONTEND_URL}/login.html"
-    if next_url:
-        target += f"?next={next_url}"
-    return redirect(target)
+    return render(request, 'pages/auth/login.html', {
+        'frontend_url': settings.FRONTEND_URL,
+        'site_url': _site_url(request),
+    })
 
 
 def register_page(request):
     if request.user.is_authenticated:
         return redirect('index')
-    return redirect(f"{settings.FRONTEND_URL}/register.html")
+    return render(request, 'pages/auth/register.html', {
+        'frontend_url': settings.FRONTEND_URL,
+        'site_url': _site_url(request),
+    })
 
 
 @login_required
