@@ -1,8 +1,6 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
 from sba_app import views
-from django.conf import settings
-from django.conf.urls.static import static
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -139,9 +137,16 @@ urlpatterns = [
     path('api/auth/google/', views.api_google_auth, name='api_google_auth'),
     path('confirmar-email/<uuid:token>/', views.confirmar_email, name='confirmar_email'),
     path('mi-plan/', views.mi_plan, name='mi_plan'),
+    path('planes/', views.planes, name='planes'),
+    path('planes/cambiar/', views.cambiar_plan, name='cambiar_plan'),
+    path('mi-plan/cancelar/', views.cancelar_plan, name='cancelar_plan'),
 ]
 
 if settings.DEBUG:
-
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+    # Sirve los archivos del frontend (SBA-PAGE) como fallback en local
+    if settings.FRONTEND_DIR:
+        from django.views.static import serve
+        urlpatterns += [re_path(r'^(?P<path>.*)$', serve, {'document_root': settings.FRONTEND_DIR, 'show_indexes': False})]

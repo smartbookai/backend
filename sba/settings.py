@@ -71,6 +71,7 @@ if IS_PRODUCTION:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    CSRF_TRUSTED_ORIGINS = ['https://app.smartbookai.es']
 else:
     SESSION_COOKIE_SECURE = False
 
@@ -238,6 +239,7 @@ CELERY_RESULT_EXPIRES = 3 * 24 * 3600   # 3 days
 
 SITE_URL = env("SITE_URL")           # URL base de Django, ej: http://localhost:8080
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5500")  # URL del frontend estático
+FRONTEND_DIR = env("FRONTEND_DIR", default="")   # Solo necesario en local (DEBUG=True)
 
 LOGIN_URL = f"{SITE_URL}/login/"
 LOGIN_REDIRECT_URL = 'index'

@@ -7,3 +7,5 @@ venv
 .idea/
 sba_app/migrations/
 sba_app/media/
+.env.production
+.env.production

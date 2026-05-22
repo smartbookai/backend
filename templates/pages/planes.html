@@ -1,0 +1,254 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Planes | SBA{% endblock %}
+
+{% block extra_head %}
+<style>
+  .planes-page { max-width: 1100px; margin: 0 auto; padding: 32px 16px 80px; }
+  .planes-page-title { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .planes-page-sub { font-size: 14px; color: #6B7280; margin-bottom: 36px; }
+
+  .planes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+
+  .plan-card {
+    background: #fff;
+    border: 1.5px solid #ede8f5;
+    border-radius: 16px;
+    padding: 28px 22px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: box-shadow .2s, transform .15s;
+  }
+  .plan-card:hover { box-shadow: 0 8px 28px rgba(98,50,138,.13); transform: translateY(-2px); }
+
+  .plan-card.featured {
+    border-color: #7b3fa8;
+    box-shadow: 0 4px 20px rgba(98,50,138,.18);
+  }
+  .plan-card.current-plan {
+    border-color: #62328A;
+    background: #faf8ff;
+  }
+
+  .plan-featured-badge {
+    position: absolute;
+    top: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #7b3fa8, #62328A);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 14px;
+    border-radius: 999px;
+    letter-spacing: .4px;
+    white-space: nowrap;
+  }
+
+  .plan-current-badge {
+    position: absolute;
+    top: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #e7f3e8;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 14px;
+    border-radius: 999px;
+    letter-spacing: .4px;
+    white-space: nowrap;
+  }
+
+  .plan-card-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: #3d2558;
+    margin-bottom: 6px;
+  }
+  .plan-card-volume {
+    font-size: 12px;
+    color: #9b92b0;
+    margin-bottom: 18px;
+    min-height: 32px;
+  }
+
+  .plan-card-price {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    margin-bottom: 20px;
+  }
+  .plan-price-amount {
+    font-size: 32px;
+    font-weight: 900;
+    color: #3d2558;
+    line-height: 1;
+  }
+  .plan-price-currency {
+    font-size: 16px;
+    font-weight: 600;
+    color: #9b92b0;
+  }
+  .plan-price-period {
+    font-size: 12px;
+    color: #9b92b0;
+    margin-left: 2px;
+  }
+
+  .plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    flex: 1;
+  }
+  .plan-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.4;
+  }
+  .plan-features li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7b3fa8;
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  .plan-tokens-note {
+    font-size: 12px;
+    color: #7b3fa8;
+    font-weight: 600;
+    background: #f3edfb;
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .btn-select-plan {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 10px 0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: box-shadow .2s, transform .15s, background .15s;
+    border: none;
+  }
+  .btn-select-plan.active {
+    background: linear-gradient(135deg, #7b3fa8 0%, #62328A 100%);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(98,50,138,.28);
+  }
+  .btn-select-plan.active:hover { box-shadow: 0 8px 22px rgba(98,50,138,.38); transform: translateY(-1px); color: #fff; text-decoration: none; }
+  .btn-select-plan.disabled {
+    background: #e7f3e8;
+    color: #166534;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .planes-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #7b3fa8;
+    text-decoration: none;
+    margin-bottom: 24px;
+    font-weight: 500;
+  }
+  .planes-back-link:hover { color: #62328A; text-decoration: underline; }
+
+  @media (max-width: 768px) {
+    .planes-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 480px) {
+    .planes-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="planes-page">
+  <a href="{% url 'mi_plan' %}" class="planes-back-link">
+    <i class="bi bi-arrow-left"></i> Volver a mi plan
+  </a>
+
+  <h2 class="planes-page-title">Elige tu plan</h2>
+  <p class="planes-page-sub">Compara todos los planes y elige el que mejor se adapta a tu negocio.</p>
+
+  <div class="planes-grid">
+    {% for plan in plans %}
+    <div class="plan-card {% if plan.featured %}featured{% endif %} {% if plan.current %}current-plan{% endif %}">
+
+      {% if plan.current %}
+        <span class="plan-current-badge"><i class="bi bi-check-circle-fill"></i> Tu plan actual</span>
+      {% elif plan.featured %}
+        <span class="plan-featured-badge"><i class="bi bi-star-fill"></i> Más popular</span>
+      {% endif %}
+
+      <p class="plan-card-name">{{ plan.label }}</p>
+      <p class="plan-card-volume">{{ plan.volume }}</p>
+
+      <div class="plan-card-price">
+        <span class="plan-price-amount">{{ plan.price }}</span>
+        <span class="plan-price-currency">€</span>
+        <span class="plan-price-period">/ mes</span>
+      </div>
+
+      {% if plan.tokens > 0 %}
+      <div class="plan-tokens-note">
+        <i class="bi bi-cpu"></i> {{ plan.tokens }} tokens de IA incluidos
+      </div>
+      {% else %}
+      <div class="plan-tokens-note" style="color:#6B7280;background:#f3f4f6;">
+        Sin tokens de IA
+      </div>
+      {% endif %}
+
+      <ul class="plan-features">
+        {% for f in plan.features %}
+        <li>{{ f }}</li>
+        {% endfor %}
+      </ul>
+
+      {% if plan.current %}
+        <span class="btn-select-plan disabled">
+          <i class="bi bi-check2"></i> Plan activo
+        </span>
+      {% else %}
+        <form method="post" action="{% url 'cambiar_plan' %}">
+          {% csrf_token %}
+          <input type="hidden" name="plan" value="{{ plan.key }}">
+          <button type="submit" class="btn-select-plan active">
+            Cambiar a {{ plan.label }}
+          </button>
+        </form>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+  </div>
+
+  <p style="font-size:12px;color:#9b92b0;text-align:center;margin-top:32px;">
+    Todos los precios sin IVA. Puedes cancelar o cambiar tu plan en cualquier momento.
+  </p>
+</div>
+{% endblock %}

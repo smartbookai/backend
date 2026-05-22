@@ -13,6 +13,7 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
   <meta name="sba-frontend" content="{{ frontend_url }}" />
+  <meta name="sba-api" content="{{ site_url }}" />
   <link rel="icon" type="image/png" href="{{ frontend_url }}/favicon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -215,6 +216,6 @@
   </div>
 
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <script src="{{ frontend_url }}/main.js" defer></script>
+  <script src="{{ frontend_url }}/main.js?v=20260520" defer></script>
 </body>
 </html>

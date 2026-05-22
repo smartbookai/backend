@@ -283,13 +283,27 @@ def anonymous_required(function=None):
     return actual_decorator
 
 
+def _site_url(request):
+    if settings.DEBUG:
+        return f"{request.scheme}://{request.get_host()}"
+    return settings.SITE_URL
+
+
 @anonymous_required
 def login_page(request):
-    return render(request, 'pages/auth/login.html', {'frontend_url': settings.FRONTEND_URL})
+    if request.user.is_authenticated:
+        return redirect('index')
+    next_url = request.GET.get('next', '')
+    target = f"{settings.FRONTEND_URL}/login.html"
+    if next_url:
+        target += f"?next={next_url}"
+    return redirect(target)
 
 
 def register_page(request):
-    return render(request, 'pages/auth/register.html', {'frontend_url': settings.FRONTEND_URL})
+    if request.user.is_authenticated:
+        return redirect('index')
+    return redirect(f"{settings.FRONTEND_URL}/register.html")
 
 
 @login_required
@@ -7401,11 +7415,13 @@ def api_login(request):
         logger.warning('api_login: usuario no encontrado para email=%s', email)
         return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
 
+    logger.warning('api_login: user_obj=%s is_active=%s check_password=%s',
+                   user_obj.username, user_obj.is_active, user_obj.check_password(password))
+
     user = authenticate(request, username=user_obj.username, password=password)
-    logger.info('api_login: authenticate resultado=%s is_active=%s', user, getattr(user_obj, 'is_active', '?'))
 
     if user is None:
-        logger.warning('api_login: contraseña incorrecta para username=%s', user_obj.username)
+        logger.warning('api_login: authenticate devolvio None para username=%s', user_obj.username)
         return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
 
     auth_login(request, user)
@@ -7622,15 +7638,110 @@ def bienvenido(request):
 
 # ==================== MI PLAN ====================
 
+_PLAN_INFO = {
+    'starter': {
+        'label': 'Starter', 'price': '9,99', 'tokens': 0,
+        'volume': 'Ideal para autónomos que solo quieren facturar',
+        'features': ['Generación manual de facturas', 'Gestión básica de clientes', 'Exportación simple de facturas', 'Panel básico'],
+    },
+    'lite': {
+        'label': 'Lite', 'price': '29,99', 'tokens': 100,
+        'volume': '0–100 documentos al mes',
+        'features': ['Todo lo del plan Starter', 'Subida de facturas en PDF', 'Extracción automática con IA', 'Facturas recibidas y emitidas', 'Gestión de proveedores'],
+    },
+    'smart': {
+        'label': 'Smart', 'price': '49,99', 'tokens': 250, 'featured': True,
+        'volume': '101–250 documentos al mes',
+        'features': ['Todo lo del plan Lite', 'Asientos contables automáticos', 'Asociación automática de clientes', 'Panel con métricas', 'Soporte prioritario'],
+    },
+    'power': {
+        'label': 'Power', 'price': '79,99', 'tokens': 500,
+        'volume': '251–500 documentos al mes',
+        'features': ['Todo lo del plan Smart', 'Dashboard avanzado de PyG', 'IVA soportado e IVA repercutido', 'Alertas fiscales', 'Exportación contable avanzada'],
+    },
+    'ultra': {
+        'label': 'Ultra', 'price': '129,99', 'tokens': 1000,
+        'volume': '501–1000 documentos al mes',
+        'features': ['Todo lo del plan Power', 'Automatización contable completa', 'Gestión de nóminas', 'Multiempresa', 'Soporte premium y onboarding'],
+    },
+}
+
+
 @login_required
 def mi_plan(request):
-    return render(request, 'pages/mi_plan.html')
+    profile = getattr(request.user, 'profile', None)
+    plan_key = (profile.plan_name or '').lower() if profile else ''
+    plan_info = _PLAN_INFO.get(plan_key)
+    return render(request, 'pages/mi_plan.html', {
+        'profile': profile,
+        'plan_key': plan_key,
+        'plan_info': plan_info,
+    })
+
+
+@login_required
+def planes(request):
+    profile = getattr(request.user, 'profile', None)
+    current_plan = (profile.plan_name or '').lower() if profile else ''
+    plans = [
+        {'key': key, 'current': key == current_plan, **info}
+        for key, info in _PLAN_INFO.items()
+    ]
+    return render(request, 'pages/planes.html', {'plans': plans, 'current_plan': current_plan})
+
+
+@login_required
+def cambiar_plan(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    plan_key = request.POST.get('plan', '').lower()
+    plan_cfg = settings.STRIPE_PLANS.get(plan_key)
+    if not plan_cfg:
+        return JsonResponse({'error': 'Plan no válido'}, status=400)
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            mode='subscription',
+            customer_email=request.user.email,
+            metadata={
+                'nombre': request.user.first_name or request.user.username,
+                'apellido': request.user.last_name or '',
+                'email': request.user.email,
+                'telefono': '',
+            },
+            line_items=[{'price': plan_cfg['price_id'], 'quantity': 1}],
+            success_url=f"{settings.SITE_URL}/mi-plan/?upgraded=1",
+            cancel_url=f"{settings.SITE_URL}/planes/",
+        )
+        return redirect(checkout_session.url)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def cancelar_plan(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    profile = getattr(request.user, 'profile', None)
+    sub_id = profile.stripe_subscription_id if profile else None
+    if not sub_id:
+        return JsonResponse({'error': 'No tienes una suscripción activa registrada.'}, status=400)
+    try:
+        sub = stripe.Subscription.modify(sub_id, cancel_at_period_end=True)
+        from datetime import datetime
+        end_date = datetime.utcfromtimestamp(sub.current_period_end).strftime('%d/%m/%Y')
+        return JsonResponse({'ok': True, 'end_date': end_date})
+    except stripe.error.InvalidRequestError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # ==================== STRIPE WEBHOOK ====================
 
-# product_id → tokens (construido desde settings.STRIPE_PLANS)
+# product_id → tokens y plan_name (construido desde settings.STRIPE_PLANS)
 _PRODUCT_TOKENS = {p['product_id']: p['tokens'] for p in settings.STRIPE_PLANS.values()}
+_PRODUCT_PLAN   = {p['product_id']: name for name, p in settings.STRIPE_PLANS.items()}
 
 
 def _handle_checkout_completed(session):
@@ -7701,6 +7812,8 @@ def _handle_checkout_completed(session):
             tokens=assigned_tokens,
             stripe_email=stripe_email,
             is_trial=is_trial,
+            plan_name=_PRODUCT_PLAN.get(product_id),
+            stripe_subscription_id=full_session.subscription or None,
         )
         pending.confirmed = True
         pending.save(update_fields=['confirmed'])

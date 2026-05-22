@@ -28,6 +28,8 @@ class UserProfile(models.Model):
     tokens = models.PositiveIntegerField(default=0, verbose_name="Tokens disponibles")
     stripe_email = models.EmailField(null=True, blank=True, verbose_name="Email de Stripe")
     is_trial = models.BooleanField(default=False, verbose_name="En período de prueba")
+    plan_name = models.CharField(max_length=50, null=True, blank=True, verbose_name="Plan actual")
+    stripe_subscription_id = models.CharField(max_length=100, null=True, blank=True, verbose_name="ID suscripción Stripe")
 
     def __str__(self):
         return str(self.user.email)
