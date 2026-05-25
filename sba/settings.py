@@ -51,6 +51,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "sba_app.middleware.NoCacheAuthMiddleware",
     "rollbar.contrib.django.middleware.RollbarNotifierMiddleware",
 ]
 

@@ -110,13 +110,35 @@
         Mi plan
       </a>
       <div class="cs-divider"></div>
-      <a href="{% url 'logout' %}" class="cs-action-btn danger">
+      <button type="button" class="cs-action-btn danger" onclick="openLogoutModal(event)">
         <i class="bi bi-box-arrow-right"></i>
         Cerrar sesión
-      </a>
+      </button>
     </div>
   </div>
 </header>
+
+<!-- Modal de confirmación de cierre de sesión -->
+<div id="logout-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.18);text-align:center;">
+    <div style="width:52px;height:52px;background:#FEF2F2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <i class="bi bi-box-arrow-right" style="font-size:1.4rem;color:#DC2626;"></i>
+    </div>
+    <h3 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#111827;">¿Cerrar sesión?</h3>
+    <p style="margin:0 0 24px;font-size:.9rem;color:#6B7280;line-height:1.5;">Tendrás que volver a iniciar sesión para acceder a tu cuenta de SmartBook AI.</p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button type="button" onclick="closeLogoutModal()" style="flex:1;height:42px;border:1.5px solid #E5E7EB;border-radius:10px;background:#fff;color:#374151;font-size:.9rem;font-weight:600;cursor:pointer;">
+        Cancelar
+      </button>
+      <form method="post" action="{% url 'logout' %}" style="flex:1;margin:0;">
+        {% csrf_token %}
+        <button type="submit" style="width:100%;height:42px;border:none;border-radius:10px;background:#DC2626;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;">
+          Cerrar sesión
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
 
 <script>
 function toggleCS(e) {
@@ -126,5 +148,20 @@ function toggleCS(e) {
 document.addEventListener('click', function(e) {
   if (!document.getElementById('cswrap').contains(e.target))
     document.getElementById('csdropdown').classList.remove('open');
+});
+function openLogoutModal(e) {
+  e.stopPropagation();
+  document.getElementById('csdropdown').classList.remove('open');
+  var overlay = document.getElementById('logout-overlay');
+  overlay.style.display = 'flex';
+}
+function closeLogoutModal() {
+  document.getElementById('logout-overlay').style.display = 'none';
+}
+document.getElementById('logout-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeLogoutModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeLogoutModal();
 });
 </script>
