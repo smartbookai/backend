@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -7,7 +8,7 @@
   <meta name="description" content="Inicia sesión en SmartBook AI con tu correo y contraseña." />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'sha256-EjXADDDDCgVm2ALQEb7olDMFGd4hSyS4ImUL0Z0LsWk=' https://accounts.google.com {{ frontend_url }}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.pravatar.cc https://lh3.googleusercontent.com {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self' https://accounts.google.com https://www.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self'"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.pravatar.cc https://lh3.googleusercontent.com {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'"
   />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
@@ -103,6 +104,7 @@
     .btn-login-submit:disabled { opacity: .58; cursor: not-allowed; transform: none; }
     .btn-login-submit svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .login-error { display: none; font-size: .83rem; color: #c0392b; background: #fff0ee; border: 1px solid #f5c6c2; border-radius: 8px; padding: 10px 14px; margin-top: -4px; text-align: left; }
+    .login-error:not(:empty) { display: block; }
     .login-divider { display: flex; align-items: center; gap: 12px; font-size: .8rem; color: var(--gray-400); margin: 4px 0; }
     .login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: var(--gray-100); }
     .social-buttons { display: grid; grid-template-columns: 1fr; gap: 10px; }
@@ -169,19 +171,20 @@
         <div id="login-banner" class="login-banner" role="alert">
           Cuenta activada correctamente. Ya puedes iniciar sesión.
         </div>
-        <form id="form-login" class="login-form" novalidate>
+        <form id="form-login" class="login-form" novalidate action="/login/" method="post">
+          {% csrf_token %}
           <div>
             <label class="field-label" for="login-email">Correo electrónico</label>
             <div class="input-wrap">
               <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
-              <input id="login-email" class="login-input" type="email" placeholder="tu@email.com" autocomplete="email" maxlength="160" required />
+              <input id="login-email" name="email" class="login-input" type="email" placeholder="tu@email.com" autocomplete="email" maxlength="160" required />
             </div>
           </div>
           <div>
             <label class="field-label" for="login-password">Contraseña</label>
             <div class="input-wrap">
               <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <input id="login-password" class="login-input" type="password" placeholder="••••••••" autocomplete="current-password" minlength="8" required />
+              <input id="login-password" name="password" class="login-input" type="password" placeholder="••••••••" autocomplete="current-password" minlength="8" required />
               <button type="button" class="btn-eye" id="btn-eye" aria-label="Mostrar contraseña">
                 <svg id="icon-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -191,7 +194,7 @@
             <label class="login-remember"><input type="checkbox" id="login-remember" name="recordarme" /> Recordarme</label>
             <a href="#" class="login-forgot">¿Olvidaste tu contraseña?</a>
           </div>
-          <p id="login-error" class="login-error" data-form-feedback role="alert"></p>
+          <p id="login-error" class="login-error" role="alert">{% if login_error %}{{ login_error }}{% endif %}</p>
           <button type="submit" class="btn-login-submit" id="btn-login-submit">
             <span id="btn-login-label">Iniciar sesión</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -215,7 +218,6 @@
 
   </div>
 
-  <script src="https://accounts.google.com/gsi/client" async></script>
-  <script src="{{ frontend_url }}/main.js?v=20260521-2" defer></script>
+  <script src="{% static 'js/login.js' %}" defer></script>
 </body>
 </html>

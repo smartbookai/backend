@@ -293,6 +293,24 @@ def _site_url(request):
 def login_page(request):
     if request.user.is_authenticated:
         return redirect('index')
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        password = request.POST.get('password', '').strip()
+        user_obj = (
+            User.objects.filter(email__iexact=email).first()
+            or User.objects.filter(username__iexact=email).first()
+        )
+        user = None
+        if user_obj:
+            user = authenticate(request, username=user_obj.username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            return redirect('index')
+        return render(request, 'pages/auth/login.html', {
+            'frontend_url': settings.FRONTEND_URL,
+            'site_url': _site_url(request),
+            'login_error': 'Credenciales incorrectas. Revisa tu email y contraseña.',
+        })
     return render(request, 'pages/auth/login.html', {
         'frontend_url': settings.FRONTEND_URL,
         'site_url': _site_url(request),
