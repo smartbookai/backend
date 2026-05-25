@@ -8,13 +8,14 @@
   <meta name="description" content="Inicia sesión en SmartBook AI con tu correo y contraseña." />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.pravatar.cc https://lh3.googleusercontent.com {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'"
+    content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.pravatar.cc https://lh3.googleusercontent.com {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self' https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self'"
   />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
   <meta name="sba-frontend" content="{{ frontend_url }}" />
   <meta name="sba-api" content="{{ site_url }}" />
+  <meta name="google-client-id" content="{{ google_client_id }}" />
   <link rel="icon" type="image/png" href="{{ frontend_url }}/assets/favicon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -218,6 +219,8 @@
 
   </div>
 
+  <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="{% static 'js/login.js' %}" defer></script>
+  <script src="{% static 'js/google-auth.js' %}" defer></script>
 </body>
 </html>

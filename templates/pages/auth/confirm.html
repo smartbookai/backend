@@ -1,0 +1,169 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirma tu cuenta | SmartBook AI</title>
+  <meta name="description" content="Te hemos enviado un correo de confirmación. Accede a él para activar tu cuenta SmartBook AI." />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'"
+  />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+  <link rel="icon" type="image/png" href="{{ frontend_url }}/assets/favicon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #5d3085; --accent-dark: #3b1668; --white: #ffffff;
+      --gray-50: #f8f7fc; --gray-100: #ededf5; --gray-400: #9b92b0;
+      --gray-700: #3d3552; --gray-900: #111111;
+    }
+    html, body { min-height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); -webkit-font-smoothing: antialiased; }
+    .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; }
+    .topbar { padding: 20px 24px; display: flex; align-items: center; }
+    .topbar img { height: 30px; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+    .card { background: #fff; border-radius: 20px; box-shadow: 0 4px 32px rgba(93,48,133,.09), 0 1px 4px rgba(0,0,0,.05); padding: 48px 44px; max-width: 500px; width: 100%; text-align: center; }
+    .icon-wrap { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #ede4ff 0%, #d8c8ff 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+    .icon-wrap svg { width: 32px; height: 32px; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    h1 { font-size: 1.6rem; font-weight: 800; color: var(--gray-900); margin-bottom: 10px; letter-spacing: -.02em; }
+    .intro { font-size: .92rem; color: var(--gray-400); margin-bottom: 16px; }
+    .email-pill { display: inline-block; background: var(--gray-50); border: 1.5px solid var(--gray-100); border-radius: 999px; padding: 8px 20px; font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: 28px; word-break: break-all; }
+    .steps { display: flex; flex-direction: column; gap: 14px; text-align: left; margin-bottom: 24px; }
+    .step { display: flex; align-items: flex-start; gap: 12px; }
+    .step-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--accent) 0%, #9d4edd 100%); color: #fff; font-size: .78rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+    .step span { font-size: .875rem; color: var(--gray-700); line-height: 1.55; }
+    .spam-note { font-size: .83rem; color: var(--gray-400); margin-bottom: 24px; }
+    .resend-section { background: var(--gray-50); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
+    .resend-label { font-size: .83rem; color: var(--gray-700); margin-bottom: 10px; font-weight: 500; }
+    .btn-resend { height: 40px; padding: 0 20px; border: 1.5px solid var(--gray-100); border-radius: 999px; background: #fff; color: var(--accent); font-size: .85rem; font-weight: 700; cursor: pointer; transition: border-color .16s, box-shadow .16s; }
+    .btn-resend:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93,48,133,.1); }
+    .btn-resend:disabled { opacity: .55; cursor: not-allowed; }
+    .resend-feedback { font-size: .8rem; margin-top: 8px; min-height: 1.2em; }
+    .resend-feedback.ok { color: #1a7f37; }
+    .resend-feedback.err { color: #c0392b; }
+    hr { border: none; border-top: 1px solid var(--gray-100); margin: 20px 0; }
+    .thanks { font-size: .83rem; color: var(--gray-400); margin-bottom: 20px; }
+    .btn-home { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 28px; border-radius: 999px; background: linear-gradient(135deg, var(--accent) 0%, #7c4aad 100%); color: #fff; font-size: .9rem; font-weight: 700; text-decoration: none; box-shadow: 0 4px 18px rgba(93,48,133,.28); transition: box-shadow .18s, transform .12s; }
+    .btn-home:hover { box-shadow: 0 8px 28px rgba(93,48,133,.4); transform: translateY(-1px); }
+    @media (max-width: 540px) { .card { padding: 32px 20px; } h1 { font-size: 1.35rem; } }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="topbar">
+      <a href="{{ frontend_url }}/index.html" aria-label="SmartBook AI - Inicio">
+        <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" />
+      </a>
+    </div>
+    <main>
+      <div class="card">
+        <div class="icon-wrap" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
+        </div>
+        <h1>Revisa tu correo</h1>
+        <p class="intro">Te hemos enviado un mensaje de confirmación a:</p>
+        <div class="email-pill" id="confirm-email">{% if email %}{{ email }}{% else %}tu dirección de correo{% endif %}</div>
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span>Abre tu bandeja de entrada y busca un correo de <strong>SmartBook AI</strong>.</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span>Haz clic en el <strong>enlace de confirmación</strong> para activar tu cuenta.</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span>Ya podrás acceder a SmartBook AI y disfrutar de tu prueba gratuita.</span>
+          </div>
+        </div>
+        <p class="spam-note">¿No encuentras el correo? Revisa tu carpeta de <strong>spam</strong> o correo no deseado.</p>
+        <div class="resend-section">
+          <p class="resend-label">¿No te ha llegado el correo?</p>
+          <button type="button" id="btn-resend" class="btn-resend">
+            <span id="btn-resend-label">Reenviar correo</span>
+          </button>
+          <p id="resend-feedback" class="resend-feedback" role="alert" aria-live="polite"></p>
+        </div>
+        <hr />
+        <p class="thanks">Gracias por confiar en <strong>SmartBook AI</strong>.</p>
+        <a href="{{ frontend_url }}/index.html" class="btn-home">Volver al inicio</a>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var RESEND_KEY = 'sba_resend_unlock';
+      var COOLDOWN_MS = 180000;
+      var email = '{{ email|escapejs }}';
+      var btn = document.getElementById('btn-resend');
+      var btnLabel = document.getElementById('btn-resend-label');
+      var feedback = document.getElementById('resend-feedback');
+
+      function setFeedback(msg, state) {
+        feedback.textContent = msg;
+        feedback.className = 'resend-feedback ' + (state || '');
+      }
+
+      function updateCooldown() {
+        var unlockAt = Number(localStorage.getItem(RESEND_KEY) || 0);
+        var remaining = unlockAt - Date.now();
+        if (remaining <= 0) {
+          btn.disabled = false;
+          btnLabel.textContent = 'Reenviar correo';
+          return;
+        }
+        btn.disabled = true;
+        btnLabel.textContent = 'Reenviar en ' + Math.ceil(remaining / 1000) + 's';
+        setTimeout(updateCooldown, 1000);
+      }
+
+      updateCooldown();
+
+      btn.addEventListener('click', function () {
+        if (!email) {
+          setFeedback('No se pudo identificar el email. Regístrate de nuevo.', 'err');
+          return;
+        }
+        btn.disabled = true;
+        btnLabel.textContent = 'Enviando...';
+        setFeedback('', '');
+
+        fetch('/api/resend-confirmation/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ email: email }),
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+          })
+          .then(function (result) {
+            if (!result.ok && result.status !== 429) {
+              var msg = result.status === 410
+                ? 'El registro ha expirado. Puedes registrarte de nuevo para recibir otro enlace.'
+                : (result.data.error || 'No se pudo reenviar el correo. Inténtalo de nuevo más tarde.');
+              setFeedback(msg, 'err');
+              btn.disabled = false;
+              btnLabel.textContent = 'Reenviar correo';
+              return;
+            }
+            localStorage.setItem(RESEND_KEY, String(Date.now() + COOLDOWN_MS));
+            setFeedback('Correo reenviado. Revisa tu bandeja de entrada y spam.', 'ok');
+            updateCooldown();
+          })
+          .catch(function () {
+            setFeedback('No se pudo conectar con el servidor. Inténtalo de nuevo.', 'err');
+            btn.disabled = false;
+            btnLabel.textContent = 'Reenviar correo';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

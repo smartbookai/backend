@@ -293,6 +293,11 @@ def _site_url(request):
 def login_page(request):
     if request.user.is_authenticated:
         return redirect('index')
+    ctx = {
+        'frontend_url': settings.FRONTEND_URL,
+        'site_url': _site_url(request),
+        'google_client_id': settings.GOOGLE_CLIENT_ID,
+    }
     if request.method == 'POST':
         email = request.POST.get('email', '').strip().lower()
         password = request.POST.get('password', '').strip()
@@ -306,15 +311,8 @@ def login_page(request):
         if user is not None:
             auth_login(request, user)
             return redirect('index')
-        return render(request, 'pages/auth/login.html', {
-            'frontend_url': settings.FRONTEND_URL,
-            'site_url': _site_url(request),
-            'login_error': 'Credenciales incorrectas. Revisa tu email y contraseña.',
-        })
-    return render(request, 'pages/auth/login.html', {
-        'frontend_url': settings.FRONTEND_URL,
-        'site_url': _site_url(request),
-    })
+        ctx['login_error'] = 'Credenciales incorrectas. Revisa tu email y contraseña.'
+    return render(request, 'pages/auth/login.html', ctx)
 
 
 def register_page(request):
@@ -323,6 +321,7 @@ def register_page(request):
     return render(request, 'pages/auth/register.html', {
         'frontend_url': settings.FRONTEND_URL,
         'site_url': _site_url(request),
+        'google_client_id': settings.GOOGLE_CLIENT_ID,
     })
 
 
@@ -521,10 +520,9 @@ def api_dashboard_last_invoices(request):
     return JsonResponse({'invoices': payload})
 
 
+@require_POST
 def logout_view(request):
-    """Logs out the user and redirects to the login page."""
     logout(request)
-    messages.success(request, "Ha cerrado sesion correctamente.")
     return redirect(settings.LOGIN_URL)
 
 
@@ -7613,10 +7611,23 @@ def api_google_auth(request):
     user = User.objects.filter(email__iexact=email).first()
 
     if not user:
-        return JsonResponse({'action': 'register'}, status=200)
+        return JsonResponse({
+            'action': 'register',
+            'email': email,
+            'name': idinfo.get('name', ''),
+        }, status=200)
 
     auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
     return JsonResponse({'ok': True, 'redirect': f"{settings.SITE_URL}/"}, status=200)
+
+
+def confirm_page(request):
+    email = request.GET.get('email', '')
+    return render(request, 'pages/auth/confirm.html', {
+        'email': email,
+        'site_url': _site_url(request),
+        'frontend_url': settings.FRONTEND_URL,
+    })
 
 
 def confirmar_email(request, token):
@@ -7689,13 +7700,28 @@ _PLAN_INFO = {
 
 @login_required
 def mi_plan(request):
+    from datetime import datetime as _dt
     profile = getattr(request.user, 'profile', None)
     plan_key = (profile.plan_name or '').lower() if profile else ''
     plan_info = _PLAN_INFO.get(plan_key)
+
+    trial_end = None
+    cancel_at_period_end = False
+    if profile and profile.stripe_subscription_id:
+        try:
+            sub = stripe.Subscription.retrieve(profile.stripe_subscription_id)
+            if sub.trial_end:
+                trial_end = _dt.utcfromtimestamp(sub.trial_end).strftime('%d/%m/%Y')
+            cancel_at_period_end = bool(sub.cancel_at_period_end)
+        except Exception:
+            pass
+
     return render(request, 'pages/mi_plan.html', {
         'profile': profile,
         'plan_key': plan_key,
         'plan_info': plan_info,
+        'trial_end': trial_end,
+        'cancel_at_period_end': cancel_at_period_end,
     })
 
 
@@ -7755,6 +7781,34 @@ def cancelar_plan(request):
         return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_cancellation_feedback(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    reason = (data.get('reason') or '').strip()[:2000]
+    user = request.user
+    profile = getattr(user, 'profile', None)
+    plan_name = (profile.plan_name or 'desconocido') if profile else 'desconocido'
+
+    commercial_email = getattr(settings, 'COMMERCIAL_EMAIL', 'comercial@smartbookai.es')
+    subject = f'Baja de suscripción – {user.email}'
+    body = (
+        f'El usuario {user.first_name or user.username} ({user.email}) '
+        f'ha cancelado su suscripción al plan {plan_name}.\n\n'
+        f'Motivo indicado:\n{reason or "(no indicó motivo)"}'
+    )
+    try:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [commercial_email], fail_silently=False)
+    except Exception as exc:
+        logger.warning('api_cancellation_feedback: error enviando email: %s', exc)
+
+    return JsonResponse({'ok': True})
 
 
 # ==================== STRIPE WEBHOOK ====================
@@ -7827,18 +7881,40 @@ def _handle_checkout_completed(session):
         user.password = pending.password_hash
         user.save()
         logger.info('stripe_webhook checkout: User creado id=%d', user.id)
-        UserProfile.objects.filter(user=user).update(
-            phone=pending.telefono or None,
-            tokens=assigned_tokens,
-            stripe_email=stripe_email,
-            is_trial=is_trial,
-            plan_name=_PRODUCT_PLAN.get(product_id),
-            stripe_subscription_id=full_session.subscription or None,
+        UserProfile.objects.update_or_create(
+            user=user,
+            defaults={
+                'phone': pending.telefono or None,
+                'tokens': assigned_tokens,
+                'stripe_email': stripe_email,
+                'is_trial': is_trial,
+                'plan_name': _PRODUCT_PLAN.get(product_id),
+                'stripe_subscription_id': full_session.subscription or None,
+            },
         )
         pending.confirmed = True
         pending.save(update_fields=['confirmed'])
 
     logger.info('stripe_webhook checkout: usuario creado %s | tokens=%d | trial=%s', pending.email, assigned_tokens, is_trial)
+
+
+def _handle_subscription_deleted(subscription):
+    sub_id = subscription['id']
+    profile = UserProfile.objects.filter(stripe_subscription_id=sub_id).first()
+    if not profile:
+        logger.warning('stripe_webhook subscription.deleted: perfil no encontrado para sub_id=%s', sub_id)
+        return
+    profile.plan_name = None
+    profile.is_trial = False
+    profile.stripe_subscription_id = None
+    profile.save(update_fields=['plan_name', 'is_trial', 'stripe_subscription_id'])
+    logger.info('stripe_webhook subscription.deleted: plan borrado para usuario %s', profile.user.email)
+
+
+def _handle_invoice_payment_failed(invoice):
+    stripe_email = (invoice.get('customer_email') or '').strip().lower()
+    invoice_id = invoice.get('id', '?')
+    logger.warning('stripe_webhook invoice.payment_failed: pago fallido factura=%s email=%s', invoice_id, stripe_email)
 
 
 def _handle_invoice_paid(invoice):
@@ -7914,6 +7990,10 @@ def stripe_webhook(request):
             _handle_checkout_completed(event['data']['object'])
         elif event['type'] == 'invoice.paid':
             _handle_invoice_paid(event['data']['object'])
+        elif event['type'] == 'customer.subscription.deleted':
+            _handle_subscription_deleted(event['data']['object'])
+        elif event['type'] == 'invoice.payment_failed':
+            _handle_invoice_payment_failed(event['data']['object'])
     except Exception as exc:
         logger.exception('stripe_webhook: excepción no controlada procesando %s: %s', event['type'], exc)
         return HttpResponse(status=500)

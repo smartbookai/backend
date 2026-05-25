@@ -135,11 +135,13 @@ urlpatterns = [
     path('api/register/', views.api_register, name='api_register'),
     path('api/resend-confirmation/', views.api_resend_confirmation, name='api_resend_confirmation'),
     path('api/auth/google/', views.api_google_auth, name='api_google_auth'),
+    path('confirmar/', views.confirm_page, name='confirm_page'),
     path('confirmar-email/<uuid:token>/', views.confirmar_email, name='confirmar_email'),
     path('mi-plan/', views.mi_plan, name='mi_plan'),
     path('planes/', views.planes, name='planes'),
     path('planes/cambiar/', views.cambiar_plan, name='cambiar_plan'),
     path('mi-plan/cancelar/', views.cancelar_plan, name='cancelar_plan'),
+    path('mi-plan/cancelar/feedback/', views.api_cancellation_feedback, name='api_cancellation_feedback'),
 ]
 
 if settings.DEBUG:
