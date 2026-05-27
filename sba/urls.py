@@ -139,6 +139,7 @@ urlpatterns = [
     path('confirmar-email/<uuid:token>/', views.confirmar_email, name='confirmar_email'),
     path('mi-plan/', views.mi_plan, name='mi_plan'),
     path('planes/', views.planes, name='planes'),
+    path('planes-publicos/', views.planes_publico, name='planes_publico'),
     path('planes/cambiar/', views.cambiar_plan, name='cambiar_plan'),
     path('mi-plan/cancelar/', views.cancelar_plan, name='cancelar_plan'),
     path('mi-plan/cancelar/feedback/', views.api_cancellation_feedback, name='api_cancellation_feedback'),

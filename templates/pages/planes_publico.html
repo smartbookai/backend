@@ -1,0 +1,180 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elige tu plan | SmartBook AI</title>
+  <meta name="description" content="Elige el plan SmartBook AI que mejor se adapta a tu negocio. 7 días de prueba gratuita sin compromiso." />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: {{ frontend_url }}; font-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'"
+  />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+  <link rel="icon" type="image/png" href="{{ frontend_url }}/assets/favicon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #5d3085; --accent-dark: #3b1668; --accent-mid: #7c4aad;
+      --white: #ffffff; --gray-50: #f8f7fc; --gray-100: #ededf5;
+      --gray-400: #9b92b0; --gray-700: #3d3552; --gray-900: #111111;
+    }
+    html, body { min-height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); -webkit-font-smoothing: antialiased; }
+
+    .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; }
+
+    /* Topbar */
+    .topbar { padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid var(--gray-100); }
+    .topbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .topbar-brand img { height: 30px; }
+    .topbar-back { font-size: .84rem; color: var(--accent); font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 6px; }
+    .topbar-back:hover { text-decoration: underline; }
+    .topbar-back svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Header */
+    .plans-header { text-align: center; padding: 52px 20px 40px; }
+    .plans-trial-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(93,48,133,.09); border: 1px solid rgba(93,48,133,.18);
+      border-radius: 999px; padding: 5px 16px; font-size: .78rem; font-weight: 700;
+      color: var(--accent); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 18px;
+    }
+    .plans-trial-badge svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .plans-header h1 { font-size: clamp(1.6rem, 3.5vw, 2.4rem); font-weight: 800; color: var(--gray-900); letter-spacing: -.03em; margin-bottom: 12px; }
+    .plans-header h1 em { font-style: normal; color: var(--accent); }
+    .plans-header p { font-size: .95rem; color: var(--gray-400); max-width: 500px; margin: 0 auto; line-height: 1.65; }
+
+    /* Grid */
+    main { flex: 1; padding: 0 20px 72px; }
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 20px;
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+
+    /* Card */
+    .plan-card {
+      background: #fff;
+      border: 1.5px solid var(--gray-100);
+      border-radius: 18px;
+      padding: 30px 24px 26px;
+      display: flex; flex-direction: column;
+      position: relative;
+      transition: box-shadow .2s, transform .15s;
+    }
+    .plan-card:hover { box-shadow: 0 8px 32px rgba(93,48,133,.13); transform: translateY(-3px); }
+    .plan-card.featured { border-color: var(--accent-mid); box-shadow: 0 4px 24px rgba(93,48,133,.18); }
+
+    .plan-badge {
+      position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+      font-size: .72rem; font-weight: 800; padding: 3px 16px; border-radius: 999px;
+      white-space: nowrap; letter-spacing: .04em;
+    }
+    .plan-badge.popular { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-mid) 100%); color: #fff; }
+
+    .plan-name { font-size: 1.05rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
+    .plan-volume { font-size: .77rem; color: var(--gray-400); margin-bottom: 20px; min-height: 34px; line-height: 1.5; }
+
+    .plan-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 22px; }
+    .plan-price-amount { font-size: 2rem; font-weight: 800; color: var(--gray-900); letter-spacing: -.04em; }
+    .plan-price-currency { font-size: 1rem; font-weight: 700; color: var(--gray-700); }
+    .plan-price-period { font-size: .78rem; color: var(--gray-400); }
+
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 9px; margin-bottom: 26px; flex: 1; }
+    .plan-feature { display: flex; align-items: flex-start; gap: 9px; font-size: .82rem; color: var(--gray-700); line-height: 1.45; }
+    .plan-feature svg { flex-shrink: 0; margin-top: 2px; width: 14px; height: 14px; stroke: var(--accent); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    .btn-choose {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      width: 100%; height: 46px; border: none; border-radius: 999px;
+      font-size: .9rem; font-weight: 700; cursor: pointer; text-decoration: none;
+      transition: box-shadow .18s, transform .12s, opacity .16s;
+    }
+    .btn-choose.primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-mid) 100%);
+      color: #fff; box-shadow: 0 4px 18px rgba(93,48,133,.30);
+    }
+    .btn-choose.primary:hover { box-shadow: 0 8px 28px rgba(93,48,133,.42); transform: translateY(-1px); }
+    .btn-choose.secondary {
+      background: var(--gray-50); border: 1.5px solid var(--gray-100); color: var(--accent);
+    }
+    .btn-choose.secondary:hover { border-color: var(--accent); background: #fff; }
+    .btn-choose svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Footer note */
+    .plans-footer-note { text-align: center; font-size: .82rem; color: var(--gray-400); padding: 20px 20px 40px; }
+    .plans-footer-note strong { color: var(--gray-700); }
+
+    @media (max-width: 600px) {
+      .topbar { padding: 16px 20px; }
+      .plans-header { padding: 36px 16px 28px; }
+      .plans-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="topbar">
+      <a href="{{ frontend_url }}/index.html" class="topbar-brand" aria-label="SmartBook AI – Inicio">
+        <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" />
+      </a>
+      <a href="/register/" class="topbar-back">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        Volver al registro
+      </a>
+    </header>
+
+    <div class="plans-header">
+      <div class="plans-trial-badge">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        7 días de prueba gratuita
+      </div>
+      <h1>Elige tu plan, <em>sin riesgos</em></h1>
+      <p>Empieza gratis durante 7 días. Solo se cobra si decides quedarte. Cancela cuando quieras.</p>
+    </div>
+
+    <main>
+      <div class="plans-grid">
+        {% for plan in plans %}
+        <div class="plan-card{% if plan.featured %} featured{% endif %}">
+          {% if plan.featured %}
+          <span class="plan-badge popular">Más popular</span>
+          {% endif %}
+
+          <p class="plan-name">{{ plan.label }}</p>
+          <p class="plan-volume">{{ plan.volume }}</p>
+
+          <div class="plan-price">
+            <span class="plan-price-currency">€</span>
+            <span class="plan-price-amount">{{ plan.price }}</span>
+            <span class="plan-price-period">/mes</span>
+          </div>
+
+          <ul class="plan-features">
+            {% for feat in plan.features %}
+            <li class="plan-feature">
+              <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              {{ feat }}
+            </li>
+            {% endfor %}
+          </ul>
+
+          <a href="/register/?plan={{ plan.key }}" class="btn-choose {% if plan.featured %}primary{% else %}secondary{% endif %}">
+            Elegir {{ plan.label }}
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </main>
+
+    <p class="plans-footer-note">
+      <strong>Sin compromisos.</strong> Tras los 7 días gratuitos se aplica el precio mensual del plan elegido. Cancela en cualquier momento desde tu panel de usuario.
+    </p>
+  </div>
+</body>
+</html>

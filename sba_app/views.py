@@ -7733,6 +7733,11 @@ def planes(request):
     return render(request, 'pages/planes.html', {'plans': plans, 'current_plan': current_plan})
 
 
+def planes_publico(request):
+    plans = [{'key': key, **info} for key, info in _PLAN_INFO.items()]
+    return render(request, 'pages/planes_publico.html', {'plans': plans})
+
+
 @login_required
 def cambiar_plan(request):
     if request.method != 'POST':
