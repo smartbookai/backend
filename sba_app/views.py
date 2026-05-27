@@ -289,10 +289,7 @@ def _site_url(request):
     return settings.SITE_URL
 
 
-@anonymous_required
 def login_page(request):
-    if request.user.is_authenticated:
-        return redirect('index')
     ctx = {
         'frontend_url': settings.FRONTEND_URL,
         'site_url': _site_url(request),
@@ -309,6 +306,7 @@ def login_page(request):
         if user_obj:
             user = authenticate(request, username=user_obj.username, password=password)
         if user is not None:
+            logout(request)
             auth_login(request, user)
             return redirect('index')
         ctx['login_error'] = 'Credenciales incorrectas. Revisa tu email y contraseña.'
@@ -316,8 +314,6 @@ def login_page(request):
 
 
 def register_page(request):
-    if request.user.is_authenticated:
-        return redirect('index')
     return render(request, 'pages/auth/register.html', {
         'frontend_url': settings.FRONTEND_URL,
         'site_url': _site_url(request),
@@ -7442,6 +7438,7 @@ def api_login(request):
         logger.warning('api_login: authenticate devolvio None para username=%s', user_obj.username)
         return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
 
+    logout(request)
     auth_login(request, user)
     logger.info('api_login: login exitoso para user_id=%s', user.id)
     return JsonResponse({'ok': True, 'redirect': f"{settings.SITE_URL}/"})
