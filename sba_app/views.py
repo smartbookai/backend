@@ -7898,6 +7898,42 @@ def _handle_checkout_completed(session):
     logger.info('stripe_webhook checkout: usuario creado %s | tokens=%d | trial=%s', pending.email, assigned_tokens, is_trial)
 
 
+def _handle_subscription_updated(subscription):
+    sub_id = subscription['id']
+    profile = UserProfile.objects.filter(stripe_subscription_id=sub_id).first()
+    if not profile:
+        logger.warning('stripe_webhook subscription.updated: perfil no encontrado para sub_id=%s', sub_id)
+        return
+
+    fields = []
+
+    # Detectar cambio de plan (producto distinto al actual)
+    try:
+        item = subscription['items']['data'][0]
+        product_id = item['price']['product']
+        if not isinstance(product_id, str):
+            product_id = product_id['id']
+        new_plan = _PRODUCT_PLAN.get(product_id)
+        if new_plan and new_plan != profile.plan_name:
+            new_tokens = _PRODUCT_TOKENS.get(product_id, 0)
+            profile.plan_name = new_plan
+            profile.tokens = new_tokens
+            fields += ['plan_name', 'tokens']
+            logger.info('stripe_webhook subscription.updated: plan cambiado a %s para sub_id=%s', new_plan, sub_id)
+    except (KeyError, IndexError, TypeError):
+        pass
+
+    # Trial finalizado → marcar como suscripción activa
+    status = subscription.get('status', '')
+    if status == 'active' and profile.is_trial:
+        profile.is_trial = False
+        fields.append('is_trial')
+        logger.info('stripe_webhook subscription.updated: trial finalizado para sub_id=%s', sub_id)
+
+    if fields:
+        profile.save(update_fields=fields)
+
+
 def _handle_subscription_deleted(subscription):
     sub_id = subscription['id']
     profile = UserProfile.objects.filter(stripe_subscription_id=sub_id).first()
@@ -7990,6 +8026,8 @@ def stripe_webhook(request):
             _handle_checkout_completed(event['data']['object'])
         elif event['type'] == 'invoice.paid':
             _handle_invoice_paid(event['data']['object'])
+        elif event['type'] == 'customer.subscription.updated':
+            _handle_subscription_updated(event['data']['object'])
         elif event['type'] == 'customer.subscription.deleted':
             _handle_subscription_deleted(event['data']['object'])
         elif event['type'] == 'invoice.payment_failed':

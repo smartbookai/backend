@@ -52,7 +52,7 @@
                   radial-gradient(ellipse 40% 40% at 20% 80%, rgba(93,48,133,.3) 0%, transparent 70%);
       pointer-events: none;
     }
-    .reg-left-brand { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+    .reg-left-brand { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; text-decoration: none; }
     .reg-left-brand img { height: 32px; filter: brightness(0) invert(1); }
 
     .reg-left-body { flex: 1; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 1; padding: 32px 0 0; }
@@ -99,8 +99,8 @@
       background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
       border-radius: 13px; padding: 16px 18px;
     }
-    .reg-testimonial-avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,.25); }
-    .reg-testimonial-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .reg-testimonial-logo { flex-shrink: 0; width: 60px; height: 60px; border-radius: 10px; overflow: hidden; background: #fff; display: flex; align-items: center; justify-content: center; padding: 4px; }
+    .reg-testimonial-logo img { width: 100%; height: 100%; object-fit: contain; }
     .reg-testimonial-body blockquote { font-size: .8rem; color: rgba(255,255,255,.78); line-height: 1.55; font-style: italic; margin-bottom: 7px; }
     .reg-testimonial-author { font-size: .74rem; color: rgba(255,255,255,.5); }
     .reg-testimonial-author strong { color: rgba(255,255,255,.82); font-style: normal; }
@@ -203,9 +203,9 @@
 
     <!-- Panel izquierdo -->
     <aside class="reg-left" aria-hidden="true">
-      <div class="reg-left-brand">
+      <a href="{{ frontend_url }}/index.html" class="reg-left-brand" aria-label="SmartBook AI – Inicio">
         <img src="{{ frontend_url }}/assets/smartbook-logo.png" alt="SmartBook AI" />
-      </div>
+      </a>
       <div class="reg-left-body">
         <div class="reg-trial-badge">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -255,12 +255,12 @@
         </div>
 
         <div class="reg-testimonial">
-          <div class="reg-testimonial-avatar">
-            <img src="https://i.pravatar.cc/80?img=12" alt="Carlos Martínez" width="40" height="40" />
+          <div class="reg-testimonial-logo">
+            <img src="{% static 'img/jj-mayoni-logo.png' %}" alt="Pescados & Mariscos J.J. Mayoni" width="60" height="60" />
           </div>
           <div class="reg-testimonial-body">
-            <blockquote>"Lo probé gratis y ya no pude dejarlo. Me ahorra horas cada semana."</blockquote>
-            <p class="reg-testimonial-author"><strong>Carlos Martínez</strong> — Autónomo, Madrid</p>
+            <blockquote>"Lo probamos durante la semana gratis y ya no pudimos dejarlo. Nuestra contabilidad nunca había sido tan sencilla."</blockquote>
+            <p class="reg-testimonial-author"><strong>Jorge Mayoni</strong> — CEO, Pescados &amp; Mariscos J.J. Mayoni</p>
           </div>
         </div>
       </div>
