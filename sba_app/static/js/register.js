@@ -3,7 +3,6 @@
 
   document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('revealed'); });
 
-  var FRONTEND_URL = (document.querySelector('meta[name="sba-frontend"]') || {}).content || '';
   var DEFAULT_PLAN = 'sin_plan';
   var FORM_STORAGE_KEY = 'sba_reg_form';
 
@@ -20,6 +19,86 @@
     '+56': 9, '+51': 9,
   };
 
+  // ── Eye toggle ──────────────────────────────────────────
+  (function initEye() {
+    var btn = document.getElementById('btn-eye-reg');
+    var inp = document.getElementById('password');
+    if (!btn || !inp) return;
+    btn.addEventListener('click', function () {
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      // swap icon: crossed-eye when visible, open eye when hidden
+      btn.querySelector('svg').innerHTML = show
+        ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
+        : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    });
+  })();
+
+  // ── Live password requirements ───────────────────────────
+  (function initPwdReqs() {
+    var pwdInput = document.getElementById('password');
+    var reqs = document.getElementById('pwd-requirements');
+    if (!pwdInput || !reqs) return;
+
+    function setReq(id, pass) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('ok', pass);
+      var svg = el.querySelector('svg');
+      if (!svg) return;
+      svg.innerHTML = pass
+        ? '<circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>'
+        : '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+    }
+
+    pwdInput.addEventListener('input', function () {
+      var v = this.value;
+      reqs.classList.add('visible');
+      setReq('req-length', v.length >= 10);
+      setReq('req-upper',  /[A-Z]/.test(v));
+      setReq('req-lower',  /[a-z]/.test(v));
+      setReq('req-digit',  /\d/.test(v));
+    });
+  })();
+
+  // ── Phone prefix ─────────────────────────────────────────
+  function updateDigitsMaxLength(prefix) {
+    var digitsEl = form.querySelector('#phone-digits');
+    if (!digitsEl) return;
+    digitsEl.maxLength = PREFIX_LENGTHS[prefix] || 15;
+  }
+
+  var prefixSelect = form.querySelector('#phone-prefix');
+  if (prefixSelect) {
+    prefixSelect.addEventListener('change', function () {
+      updateDigitsMaxLength(this.value);
+    });
+    updateDigitsMaxLength(prefixSelect.value);
+  }
+
+  // ── Restore saved form data after plan redirect ───────────
+  (function restoreForm() {
+    var saved = sessionStorage.getItem(FORM_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      var data = JSON.parse(saved);
+      var nameEl      = form.querySelector('#name');
+      var apellidosEl = form.querySelector('#apellidos');
+      var emailEl     = form.querySelector('#email');
+      var prefixEl    = form.querySelector('#phone-prefix');
+      var digitsEl    = form.querySelector('#phone-digits');
+      if (nameEl      && data.nombre)    nameEl.value      = data.nombre;
+      if (apellidosEl && data.apellidos) apellidosEl.value = data.apellidos;
+      if (emailEl     && data.email)     emailEl.value     = data.email;
+      if (prefixEl    && data.prefix) {
+        prefixEl.value = data.prefix;
+        updateDigitsMaxLength(data.prefix);
+      }
+      if (digitsEl && data.digits) digitsEl.value = data.digits;
+    } catch (e) {}
+  })();
+
+  // ── Helpers ───────────────────────────────────────────────
   function isValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,160}$/.test(String(v || '')); }
   function isValidPassword(v) {
     var p = String(v || '');
@@ -30,42 +109,6 @@
     var p = String(v || '').trim().toLowerCase();
     return allowed.indexOf(p) !== -1 ? p : DEFAULT_PLAN;
   }
-
-  function updateDigitsMaxLength(prefix) {
-    var digitsEl = form.querySelector('#phone-digits');
-    if (!digitsEl) return;
-    digitsEl.maxLength = PREFIX_LENGTHS[prefix] || 15;
-  }
-
-  // Restore form data saved before plan redirect
-  (function restoreForm() {
-    var saved = sessionStorage.getItem(FORM_STORAGE_KEY);
-    if (!saved) return;
-    try {
-      var data = JSON.parse(saved);
-      var nameEl = form.querySelector('#name');
-      var emailEl = form.querySelector('#email');
-      var prefixEl = form.querySelector('#phone-prefix');
-      var digitsEl = form.querySelector('#phone-digits');
-      if (nameEl && data.nombre) nameEl.value = data.nombre;
-      if (emailEl && data.email) emailEl.value = data.email;
-      if (prefixEl && data.prefix) {
-        prefixEl.value = data.prefix;
-        updateDigitsMaxLength(data.prefix);
-      }
-      if (digitsEl && data.digits) digitsEl.value = data.digits;
-    } catch (e) {}
-  })();
-
-  // Keep maxlength in sync when prefix changes
-  var prefixSelect = form.querySelector('#phone-prefix');
-  if (prefixSelect) {
-    prefixSelect.addEventListener('change', function () {
-      updateDigitsMaxLength(this.value);
-    });
-    updateDigitsMaxLength(prefixSelect.value);
-  }
-
   function showError(msg) {
     var box = document.getElementById('registro-error');
     if (box) { box.textContent = msg; box.style.display = 'block'; }
@@ -81,6 +124,7 @@
     if (label) label.textContent = loading ? 'Creando cuenta...' : 'Registrarme gratis';
   }
 
+  // ── Submit ────────────────────────────────────────────────
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     clearError();
@@ -88,24 +132,25 @@
     var googleToken = (document.getElementById('google-access-token-field') || {}).value || '';
     var isGoogleMode = !!googleToken;
 
-    var nombre = (form.querySelector('#name') || {}).value || '';
-    nombre = nombre.trim().slice(0, 80);
-
-    var prefix = ((form.querySelector('#phone-prefix') || {}).value || '+34').trim();
-    var digits = ((form.querySelector('#phone-digits') || {}).value || '').replace(/\D/g, '');
-    var telefono = (prefix + digits).slice(0, 30);
-
-    var email = ((form.querySelector('#email') || {}).value || '').trim().toLowerCase();
-    var password = isGoogleMode ? '' : ((form.querySelector('#password') || {}).value || '');
+    var nombre    = ((form.querySelector('#name')      || {}).value || '').trim().slice(0, 80);
+    var apellidos = ((form.querySelector('#apellidos') || {}).value || '').trim().slice(0, 120);
+    var prefix    = ((form.querySelector('#phone-prefix') || {}).value || '+34').trim();
+    var digits    = ((form.querySelector('#phone-digits') || {}).value || '').replace(/\D/g, '');
+    var telefono  = (prefix + digits).slice(0, 30);
+    var email     = ((form.querySelector('#email')    || {}).value || '').trim().toLowerCase();
+    var password  = isGoogleMode ? '' : ((form.querySelector('#password') || {}).value || '');
 
     // Validations
     if (!nombre || nombre.length < 2) {
       showError('El nombre es obligatorio (mínimo 2 caracteres).');
       return;
     }
-    var maxDigits = PREFIX_LENGTHS[prefix] || 15;
-    if (!digits || digits.length < 6 || digits.length > maxDigits) {
-      showError('Introduce un número de teléfono válido (' + maxDigits + ' dígitos para ' + prefix + ').');
+    if (!apellidos || apellidos.length < 2) {
+      showError('Los apellidos son obligatorios (mínimo 2 caracteres).');
+      return;
+    }
+    if (!digits || digits.length < 6) {
+      showError('Introduce un número de teléfono válido (mínimo 6 dígitos).');
       return;
     }
     if (!isValidEmail(email)) {
@@ -113,16 +158,22 @@
       return;
     }
     if (!isGoogleMode && !isValidPassword(password)) {
-      showError('La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.');
+      var p = password;
+      var msg = p.length < 10
+        ? 'La contraseña debe tener al menos 10 caracteres.'
+        : !(/[A-Z]/.test(p))
+          ? 'La contraseña debe incluir al menos una letra mayúscula.'
+          : !(/[a-z]/.test(p))
+            ? 'La contraseña debe incluir al menos una letra minúscula.'
+            : 'La contraseña debe incluir al menos un número.';
+      showError(msg);
       return;
     }
 
     if (selectedPlan === DEFAULT_PLAN) {
       sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify({
-        nombre: nombre,
-        email: email,
-        prefix: prefix,
-        digits: digits,
+        nombre: nombre, apellidos: apellidos, email: email,
+        prefix: prefix, digits: digits,
       }));
       window.location.assign('/planes-publicos/');
       return;
@@ -130,12 +181,9 @@
 
     setLoading(true);
 
-    var payload = {
-      nombre: nombre,
-      telefono: telefono,
-      email: email,
-      plan: selectedPlan,
-    };
+    var nombreCompleto = apellidos ? nombre + ' ' + apellidos : nombre;
+
+    var payload = { nombre: nombreCompleto, telefono: telefono, email: email, plan: selectedPlan };
     if (isGoogleMode) {
       payload.google_access_token = googleToken;
     } else {

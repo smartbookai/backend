@@ -151,6 +151,12 @@
     .btn-eye:hover { color: var(--accent); }
     .btn-eye svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
+    .pwd-reqs { display: none; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .pwd-reqs.visible { display: flex; }
+    .pwd-req { display: flex; align-items: center; gap: 7px; font-size: .77rem; color: #c0392b; transition: color .15s; }
+    .pwd-req.ok { color: #1a7f37; }
+    .pwd-req svg { flex-shrink: 0; width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
     .phone-wrap { display: flex; height: 44px; border: 1.5px solid var(--gray-100); border-radius: var(--radius-input); overflow: hidden; background: var(--gray-50); transition: border-color 160ms, box-shadow 160ms; }
     .phone-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93,48,133,.12); background: #fff; }
     .phone-prefix-select { flex-shrink: 0; height: 100%; padding: 0 6px 0 10px; border: none; border-right: 1.5px solid var(--gray-100); background: transparent; font-size: .82rem; color: var(--gray-700); font-weight: 600; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; }
@@ -298,29 +304,38 @@
               <label class="field-label" for="name">Nombre *</label>
               <div class="input-wrap">
                 <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <input id="name" name="Nombre" class="reg-input" type="text" placeholder="Tu nombre" autocomplete="name" maxlength="120" required />
+                <input id="name" name="Nombre" class="reg-input" type="text" placeholder="Tu nombre" autocomplete="given-name" maxlength="80" required />
               </div>
             </div>
             <div class="reg-field">
-              <label class="field-label" for="phone-digits">Teléfono *</label>
-              <div class="phone-wrap">
-                <select id="phone-prefix" class="phone-prefix-select" autocomplete="tel-country-code" aria-label="Prefijo de país">
-                  <option value="+34">🇪🇸 +34</option>
-                  <option value="+1">🇺🇸 +1</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+33">🇫🇷 +33</option>
-                  <option value="+49">🇩🇪 +49</option>
-                  <option value="+39">🇮🇹 +39</option>
-                  <option value="+351">🇵🇹 +351</option>
-                  <option value="+52">🇲🇽 +52</option>
-                  <option value="+54">🇦🇷 +54</option>
-                  <option value="+57">🇨🇴 +57</option>
-                  <option value="+56">🇨🇱 +56</option>
-                  <option value="+51">🇵🇪 +51</option>
-                </select>
-                <input id="phone-digits" name="Teléfono" class="phone-number-input" type="tel" placeholder="600 000 000" autocomplete="tel-national" maxlength="9" required />
+              <label class="field-label" for="apellidos">Apellidos *</label>
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input id="apellidos" name="Apellidos" class="reg-input" type="text" placeholder="Tus apellidos" autocomplete="family-name" maxlength="120" required />
               </div>
             </div>
+          </div>
+
+          <div class="reg-field">
+            <label class="field-label" for="phone-digits">Teléfono *</label>
+            <div class="phone-wrap">
+              <select id="phone-prefix" class="phone-prefix-select" autocomplete="tel-country-code" aria-label="Prefijo de país">
+                <option value="+34">🇪🇸 +34</option>
+                <option value="+1">🇺🇸 +1</option>
+                <option value="+44">🇬🇧 +44</option>
+                <option value="+33">🇫🇷 +33</option>
+                <option value="+49">🇩🇪 +49</option>
+                <option value="+39">🇮🇹 +39</option>
+                <option value="+351">🇵🇹 +351</option>
+                <option value="+52">🇲🇽 +52</option>
+                <option value="+54">🇦🇷 +54</option>
+                <option value="+57">🇨🇴 +57</option>
+                <option value="+56">🇨🇱 +56</option>
+                <option value="+51">🇵🇪 +51</option>
+              </select>
+              <input id="phone-digits" name="Teléfono" class="phone-number-input" type="tel" placeholder="600 000 000" autocomplete="tel-national" maxlength="9" required />
+            </div>
+            <span class="field-hint">Solo los dígitos, sin prefijo de país.</span>
           </div>
 
           <div class="reg-field">
@@ -340,7 +355,24 @@
                 <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
-            <span class="field-hint">Mínimo 10 caracteres, una mayúscula, una minúscula y un número.</span>
+            <div id="pwd-requirements" class="pwd-reqs" role="status" aria-live="polite">
+              <div class="pwd-req" id="req-length">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Mínimo 10 caracteres
+              </div>
+              <div class="pwd-req" id="req-upper">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Una letra mayúscula
+              </div>
+              <div class="pwd-req" id="req-lower">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Una letra minúscula
+              </div>
+              <div class="pwd-req" id="req-digit">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Al menos un número
+              </div>
+            </div>
           </div>
 
           <p id="registro-error" class="reg-error" data-form-feedback role="alert"></p>
@@ -368,22 +400,6 @@
     </main>
 
   </div>
-
-  <script>
-    // Toggle mostrar/ocultar contraseña
-    (function () {
-      var btn = document.getElementById('btn-eye-reg');
-      var inp = document.getElementById('password');
-      if (!btn || !inp) return;
-      btn.addEventListener('click', function () {
-        var show = inp.type === 'password';
-        inp.type = show ? 'text' : 'password';
-        btn.innerHTML = show
-          ? '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
-          : '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-      });
-    })();
-  </script>
 
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="{% static 'js/register.js' %}" defer></script>
