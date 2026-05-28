@@ -1,0 +1,15 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+  {% if original and original.pk %}
+    <li>
+      <a href="{% url 'template_builder_edit' original.pk %}"
+         class="historylink"
+         style="background:#9d4edd;color:#fff;border-color:#7a32b8;">
+        ✏️ Editar visualmente en Template Builder
+      </a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

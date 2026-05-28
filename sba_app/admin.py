@@ -106,16 +106,39 @@ class EmployeeAdmin(admin.ModelAdmin):
 @admin.register(UserTemplate)
 class UserTemplateAdmin(admin.ModelAdmin):
     # Columnas que verás en la lista principal
-    list_display = ('style_name', 'document_type', 'user', 'is_system_default', 'created_at')
-    
+    list_display = ('style_name', 'document_type', 'user', 'is_system_default', 'thumbnail_preview', 'created_at', 'open_in_builder')
+
     # Filtros laterales para encontrar rápido las plantillas
     list_filter = ('is_system_default', 'document_type', 'created_at')
-    
+
     # Buscador por nombre de estilo o email del usuario
     search_fields = ('style_name', 'user__email')
-    
+
     # Ordenar por fecha de creación
     ordering = ('-created_at',)
+
+    readonly_fields = ('thumbnail_preview',)
+
+    # Plantilla del change_form personalizada para añadir el botón "Editar visualmente"
+    change_form_template = 'admin/sba_app/usertemplate/change_form.html'
+
+    def thumbnail_preview(self, obj):
+        if obj.screenshot:
+            return format_html(
+                '<img src="{}" style="height:80px;border-radius:6px;border:1px solid #ddd;" />',
+                obj.screenshot.url,
+            )
+        return '—'
+    thumbnail_preview.short_description = 'Miniatura'
+
+    def open_in_builder(self, obj):
+        if not obj.pk:
+            return '-'
+        return format_html(
+            '<a class="button" style="background:#9d4edd;color:#fff;padding:4px 10px;border-radius:6px;text-decoration:none;" href="{}">✏️ Editar visualmente</a>',
+            reverse('template_builder_edit', args=[obj.pk]),
+        )
+    open_in_builder.short_description = 'Template Builder'
 
 
 @admin.register(Payroll)

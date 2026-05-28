@@ -8,9 +8,14 @@
 <style>
     .templates-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
         margin-bottom: 24px;
+    }
+    .template-thumb {
+        width: 100%; height: 200px; object-fit: cover;
+        border-radius: 8px; margin-bottom: 14px;
+        border: 1px solid #e2e8f0; background: #fff;
     }
     .template-card {
         background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;
@@ -347,7 +352,11 @@
             {% for plantilla in templates_sistema %}
             <div class="template-card" id="tcard-{{ plantilla.id }}">
               <div>
+                {% if plantilla.screenshot %}
+                <img src="{{ plantilla.screenshot.url }}" alt="{{ plantilla.style_name }}" class="template-thumb">
+                {% else %}
                 <div class="template-icon">💎</div>
+                {% endif %}
                 <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:16px;">{{ plantilla.style_name }}</div>
               </div>
               <div>
@@ -369,7 +378,7 @@
             <div class="template-card" id="tcard-{{ plantilla.id }}">
               <div>
                 {% if plantilla.screenshot %}
-                <img src="{{ plantilla.screenshot.url }}" alt="{{ plantilla.style_name }}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:12px;border:1px solid #e2e8f0;">
+                <img src="{{ plantilla.screenshot.url }}" alt="{{ plantilla.style_name }}" class="template-thumb">
                 {% else %}
                 <div class="template-icon">🎨</div>
                 {% endif %}

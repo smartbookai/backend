@@ -325,6 +325,8 @@
     let currentScale = 1;
 
     const DOCUMENT_TYPE = '{{ document_type|default:"invoice" }}';
+    const EXISTING_TEMPLATE_NAME = {% if template %}'{{ template.style_name|escapejs }}'{% else %}''{% endif %};
+    const IS_SYSTEM_TEMPLATE = {% if template and template.is_system_default %}true{% else %}false{% endif %};
 
     window.onload = function() {
         try {
@@ -714,7 +716,11 @@
 
     // --- 4. GUARDAR CON CAPTURA ---
     document.getElementById('btn-save').onclick = function() {
-        const templateName = prompt("Nombre de esta plantilla:", "Copia de Plantilla");
+        const defaultName = EXISTING_TEMPLATE_NAME || "Copia de Plantilla";
+        const promptMsg = IS_SYSTEM_TEMPLATE
+            ? "Editando plantilla del SISTEMA. Nombre:"
+            : "Nombre de esta plantilla:";
+        const templateName = prompt(promptMsg, defaultName);
         if (!templateName) return;
 
         const btn = this;

@@ -7199,24 +7199,33 @@ def template_builder(request, template_id=None):
             overwrite_confirmed = data.get('overwrite', False)
             post_doc_type = data.get('doc_type', doc_type)
 
-            existing_template = UserTemplate.objects.filter(
-                user=request.user,
-                style_name=template_name,
-                document_type=post_doc_type
-            ).first()
+            # Si un staff abre una plantilla del sistema desde el admin, la edita "in-place"
+            # conservando is_system_default=True. Para usuarios normales se sigue clonando
+            # en una plantilla personal.
+            editing_system_template = bool(
+                template_obj and template_obj.is_system_default and request.user.is_staff
+            )
 
-            if existing_template and (not template_obj or template_obj.id != existing_template.id):
-                if not overwrite_confirmed:
-                    return JsonResponse({
-                        "success": False,
-                        "requires_overwrite": True,
-                        "message": f"Ya tienes un diseño llamado '{template_name}'. ¿Quieres sobreescribirlo?"
-                    })
-                else:
-                    template_obj = existing_template
+            if not editing_system_template:
+                existing_template = UserTemplate.objects.filter(
+                    user=request.user,
+                    style_name=template_name,
+                    document_type=post_doc_type
+                ).first()
 
-            if template_obj and template_obj.is_system_default:
-                template_obj = None
+                if existing_template and (not template_obj or template_obj.id != existing_template.id):
+                    if not overwrite_confirmed:
+                        return JsonResponse({
+                            "success": False,
+                            "requires_overwrite": True,
+                            "message": f"Ya tienes un diseño llamado '{template_name}'. ¿Quieres sobreescribirlo?"
+                        })
+                    else:
+                        template_obj = existing_template
+
+                # Usuario no-staff editando una plantilla de sistema: se clona como plantilla de usuario
+                if template_obj and template_obj.is_system_default:
+                    template_obj = None
 
             screenshot_file = None
             screenshot_b64 = data.get('screenshot', '')
@@ -7229,6 +7238,7 @@ def template_builder(request, template_id=None):
             if template_obj:
                 template_obj.style_name = template_name
                 template_obj.custom_html = design_json
+                # is_system_default se mantiene tal cual (True si editing_system_template, False si no)
                 if screenshot_file:
                     template_obj.screenshot = screenshot_file
                 template_obj.save()
