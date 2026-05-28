@@ -7459,7 +7459,7 @@ def api_register(request):
     telefono             = (data.get('telefono') or '').strip()
     email                = (data.get('email') or '').strip().lower()
     password             = (data.get('password') or '').strip()
-    google_access_token  = (data.get('google_access_token') or '').strip()
+    google_id_token      = (data.get('google_access_token') or '').strip()
     price_id             = (data.get('price_id') or '').strip()
 
     # Resolver nombre de plan → price_id de Stripe
@@ -7468,19 +7468,21 @@ def api_register(request):
         price_id = settings.STRIPE_PLANS.get(plan_name, {}).get('price_id', '')
 
     # Validar credencial: Google o contraseña
-    if google_access_token:
+    if google_id_token:
         try:
-            req = _urllib_req.Request(
-                'https://www.googleapis.com/oauth2/v3/userinfo',
-                headers={'Authorization': f'Bearer {google_access_token}'},
-            )
+            import urllib.parse as _urllib_parse
+            tokeninfo_url = 'https://oauth2.googleapis.com/tokeninfo?' + _urllib_parse.urlencode({'id_token': google_id_token})
+            req = _urllib_req.Request(tokeninfo_url)
             with _urllib_req.urlopen(req, timeout=5) as resp:
                 idinfo = json.loads(resp.read())
         except Exception as exc:
             logger.warning('api_register google: token inválido: %s', exc)
             return JsonResponse({'error': 'Token de Google inválido. Vuelve a intentarlo.'}, status=401)
 
-        if not idinfo.get('email_verified'):
+        if idinfo.get('aud') != settings.GOOGLE_CLIENT_ID and idinfo.get('azp') != settings.GOOGLE_CLIENT_ID:
+            return JsonResponse({'error': 'Token de Google inválido.'}, status=401)
+
+        if idinfo.get('email_verified') not in (True, 'true'):
             return JsonResponse({'error': 'El email de Google no está verificado.'}, status=401)
 
         google_email = idinfo['email'].lower()
@@ -7583,22 +7585,25 @@ def api_google_auth(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido.'}, status=400)
 
-    access_token = (data.get('access_token') or '').strip()
-    if not access_token:
+    id_token = (data.get('id_token') or '').strip()
+    if not id_token:
         return JsonResponse({'error': 'Token de Google no recibido.'}, status=400)
 
     try:
-        req = _urllib_req.Request(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            headers={'Authorization': f'Bearer {access_token}'},
-        )
+        import urllib.parse as _urllib_parse
+        tokeninfo_url = 'https://oauth2.googleapis.com/tokeninfo?' + _urllib_parse.urlencode({'id_token': id_token})
+        req = _urllib_req.Request(tokeninfo_url)
         with _urllib_req.urlopen(req, timeout=5) as resp:
             idinfo = json.loads(resp.read())
     except Exception as exc:
-        logger.warning('api_google_auth: error verificando token: %s', exc)
+        logger.warning('api_google_auth: error verificando id_token: %s', exc)
         return JsonResponse({'error': 'Token de Google inválido o expirado.'}, status=401)
 
-    if not idinfo.get('email_verified'):
+    if idinfo.get('aud') != settings.GOOGLE_CLIENT_ID and idinfo.get('azp') != settings.GOOGLE_CLIENT_ID:
+        logger.warning('api_google_auth: aud mismatch: %s', idinfo.get('aud'))
+        return JsonResponse({'error': 'Token de Google inválido.'}, status=401)
+
+    if idinfo.get('email_verified') not in (True, 'true'):
         return JsonResponse({'error': 'El email de Google no está verificado.'}, status=401)
 
     email = (idinfo.get('email') or '').lower()
@@ -7777,12 +7782,18 @@ def cancelar_plan(request):
     try:
         sub = stripe.Subscription.modify(sub_id, cancel_at_period_end=True)
         from datetime import datetime
-        end_date = datetime.utcfromtimestamp(sub.current_period_end).strftime('%d/%m/%Y')
+        end_ts = getattr(sub, 'current_period_end', None)
+        if end_ts:
+            end_date = 'el ' + datetime.utcfromtimestamp(int(end_ts)).strftime('%d/%m/%Y')
+        else:
+            end_date = 'el final del período actual'
         return JsonResponse({'ok': True, 'end_date': end_date})
     except stripe.error.InvalidRequestError as e:
+        logger.warning('cancelar_plan: InvalidRequestError sub=%s: %s', sub_id, e)
         return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error('cancelar_plan: error inesperado sub=%s: %s', sub_id, e, exc_info=True)
+        return JsonResponse({'error': 'No se pudo procesar la cancelación. Inténtalo de nuevo.'}, status=500)
 
 
 @login_required

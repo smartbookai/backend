@@ -197,6 +197,7 @@
     .reg-login-link { font-size: .84rem; color: var(--gray-400); text-align: center; margin-top: 2px; }
     .reg-login-link a { color: var(--accent); font-weight: 700; text-decoration: none; }
     .reg-login-link a:hover { text-decoration: underline; }
+    .google-fallback { display: none; justify-content: center; margin-top: 10px; padding: 12px; background: rgba(93,48,133,.04); border: 1px solid rgba(93,48,133,.15); border-radius: 10px; }
 
     /* Responsive */
     @media (max-width: 900px) {
@@ -393,6 +394,8 @@
             </svg>
             Continuar con Google
           </button>
+
+          <div id="google-fallback-container" class="google-fallback"></div>
 
           <p class="reg-login-link">¿Ya tienes cuenta? <a href="/login/">Inicia sesión</a></p>
         </form>
