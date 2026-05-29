@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 from sba_app.models import UserTemplate
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.core.files.base import ContentFile
 from django.db import transaction, IntegrityError
@@ -53,6 +54,15 @@ def _preview_next_invoice_number(company):
     return f"{year}-{next_num}"
 
 
+_NO_CONTA_IA_RESPONSE = {
+    'success': False,
+    'error': 'conta_ia_disabled',
+    'message': (
+        'Esta cuenta no está habilitada para la creación automática de asientos contables con ContaIA. '
+        'Si quieres disponer de esta funcionalidad, sube de plan.'
+    ),
+}
+
 _NO_TOKENS_RESPONSE = {
     'success': False,
     'error': 'sin_tokens',
@@ -64,13 +74,18 @@ _NO_TOKENS_RESPONSE = {
 
 
 def _check_tokens(user):
-    """Comprueba si el usuario tiene tokens disponibles (dentro de una transacción atómica).
-    Devuelve (profile, None) si hay tokens, o (None, JsonResponse_402) si no hay.
+    """Comprueba si el usuario tiene ContaIA habilitado y tokens disponibles.
+    Devuelve (profile, None) si todo OK, o (None, JsonResponse) con el error correspondiente.
     Usa select_for_update para evitar race conditions.
     """
     profile, _ = UserProfile.objects.select_for_update().get_or_create(
         user=user, defaults={'tokens': 0}
     )
+    # ContaIA feature check: starter y lite no tienen acceso a asientos automáticos
+    plan_name = getattr(profile, 'plan_name', '') or ''
+    if not _PLAN_INFO.get(plan_name, {}).get('conta_ia', False):
+        return None, JsonResponse(_NO_CONTA_IA_RESPONSE, status=403)
+    # Token check
     if profile.tokens <= 0:
         return None, JsonResponse(_NO_TOKENS_RESPONSE, status=402)
     return profile, None
@@ -7253,7 +7268,18 @@ def template_builder(request, template_id=None):
                 if screenshot_file:
                     new_tpl.screenshot = screenshot_file
                     new_tpl.save()
-            return JsonResponse({"success": True, "message": "Diseño guardado con éxito."})
+
+            if editing_system_template:
+                redirect_url = reverse('admin:sba_app_usertemplate_changelist')
+            else:
+                _doc_redirect = {
+                    'invoice':       'generar_factura',
+                    'delivery_note': 'generar_albaran',
+                    'payroll':       'generar_nomina',
+                }
+                redirect_url = reverse(_doc_redirect.get(post_doc_type, 'generar_factura'))
+
+            return JsonResponse({"success": True, "message": "Diseño guardado con éxito.", "redirect_url": redirect_url})
 
         except Exception as e:
             return JsonResponse({"success": False, "message": str(e)}, status=400)
@@ -7683,27 +7709,27 @@ def bienvenido(request):
 
 _PLAN_INFO = {
     'starter': {
-        'label': 'Starter', 'price': '9,99', 'tokens': 0,
+        'label': 'Starter', 'price': '9,99', 'tokens': 0, 'conta_ia': False,
         'volume': 'Ideal para autónomos que solo quieren facturar',
         'features': ['Generación manual de facturas', 'Gestión básica de clientes', 'Exportación simple de facturas', 'Panel básico'],
     },
     'lite': {
-        'label': 'Lite', 'price': '29,99', 'tokens': 100,
+        'label': 'Lite', 'price': '29,99', 'tokens': 100, 'conta_ia': True,
         'volume': '0–100 documentos al mes',
         'features': ['Todo lo del plan Starter', 'Subida de facturas en PDF', 'Extracción automática con IA', 'Facturas recibidas y emitidas', 'Gestión de proveedores'],
     },
     'smart': {
-        'label': 'Smart', 'price': '49,99', 'tokens': 250, 'featured': True,
+        'label': 'Smart', 'price': '49,99', 'tokens': 250, 'featured': True, 'conta_ia': True,
         'volume': '101–250 documentos al mes',
-        'features': ['Todo lo del plan Lite', 'Asientos contables automáticos', 'Asociación automática de clientes', 'Panel con métricas', 'Soporte prioritario'],
+        'features': ['Todo lo del plan Lite', 'ContaIA: asientos contables automáticos', 'Asociación automática de clientes', 'Panel con métricas', 'Soporte prioritario'],
     },
     'power': {
-        'label': 'Power', 'price': '79,99', 'tokens': 500,
+        'label': 'Power', 'price': '79,99', 'tokens': 500, 'conta_ia': True,
         'volume': '251–500 documentos al mes',
         'features': ['Todo lo del plan Smart', 'Dashboard avanzado de PyG', 'IVA soportado e IVA repercutido', 'Alertas fiscales', 'Exportación contable avanzada'],
     },
     'ultra': {
-        'label': 'Ultra', 'price': '129,99', 'tokens': 1000,
+        'label': 'Ultra', 'price': '129,99', 'tokens': 1000, 'conta_ia': True,
         'volume': '501–1000 documentos al mes',
         'features': ['Todo lo del plan Power', 'Automatización contable completa', 'Gestión de nóminas', 'Multiempresa', 'Soporte premium y onboarding'],
     },
@@ -7746,11 +7772,6 @@ def planes(request):
         for key, info in _PLAN_INFO.items()
     ]
     return render(request, 'pages/planes.html', {'plans': plans, 'current_plan': current_plan})
-
-
-def planes_publico(request):
-    plans = [{'key': key, **info} for key, info in _PLAN_INFO.items()]
-    return render(request, 'pages/planes_publico.html', {'plans': plans})
 
 
 @login_required

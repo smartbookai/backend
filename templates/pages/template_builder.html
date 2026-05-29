@@ -137,6 +137,7 @@
                     <span class="token-chip" onclick="addField('FECHA_VENCIMIENTO','Fecha vencimiento')"><i class="fas fa-calendar-times"></i> F. Vencimiento</span>
                     <span class="token-chip" onclick="addField('FORMA_PAGO','Forma de pago')"><i class="fas fa-credit-card"></i> Forma de pago</span>
                     <span class="token-chip" onclick="addField('NOTAS','Notas')"><i class="fas fa-sticky-note"></i> Notas</span>
+                    <span class="token-chip" onclick="addField('DESCRIPCION','Descripción')"><i class="fas fa-align-left"></i> Descripción</span>
                 </div>
             </div>
             <div class="col-12 col-md-6 col-lg-3 panel-invoice" style="display:none;">
@@ -741,12 +742,6 @@
             const screenshotDataUrl = canvas.toDataURL('image/png');
             console.log("Imagen capturada:", screenshotDataUrl.substring(0, 50) + "..."); // Debug
 
-            const REDIRECT_MAP = {
-                'invoice':       "{% url 'generar_factura' %}",
-                'delivery_note': "{% url 'generar_albaran' %}",
-                'payroll':       "{% url 'generar_nomina' %}",
-            };
-
             fetch(window.location.href, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
@@ -764,7 +759,7 @@
                 btn.disabled = false;
                 if (data.success) {
                     alert("✅ Guardado con captura.");
-                    window.location.href = REDIRECT_MAP[DOCUMENT_TYPE] || REDIRECT_MAP['invoice'];
+                    window.location.href = data.redirect_url;
                 } else if (data.requires_overwrite) {
                     if (confirm(data.message)) {
                         // Reenviar con overwrite=true
@@ -773,7 +768,7 @@
                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
                             body: JSON.stringify({ name: templateName, design: designData, screenshot: screenshotDataUrl, overwrite: true, doc_type: DOCUMENT_TYPE })
                         }).then(r => r.json()).then(d => {
-                            if (d.success) { alert("✅ Guardado."); window.location.href = REDIRECT_MAP[DOCUMENT_TYPE] || REDIRECT_MAP['invoice']; }
+                            if (d.success) { alert("✅ Guardado."); window.location.href = d.redirect_url; }
                         });
                     }
                 } else {

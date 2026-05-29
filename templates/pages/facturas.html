@@ -708,15 +708,12 @@ async function generatePurchaseEntry(id) {
         'X-Requested-With': 'XMLHttpRequest',
       },
     });
-    if (!res.ok) {
-      let msg = 'Error al generar el asiento contable.';
-      try {
-        const data = await res.json();
-        msg = data.message || data.error || msg;
-      } catch (_) {}
-      throw new Error(msg);
-    }
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.error === 'conta_ia_disabled') { showContaIAModal(); return; }
+      if (data.error === 'sin_tokens')        { showNoTokensModal(); return; }
+      throw new Error(data.message || data.error || 'Error al generar el asiento contable.');
+    }
     alert(data.message || 'Asiento contable generado correctamente.');
   } catch (err) {
     alert(err.message || 'Error al generar el asiento contable.');
@@ -724,5 +721,40 @@ async function generatePurchaseEntry(id) {
     hideEntryLoader();
   }
 }
+
+function showContaIAModal()  { document.getElementById('modal-conta-ia').style.display = 'flex'; }
+function showNoTokensModal() { document.getElementById('modal-no-tokens').style.display = 'flex'; }
+function closeContaIAModal() { document.getElementById('modal-conta-ia').style.display = 'none'; }
+function closeNoTokensModal(){ document.getElementById('modal-no-tokens').style.display = 'none'; }
 </script>
+
+<!-- Modal: ContaIA no habilitado -->
+<div id="modal-conta-ia" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.18);text-align:center;">
+    <div style="width:52px;height:52px;background:#FEF3C7;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <i class="bi bi-lock" style="font-size:1.4rem;color:#D97706;"></i>
+    </div>
+    <h3 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#111827;">Funcionalidad no disponible</h3>
+    <p style="margin:0 0 24px;font-size:.9rem;color:#6B7280;line-height:1.5;">Esta cuenta no está habilitada para la creación automática de asientos contables con <strong>ContaIA</strong>. Si quieres disponer de ello, sube de plan.</p>
+    <div style="display:flex;gap:10px;">
+      <button type="button" onclick="closeContaIAModal()" style="flex:1;height:42px;border:1.5px solid #E5E7EB;border-radius:10px;background:#fff;color:#374151;font-size:.9rem;font-weight:600;cursor:pointer;">Cancelar</button>
+      <a href="{% url 'planes' %}" style="flex:1;height:42px;border:none;border-radius:10px;background:linear-gradient(135deg,#5d3085,#7c4aad);color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none;">Subir plan</a>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: tokens agotados -->
+<div id="modal-no-tokens" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.18);text-align:center;">
+    <div style="width:52px;height:52px;background:#FEE2E2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <i class="bi bi-coin" style="font-size:1.4rem;color:#DC2626;"></i>
+    </div>
+    <h3 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#111827;">Tokens ContaIA agotados</h3>
+    <p style="margin:0 0 24px;font-size:.9rem;color:#6B7280;line-height:1.5;">¡Vaya! Parece que has consumido todos los tokens de <strong>ContaIA</strong> de este mes. Contrata más para continuar disfrutando de estas funcionalidades.</p>
+    <div style="display:flex;gap:10px;">
+      <button type="button" onclick="closeNoTokensModal()" style="flex:1;height:42px;border:1.5px solid #E5E7EB;border-radius:10px;background:#fff;color:#374151;font-size:.9rem;font-weight:600;cursor:pointer;">Cancelar</button>
+      <a href="{% url 'planes' %}" style="flex:1;height:42px;border:none;border-radius:10px;background:linear-gradient(135deg,#5d3085,#7c4aad);color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none;">Ver planes</a>
+    </div>
+  </div>
+</div>
 {% endblock %}

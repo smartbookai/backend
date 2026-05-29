@@ -245,6 +245,12 @@ def get_document_data(document):
         'NOTAS':            getattr(document, 'notes', '') or '',
         'OBSERVACIONES':    getattr(document, 'notes', '') or '',
 
+        # ── Descripción (descripción/s de las líneas de factura) ───────
+        'DESCRIPCION': ' / '.join(
+            l.description for l in getattr(document, 'lines', document.__class__.objects.none()).all()
+            if getattr(l, 'description', '')
+        ) if hasattr(document, 'lines') else '',
+
         # ── Empresa ────────────────────────────────────────────────────
         'EMPRESA_NOMBRE':   getattr(company, 'name', '')            if company else '',
         'EMPRESA_NAME':     getattr(company, 'name', '')            if company else '',

@@ -91,6 +91,16 @@
     if (box) { box.textContent = ''; box.style.display = 'none'; }
   }
 
+  // Auto-trigger if redirected from landing page with ?trigger_google=1
+  if (new URLSearchParams(window.location.search).get('trigger_google') === '1') {
+    var checkGoogleReady = setInterval(function () {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        clearInterval(checkGoogleReady);
+        btn.click();
+      }
+    }, 100);
+  }
+
   btn.addEventListener('click', function () {
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
       showError('El servicio de Google no está disponible todavía. Espera un momento y vuelve a intentarlo.');

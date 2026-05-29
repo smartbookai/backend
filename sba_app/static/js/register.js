@@ -175,7 +175,7 @@
         nombre: nombre, apellidos: apellidos, email: email,
         prefix: prefix, digits: digits,
       }));
-      window.location.assign('/planes-publicos/');
+      window.location.assign('https://www.smartbookai.es/planes.html');
       return;
     }
 
